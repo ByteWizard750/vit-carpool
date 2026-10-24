@@ -1,0 +1,29 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    container_name: vit_carpool_db
+    restart: unless-stopped
+    ports:
+      # Bind strictly to localhost (127.0.0.1) using POSTGRES_PORT (defaults to 5432, or 5433 if host port 5432 is occupied)
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-vit_carpool_dev}
+    volumes:
+      # Named persistent volume for database files
+      - pgdata:/var/lib/postgresql/data
+      # Script executed on first startup to initialize dev, test, and shadow databases with PostGIS
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-vit_carpool_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
+    name: vit_carpool_pgdata

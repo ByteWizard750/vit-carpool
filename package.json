@@ -1,0 +1,26 @@
+{
+  "name": "vit-carpool-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VIT Chennai Exclusive Community Carpooling Platform",
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @vit-carpool/api dev",
+    "dev:web": "pnpm --filter @vit-carpool/web dev",
+    "dev": "pnpm --parallel --filter @vit-carpool/api --filter @vit-carpool/web dev",
+    "build:contracts": "pnpm --filter @vit-carpool/contracts build",
+    "build:db": "pnpm --filter @vit-carpool/db build",
+    "build:api": "pnpm --filter @vit-carpool/api build",
+    "build:web": "pnpm --filter @vit-carpool/web build",
+    "build": "pnpm build:contracts && pnpm build:db && pnpm build:api && pnpm build:web",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "db:generate": "pnpm --filter @vit-carpool/db generate",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

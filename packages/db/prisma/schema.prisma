@@ -1,0 +1,28 @@
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  extensions        = [postgis, uuidOssp(map: "uuid-ossp")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "./client"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 1 Foundation Model
+// Full domain models (Users, Rides, Bookings, Alerts) are added in Milestones 2-7
+// in strict accordance with the incremental development roadmap.
+// -----------------------------------------------------------------------------
+
+model SystemHealthRecord {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  service   String   @db.VarChar(64)
+  status    String   @db.VarChar(32)
+  details   Json?
+  checkedAt DateTime @default(now()) @map("checked_at") @db.Timestamptz(6)
+
+  @@map("system_health_records")
+}

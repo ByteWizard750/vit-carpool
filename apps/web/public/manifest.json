@@ -1,0 +1,22 @@
+{
+  "short_name": "VIT Carpool",
+  "name": "VIT Chennai Community Carpooling",
+  "description": "Exclusive carpooling platform for the VIT Chennai student and faculty community.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090d16",
+  "theme_color": "#3b82f6",
+  "display": "standalone",
+  "orientation": "portrait"
+}
