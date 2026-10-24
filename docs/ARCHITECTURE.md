@@ -184,22 +184,89 @@ vit-carpool/
    * Supabase validates the institutional email (via OTP or magic link) and returns a signed JWT containing `sub` (auth UUID) and `email`.
 2. **NestJS JWT Interception**:
    * API receives `Authorization: Bearer <jwt>`.
-   * `SupabaseAuthGuard` cryptographically verifies the JWT signature against Supabase’s public JSON Web Key Set (JWKS).
-3. **Database Identity Synchronization & Configurable Audience Classification**:
+   * `SupabaseAuthGuard` cryptographically verifies the JWT signature against Supabase’s public JSON Web Key Set (JWKS). The client runtime and any client-supplied headers are never trusted for identity.
+3. **Database Identity Synchronization & Fail-Safe Audience Classification**:
    * The backend looks up the user record in PostgreSQL by `auth_user_id`.
-   * **First-Time User Registration**:
-     * The verified email is evaluated by the **Configurable Audience Classification Engine** using environment- or config-driven pattern matchers (`STUDENT_EMAIL_REGEX`, `FACULTY_EMAIL_REGEX`).
-     * **Zero Client Selection**: The client UI never provides an audience dropdown, and the API rejects any client payload attempting to specify an audience.
-     * If the email reliably matches an audience pattern, the user record is initialized as `VERIFIED` with the resolved `audience` (`STUDENT` or `FACULTY`).
-     * If the email format cannot be classified automatically with certainty, the user record is initialized as `PENDING` with `audience = NULL`.
-4. **Controlled Manual Verification Fallback**:
-   * Users in `PENDING` status cannot access ride-sharing features.
-   * The user may upload a campus ID card document to the `/verification/request` endpoint.
-   * Authorized administrators review pending verification requests in an administrative queue, verify institutional affiliation, and assign the appropriate audience.
-   * Every administrative decision writes an immutable record to `audit_logs` capturing reviewer ID, timestamp, and decision notes.
-5. **Access Control Gates**:
-   * `VerifiedUserGuard`: Blocks users who are not in `VERIFIED` status from accessing core endpoints (`/rides`, `/bookings`, `/alerts`).
-   * `AudienceGuard`: Enforces that student tokens only touch student resources, and faculty tokens only touch faculty resources.
+   * **Mandatory Server-Side Email Normalization**: All server-side write paths (initial login synchronization, webhook handling, email-change reconciliation, verification requests) must normalize email inputs via `email.trim().toLowerCase()` before executing any query or database mutation. The database enforces this via `CHECK (email = LOWER(email))`.
+   * **Zero Client Selection**: The client UI never provides an audience dropdown, and the API rejects any client payload attempting to specify or modify an `audience`, `role`, or `verification_status`.
+   * **Observed Campus Email Examples**:
+     * Student example: `rayavarapu.rohan2023@vitstudent.ac.in` (`@vitstudent.ac.in` domain, student name + joining year).
+     * Faculty/Proctor example: `renukadevi.r@vit.ac.in` (`@vit.ac.in` domain, employee name format).
+     * *Policy*: These are observed empirical examples, not yet confirmed universal rules. No domain pattern is hardcoded into application logic.
+   * **Configurable Pattern Matching & Fail-Safe Engine**:
+     * Matching patterns are configured strictly via environment variables:
+       * `STUDENT_EMAIL_REGEX=^[a-zA-Z0-9._%+-]+@vitstudent\.ac\.in$`
+       * `FACULTY_EMAIL_REGEX=^[a-zA-Z0-9._%+-]+@vit\.ac\.in$`
+       * `ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION=false` (**Disabled by default** until institutional patterns are officially confirmed).
+     * **Classification Gate Conditions**: Matching a regex is **never** sufficient on its own. Automatic verification executes ONLY if:
+       1. `ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION` is explicitly set to `true`.
+       2. The email identity is confirmed in Supabase Auth (`email_confirmed_at IS NOT NULL`).
+       3. The email matches exactly **one** configured audience pattern with zero ambiguity.
+     * **Classification Truth Table**:
+       | `ENABLE_AUTO` | `email_confirmed` | Matches Student? | Matches Faculty? | Assigned `audience` | Assigned `status` | Method |
+       | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+       | `false` | Any | Any | Any | `NULL` | `PENDING` | `NULL` |
+       | `true` | `false` | Any | Any | `NULL` | `PENDING` | `NULL` |
+       | `true` | `true` | `true` | `false` | `STUDENT` | `VERIFIED` | `AUTOMATIC_EMAIL` |
+       | `true` | `true` | `false` | `true` | `FACULTY` | `VERIFIED` | `AUTOMATIC_EMAIL` |
+       | `true` | `true` | `true` | `true` | **`NULL` (Fail Safe)** | **`PENDING` (Fail Safe)** | **`NULL`** |
+       | `true` | `true` | `false` | `false` | **`NULL` (Fail Safe)** | **`PENDING` (Fail Safe)** | **`NULL`** |
+     * **Zero Admin Inference**: An email domain pattern **never** grants `ADMIN` role. Administrative privileges must be assigned manually in the database or via an administrative console.
+4. **Audience Assignment vs. Account Status Separation**:
+   * `audience` (`STUDENT`, `FACULTY`) represents verified campus community group membership.
+   * `verification_status` (`PENDING`, `VERIFIED`, `REJECTED`, `SUSPENDED`) governs functional capability.
+   * A suspended verified user retains their `STUDENT` or `FACULTY` audience in PostgreSQL (preventing foreign key cascading or broken historical ride references), but is strictly blocked from all protected carpooling features by API guards and database triggers.
+5. **Trusted Server-Side Email-Change Handling & Concurrency Reconciliation**:
+   * Client-provided email change notifications are **never** trusted or accepted by the API.
+   * Email updates are detected exclusively through authoritative server-side channels:
+     * **Primary Channel (Signed Webhooks)**: Supabase Auth emits an HTTP POST to `/auth/webhook` on `user.updated`. The API verifies the cryptographic HMAC signature (`x-supabase-signature`) using `SUPABASE_WEBHOOK_SECRET` before processing.
+     * **In-Flight Dual Layer (`SupabaseAuthGuard`)**: On every authenticated API request, the guard inspects the verified JWT's `email` claim against `users.email` loaded from PostgreSQL. If a divergence is detected, the synchronization workflow triggers immediately.
+   * **Sequence Tracking & Pessimistic Concurrency**:
+     * The `users` table tracks `auth_updated_at` (the Supabase Auth event timestamp).
+     * When processing an email change, the backend executes an atomic PostgreSQL transaction with row-level locking: `SELECT * FROM users WHERE auth_user_id = :sub FOR UPDATE`.
+     * **Stale Event Rejection**: If `incoming.updated_at < users.auth_updated_at`, the event is dropped as stale (idempotent no-op). Stale events can never restore access or overwrite newer identity state.
+     * **Duplicate Event Idempotency**: If `incoming.updated_at == users.auth_updated_at` and `incoming.email == users.email`, the handler returns `200 OK` without database mutation.
+     * **Ambiguous Event Conflict Resolution**: If `incoming.updated_at == users.auth_updated_at` and `LOWER(incoming.email) != users.email`:
+       * Timestamps alone do NOT prove which payload is authoritative.
+       * The API performs a direct server-to-server fetch against the authoritative source of truth: `supabase.auth.admin.getUserById(auth_user_id)`.
+       * If `authoritative.email != users.email`:
+         1. Sets `email = LOWER(authoritative.email)`.
+         2. Sets `auth_updated_at = authoritative.updated_at`.
+         3. Sets `verification_status = 'PENDING'` and `verified_at = NULL`.
+         4. Preserves existing `audience` and `verification_method`.
+         5. Transactionally writes an audit record: `action = 'USER_EMAIL_RECONCILED'`.
+       * If `authoritative.email == users.email`: The event is dropped as a spurious mismatch; returns `200 OK`.
+     * **Transactional Revocation for Newer Events**: If `incoming.updated_at > users.auth_updated_at` and `LOWER(incoming.email) != users.email`:
+       1. Sets `email = LOWER(incoming.email)`.
+       2. Sets `auth_updated_at = incoming.updated_at`.
+       3. Sets `verification_status = 'PENDING'` and `verified_at = NULL` (instantly revoking carpooling access).
+       4. **Preserves existing `audience` and `verification_method`**: A user is **never** transferred between student and faculty groups merely by changing their email.
+       5. Writes an immutable audit record to `audit_logs` capturing old email, new email, and status transition.
+     * **Access Revocation Invariance**: Carpooling access remains strictly revoked throughout any ambiguous or updated state until institutional verification rules are satisfied.
+     * Transient database errors return `500` to trigger Supabase Auth's exponential backoff webhook retry.
+6. **Controlled Manual Verification Fallback & Document Retention Safeguards**:
+   * Users in `PENDING` status cannot access carpooling features.
+   * Unmatched users submit an institutional ID card image to the `/verification/request` endpoint.
+   * **Private Storage & Access Expiration**: Documents are stored in a private Supabase Storage bucket (`id-documents`) with all public access disallowed. Authorized admins inspect documents via short-lived signed URLs (15-minute TTL).
+   * **Automated 30-Day Purge & Retry Safeguards**:
+     * The retention clock starts when a verification request reaches a terminal status (`APPROVED` or `REJECTED`).
+     * A background worker permanently deletes the document file from storage after 30 days and sets `id_card_document_purged_at = NOW()`.
+     * If storage deletion encounters a network or service error, the worker retries with exponential backoff (up to 5 attempts).
+     * If unpurged after 35 days, a high-priority `STORAGE_PURGE_FAILURE` alert is emitted for administrator intervention.
+     * Every successful document deletion records a permanent event in `audit_logs`.
+7. **Transactional Audit Logging, Table Ownership & Role Permissions**:
+   * All sensitive state changes (verifications, suspensions, role modifications, email mutations) are written transactionally in the same database transaction as the target change.
+   * Actor identity and administrative roles are derived strictly from server-side session records.
+   * `actor_id` in `audit_logs` is a standalone UUID column without cascading foreign keys (`ON DELETE SET NULL`), preventing trigger exceptions during privacy erasure while ensuring append-only immutability.
+   * **Role Architecture & Table Ownership**:
+     * Migration Role (`postgres` / `migrator`): Table owner; possesses DDL permissions to create tables and manage triggers.
+     * Runtime Role (`app_user` / `service_role`): Non-owner; possesses least-privilege DML (`SELECT, INSERT, UPDATE` on domain tables, strictly append-only `SELECT, INSERT` on `audit_logs`). Direct `EXECUTE` grants on trigger functions are omitted. Schema creation is revoked (`REVOKE CREATE ON SCHEMA public FROM app_user`).
+     * Because the runtime role is a non-owner and lacks schema creation privileges, it cannot alter tables, disable `trg_audit_log_immutable`, or create shadow objects.
+     * Role bootstrap is strictly separated from schema migrations; credentials are supplied via environment variables (`DATABASE_APP_USER_PASSWORD`).
+     * Integration tests verify permission enforcement using the actual runtime role connection (`UPDATE`, `DELETE`, `TRUNCATE`, `ALTER TABLE DISABLE TRIGGER`, `CREATE TABLE` must all fail).
+8. **Access Control Gates**:
+   * `VerifiedUserGuard`: Blocks non-`VERIFIED` users (`PENDING`, `REJECTED`, `SUSPENDED`) from carpooling endpoints (`/rides`, `/bookings`, `/alerts`).
+   * `AudienceGuard`: Enforces that student tokens only touch student resources, and faculty tokens only touch faculty resources. Both application guards and database composite foreign keys enforce this isolation.
 
 ---
 

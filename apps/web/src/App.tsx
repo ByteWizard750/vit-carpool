@@ -1,124 +1,133 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchHealthStatus } from './services/api';
-import { HealthStatusCard } from './components/HealthStatusCard';
+import { Navbar } from './components/layout/Navbar';
+import { Footer } from './components/layout/Footer';
+import { LandingPage } from './features/landing/LandingPage';
+import { AuthModal } from './features/modals/AuthModal';
+import { SearchResultsModal } from './features/modals/SearchResultsModal';
+import { OfferRideModal } from './features/modals/OfferRideModal';
+import { DevDiagnosticsDrawer } from './components/dev/DevDiagnosticsDrawer';
+import { Terminal } from 'lucide-react';
+import { getLocalTodayDate } from './utils/date';
 
 export const App: React.FC = () => {
+  // Query backend health to preserve infrastructure integration
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['system-health'],
     queryFn: fetchHealthStatus,
-    refetchInterval: 10000, // Periodic health ping every 10s
+    refetchInterval: 10000,
     retry: 2,
   });
 
+  // Modal States
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [devDrawerOpen, setDevDrawerOpen] = useState(false);
+
+  // Search parameters for modal preview
+  const [searchParams, setSearchParams] = useState<{
+    origin: string;
+    destination: string;
+    date: string;
+    seats: number;
+  } | null>(null);
+
+  // Check URL hash for direct dev access
+  useEffect(() => {
+    if (window.location.hash === '#diagnostics') {
+      setDevDrawerOpen(true);
+    }
+  }, []);
+
+  const handleSearchSubmit = (params: {
+    origin: string;
+    destination: string;
+    date: string;
+    seats: number;
+  }) => {
+    setSearchParams(params);
+    setSearchModalOpen(true);
+  };
+
+  const handleSelectRoute = (origin: string, destination: string) => {
+    const today = getLocalTodayDate();
+    setSearchParams({ origin, destination, date: today, seats: 1 });
+    setSearchModalOpen(true);
+  };
+
+  const isHealthy = !isError && data?.status === 'ok';
+
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="brand-wrapper">
-          <div className="brand-icon">🚗</div>
-          <div>
-            <div className="brand-title">VIT Carpool</div>
-            <div className="brand-subtitle">Campus Ride Share</div>
-          </div>
-        </div>
-        <div className="campus-pill">🎓 VIT Chennai</div>
-      </header>
+    <div className="app-wrapper">
+      {/* Primary Navigation Bar */}
+      <Navbar
+        onOpenSearch={() => {
+          const searchEl = document.getElementById('search');
+          searchEl?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onOpenOffer={() => setOfferModalOpen(true)}
+        onOpenAuth={() => setAuthModalOpen(true)}
+      />
 
-      {/* Hero Intro */}
-      <section className="hero-card">
-        <div className="hero-tag">Milestone 1 — Foundation Shell</div>
-        <h1 className="hero-title">Exclusive Campus Carpooling</h1>
-        <p className="hero-desc">
-          A mobile-first, verified ride-sharing platform connecting VIT Chennai students and faculty
-          to share daily commutes, reduce fuel costs, and travel safely with trusted peers.
-        </p>
-      </section>
+      {/* Main Product Landing Experience */}
+      <LandingPage
+        onSearch={handleSearchSubmit}
+        onOfferRide={() => setOfferModalOpen(true)}
+        onSelectRoute={handleSelectRoute}
+        onOpenAuth={() => setAuthModalOpen(true)}
+      />
 
-      {/* Invariants Assurance Strip */}
-      <section className="invariants-strip">
-        <div className="invariant-pill">
-          <span className="invariant-icon">🛡️</span>
-          <span>Strict Student / Faculty Separation</span>
-        </div>
-        <div className="invariant-pill">
-          <span className="invariant-icon">🔐</span>
-          <span>Verified Institutional Accounts</span>
-        </div>
-        <div className="invariant-pill">
-          <span className="invariant-icon">🚘</span>
-          <span>Cars Only (Non-Commercial)</span>
-        </div>
-        <div className="invariant-pill">
-          <span className="invariant-icon">⚡</span>
-          <span>Atomic Concurrency (No Overbooking)</span>
-        </div>
-      </section>
+      {/* Primary Footer */}
+      <Footer onOpenDevStatus={() => setDevDrawerOpen(true)} />
 
-      {/* Live System Diagnostics */}
-      <main>
-        <HealthStatusCard
-          data={data}
-          isLoading={isLoading}
-          isError={isError}
-          error={error as Error | null}
-          onRefresh={() => refetch()}
-        />
-      </main>
+      {/* Modal Dialogs */}
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
-      {/* Architecture Highlights */}
-      <section className="diag-card">
-        <div className="diag-title-group">
-          <span style={{ fontSize: '1.25rem' }}>📐</span>
-          <h2 className="diag-title">Milestone 1 Deliverables Verified</h2>
-        </div>
-        <ul
-          style={{
-            listStyleType: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.65rem',
-            fontSize: '0.875rem',
-            color: 'var(--text-secondary)',
-          }}
+      <SearchResultsModal
+        isOpen={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        searchParams={searchParams}
+        onOfferRide={() => setOfferModalOpen(true)}
+      />
+
+      <OfferRideModal
+        isOpen={offerModalOpen}
+        onClose={() => setOfferModalOpen(false)}
+      />
+
+      {/* Developer Diagnostics Drawer */}
+      <DevDiagnosticsDrawer
+        isOpen={devDrawerOpen}
+        onClose={() => setDevDrawerOpen(false)}
+        data={data}
+        isLoading={isLoading}
+        isError={isError}
+        error={error as Error | null}
+        onRefresh={() => refetch()}
+      />
+
+      {/* Floating Developer Status Pill (Only visible in development mode) */}
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          className="dev-floating-pill"
+          onClick={() => setDevDrawerOpen(true)}
+          title="Open Developer Diagnostics Drawer (Dev Mode Only)"
+          id="dev-status-pill"
         >
-          <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: 'var(--status-success)' }}>✔</span>
-            <span>Dockerized PostgreSQL 16 + PostGIS 3.6 (Native Apple Silicon arm64)</span>
-          </li>
-          <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: 'var(--status-success)' }}>✔</span>
-            <span>Separate Isolated DBs: Development, Automated Testing, and Shadow</span>
-          </li>
-          <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: 'var(--status-success)' }}>✔</span>
-            <span>pnpm Monorepo: NestJS API, React 18 PWA Shell, Shared Contracts</span>
-          </li>
-          <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: 'var(--status-success)' }}>✔</span>
-            <span>OpenAPI (Swagger) Engine at <code>/api/docs</code></span>
-          </li>
-        </ul>
-      </section>
-
-      {/* Footer */}
-      <footer className="app-footer">
-        <p>
-          VIT Chennai Carpooling Platform &bull; Independent Community Project
-        </p>
-        <p style={{ marginTop: '0.25rem' }}>
-          Explore project specifications in the{' '}
-          <a
-            href="https://github.com"
-            className="footer-link"
-            target="_blank"
-            rel="noreferrer"
-          >
-            docs/
-          </a>{' '}
-          directory.
-        </p>
-      </footer>
+          <span
+            className={`dev-live-dot ${
+              isLoading ? 'loading' : isHealthy ? '' : 'down'
+            }`}
+          />
+          <Terminal size={12} />
+          <span>
+            Dev Status: {isLoading ? 'Checking...' : isHealthy ? `API OK (${data?.database.latencyMs ?? 3}ms)` : 'API Down'}
+          </span>
+        </button>
+      )}
     </div>
   );
 };

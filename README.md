@@ -143,3 +143,27 @@ The foundation has been verified and confirmed against the running Docker databa
 | **Swagger OpenAPI Docs** | `curl http://localhost:3000/api/docs` | HTTP 200 OK |
 | **PWA Web App** | Browser subagent on `http://localhost:5173` | UI rendered cleanly, live health card connected, interactive refetch verified |
 
+---
+
+## 7. Frontend Architecture, Design System & Current Limitations
+
+The frontend application (`apps/web`) establishes a production-grade, consumer-facing carpooling experience with a modern light-themed aesthetic inspired by Uber, BlaBlaCar, and Airbnb.
+
+### Design System & Component Architecture
+* **Color Palette & Tokens**: Warm slate background (`#F8FAFC`), pure white surface cards (`#FFFFFF`), high-contrast charcoal typography (`#0F172A` / `#334155`), restrained primary blue (`#2563EB`), and subtle green verification accents (`#16A34A`). Defined centrally in `src/styles/tokens.css` and `src/styles/components.css`.
+* **Clean SVG Iconography**: Consistent iconography using `lucide-react` (zero emoji substitute icons).
+* **Modular UI Primitives**: Reusable `Button` (with variants, sizes, loading states), `Card`, `Input` (accessible labels, icons, error/helper text), `Modal` (accessible dialog with focus trap and escape handling), and `Badge` components in `src/components/common/`.
+* **Responsive Layout**: Designed for mobile (`375px–390px`), tablet (`768px`), and desktop (`1280px–1440px`) with accessible touch targets (44px+) and collapsible mobile navigation.
+
+### Developer Diagnostics Relocation
+* **Environment-Gated Visibility**: Developer diagnostics (live PostgreSQL connection, PostGIS 3.6 status, query latency benchmark, and architecture checklist) are rendered in an on-demand slide-over drawer (`DevDiagnosticsDrawer.tsx`).
+* **Production Exclusion**: The floating status pill and footer diagnostics launcher are guarded by `import.meta.env.DEV` and are completely excluded from normal production builds.
+
+### Current Implementation Status & Roadmap Boundaries
+To maintain absolute product truthfulness, the interface clearly separates current operational features from upcoming milestone capabilities:
+1. **Illustrative Planning Corridors**: Commute route cards (Tambaram, OMR, Velachery, Guindy, Central, Kelambakkam) are explicitly presented as non-binding planning benchmarks. No live rides, drivers, or completed bookings are simulated.
+2. **Ride Search Status (Milestone 3 Roadmap)**: The ride search panel dynamically calculates the user's local date (`src/utils/date.ts`) and stores search parameters locally. It displays an honest coming-soon empty state explaining that live route discovery will connect to PostGIS spatial queries in Milestone 3.
+3. **Institutional Authentication (Milestone 2.2 Roadmap)**: The sign-in modal is an informational preview. It reinforces the project's non-negotiable security invariant: **zero user self-selection** of audience. Actual authentication and verification logic will be deployed in Milestone 2.2 once VIT Chennai institutional email patterns are confirmed.
+4. **Driver Ride Publishing (Milestone 4 Roadmap)**: The offer-a-ride modal previews the planned four-wheeler publishing workflow. No personal, vehicle, or licensing data is collected or persisted.
+
+

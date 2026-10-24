@@ -71,17 +71,46 @@ gantt
 ### Milestone 2: Identity, Supabase Auth & Configurable Verification Engine
 * **Goal**: Implement server-side JWT verification, trusted application user record synchronization, configurable automatic institutional email classification, and controlled manual verification fallback with absolute audience immutability.
 * **Components & Packages**:
-  * `packages/db`: `users`, `verification_requests`, `audit_logs` tables and composite keys `(id, audience)`.
-  * `apps/api`: `AuthModule`, `UsersModule`, `VerificationModule`, `SupabaseAuthGuard`, `VerifiedUserGuard`, `AudienceGuard`, configurable email classification rule engine.
+  * `packages/db`: `users`, `verification_requests`, `audit_logs` tables, composite keys `(id, audience)`, check constraints, participation triggers, and immutability triggers.
+  * `apps/api`: `AuthModule`, `UsersModule`, `VerificationModule`, `SupabaseAuthGuard`, `VerifiedUserGuard`, `AudienceGuard`, configurable email classification rule engine (`STUDENT_EMAIL_REGEX`, `FACULTY_EMAIL_REGEX`, `ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION`).
   * `apps/web`: Login/Register view (institutional email OTP), unverified "Pending Verification / Upload Campus ID" screen, verification status badge, protected routes. (Zero audience selection UI).
+  * Storage: Private bucket `id-documents` with signed URL access and 30-day document purge lifecycle.
 * **Acceptance Criteria**:
   * Server verifies JWT signature using Supabase JWKS; invalid tokens are rejected with `401 Unauthorized`.
   * Application user record is created/loaded by `auth_user_id`; audience is determined solely on the server.
-  * Configurable email pattern matcher automatically assigns `STUDENT` or `FACULTY` audience when institutional email matches confirmed formats.
-  * Zero client audience self-assignment: API rejects client-supplied audience fields; frontend contains no audience dropdown.
-  * Controlled manual verification fallback: Users without auto-matched patterns or blocked OTP can submit ID card proof to `verification_requests`; administrators approve/reject with audit logging.
-  * Unverified users (`PENDING`) are blocked from ride and booking endpoints.
-  * Integration tests prove student tokens cannot access faculty user data or endpoints, and vice versa.
+  * **Observed Email Formats & Configurable Classification**:
+    * Configurable via environment variables: `STUDENT_EMAIL_REGEX`, `FACULTY_EMAIL_REGEX`.
+    * Default `ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION=false` until VIT Chennai patterns are confirmed.
+    * Fail-safe: If both match, neither matches, or automatic classification is disabled, user remains `PENDING` with `audience = NULL`.
+    * Email domain NEVER infers `ADMIN` privileges.
+  * **Audience Assignment vs. Account Status Separation**:
+    * Non-`VERIFIED` accounts are NOT required to have `audience = NULL`. Suspended users retain their verified audience in the database to preserve historical foreign key integrity, but are blocked from protected features.
+  * **Controlled Email Mutation**:
+    * Modifying an email never transfers a user between student and faculty groups.
+    * Email change immediately sets status to `PENDING` re-verification, revoking carpooling capabilities, and records a transactional audit log.
+  * **Controlled Manual Verification Fallback & Evidence Privacy**:
+    * Unmatched users submit ID card evidence to `verification_requests`.
+    * Evidence stored in private bucket `id-documents`; accessible only to admins via 15-minute signed URLs.
+    * Physical document files are permanently purged 30 days after `APPROVED` or `REJECTED` decision.
+  * **Transactional & Role-Protected Audit Logging**:
+    * Sensitive state changes are logged transactionally in the same DB transaction.
+    * Database triggers block `UPDATE` and `DELETE` on `audit_logs`; application database role has `REVOKE UPDATE, DELETE, TRUNCATE`.
+    * `actor_id` is decoupled from cascading foreign keys to prevent trigger deadlocks upon user privacy erasure.
+  * **Email Normalization & Case-Insensitive Uniqueness**:
+    * Mandatory server-side normalization (`.trim().toLowerCase()`) on all write paths (signup, login sync, webhooks, verification requests).
+    * Database constraint `CHECK (email = LOWER(email))` rejects unnormalized inserts.
+    * Automated tests assert direct mixed-case insertion fails DB check constraint.
+  * **Email-Change Concurrency & Sequence Reconciliation**:
+    * Authoritative sequence tracking via `auth_updated_at` with row locking (`SELECT FOR UPDATE`).
+    * Stale out-of-order events are dropped; duplicate events are idempotent no-ops.
+    * **Ambiguous Event Reconciliation**: Events with identical timestamps but conflicting emails trigger an authoritative fetch to `supabase.auth.admin.getUserById()`. Carpooling access remains strictly revoked until verified.
+    * Automated tests assert that stale webhooks cannot restore access, and ambiguous timestamp conflicts resolve authoritatively.
+  * **Runtime Role Privilege Verification**:
+    * Table ownership belongs to migration role; `app_user` is a non-owner with least-privilege DML.
+    * Automated integration tests connect as `app_user` to assert that `UPDATE`, `DELETE`, `TRUNCATE`, `ALTER TABLE DISABLE TRIGGER`, and `CREATE TABLE` are strictly rejected with permission denied.
+  * **Verification State Transitions & Recovery**:
+    * Automated tests validate all 5 states of `chk_users_verification_state` (Active verified, Suspended, Rejected, Initial pending, Re-verification pending) and assert that unverified or suspended users can never participate in carpooling.
+    * Migration failures follow the forward-fix discipline; `down.sql` serves as a human-reviewed recovery runbook with zero automated destructive rollback.
 
 ---
 
