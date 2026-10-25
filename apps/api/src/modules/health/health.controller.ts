@@ -1,13 +1,16 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { HealthService } from './health.service';
 import { HealthResponse } from '@vit-carpool/contracts';
+import { Public } from '../auth/decorators/public.decorator';
+import { VerifiedUserGuard } from '../auth/guards/verified-user.guard';
 
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
+  @Public()
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -21,5 +24,13 @@ export class HealthController {
   })
   async getHealth(): Promise<HealthResponse> {
     return this.healthService.checkHealth();
+  }
+
+  @Get('protected-test')
+  @UseGuards(VerifiedUserGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Test endpoint gated by VerifiedUserGuard for integration testing' })
+  testVerifiedAccess() {
+    return { status: 'access_granted' };
   }
 }

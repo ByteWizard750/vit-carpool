@@ -1,7 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { UsersModule } from './modules/users/users.module';
+import { VerificationModule } from './modules/verification/verification.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { RidesModule } from './modules/rides/rides.module';
 
 @Module({
   imports: [
@@ -10,7 +18,17 @@ import { HealthModule } from './modules/health/health.module';
       validate: validateEnv,
       envFilePath: ['.env', '../../.env'],
     }),
+    PrismaModule,
+    AuditModule,
+    UsersModule,
+
+    VerificationModule,
+    AuthModule,
+    AdminModule,
+    VehiclesModule,
+    RidesModule,
     HealthModule,
   ],
 })
 export class AppModule {}
+

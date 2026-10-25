@@ -7,11 +7,16 @@ import { LandingPage } from './features/landing/LandingPage';
 import { AuthModal } from './features/modals/AuthModal';
 import { SearchResultsModal } from './features/modals/SearchResultsModal';
 import { OfferRideModal } from './features/modals/OfferRideModal';
+import { VerificationRequestModal } from './features/modals/VerificationRequestModal';
+import { VehicleManagementModal } from './features/vehicles/VehicleManagementModal';
 import { DevDiagnosticsDrawer } from './components/dev/DevDiagnosticsDrawer';
-import { Terminal } from 'lucide-react';
+import { useAuth } from './features/auth/AuthContext';
+import { Terminal, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { getLocalTodayDate } from './utils/date';
 
 export const App: React.FC = () => {
+  const { user } = useAuth();
+
   // Query backend health to preserve infrastructure integration
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['system-health'],
@@ -23,8 +28,12 @@ export const App: React.FC = () => {
   // Modal States
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [offerModalTab, setOfferModalTab] = useState<'PUBLISH' | 'MY_RIDES'>('PUBLISH');
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [vehiclesModalOpen, setVehiclesModalOpen] = useState(false);
   const [devDrawerOpen, setDevDrawerOpen] = useState(false);
+
 
   // Search parameters for modal preview
   const [searchParams, setSearchParams] = useState<{
@@ -61,20 +70,95 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-wrapper">
+      {/* Account Verification Status Alert Banner */}
+      {user && user.verificationStatus === 'PENDING' && (
+        <div
+          style={{
+            backgroundColor: '#fef3c7',
+            borderBottom: '1px solid #fde68a',
+            color: '#92400e',
+            padding: '10px 16px',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+          }}
+          id="banner-pending-verification"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldAlert size={16} />
+            <span>
+              <strong>Account Pending Verification:</strong> Complete campus affiliation verification to unlock ride publishing and seat requests.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setVerificationModalOpen(true)}
+            style={{
+              padding: '4px 10px',
+              backgroundColor: '#d97706',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '4px',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+            }}
+          >
+            Submit Proof
+          </button>
+        </div>
+      )}
+
+      {user && user.verificationStatus === 'SUSPENDED' && (
+        <div
+          style={{
+            backgroundColor: '#fee2e2',
+            borderBottom: '1px solid #fecaca',
+            color: '#991b1b',
+            padding: '10px 16px',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+          id="banner-account-suspended"
+        >
+          <AlertTriangle size={16} />
+          <span>
+            <strong>Account Suspended:</strong> This account has been suspended by campus moderators. Carpooling participation is disabled.
+          </span>
+        </div>
+      )}
+
       {/* Primary Navigation Bar */}
       <Navbar
         onOpenSearch={() => {
           const searchEl = document.getElementById('search');
           searchEl?.scrollIntoView({ behavior: 'smooth' });
         }}
-        onOpenOffer={() => setOfferModalOpen(true)}
+        onOpenOffer={() => {
+          setOfferModalTab('PUBLISH');
+          setOfferModalOpen(true);
+        }}
+        onOpenMyRides={() => {
+          setOfferModalTab('MY_RIDES');
+          setOfferModalOpen(true);
+        }}
         onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenVerification={() => setVerificationModalOpen(true)}
+        onOpenVehicles={() => setVehiclesModalOpen(true)}
       />
 
       {/* Main Product Landing Experience */}
       <LandingPage
         onSearch={handleSearchSubmit}
-        onOfferRide={() => setOfferModalOpen(true)}
+        onOfferRide={() => {
+          setOfferModalTab('PUBLISH');
+          setOfferModalOpen(true);
+        }}
         onSelectRoute={handleSelectRoute}
         onOpenAuth={() => setAuthModalOpen(true)}
       />
@@ -85,17 +169,47 @@ export const App: React.FC = () => {
       {/* Modal Dialogs */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
+      <VerificationRequestModal
+        isOpen={verificationModalOpen}
+        onClose={() => setVerificationModalOpen(false)}
+      />
+
+      <VehicleManagementModal
+        isOpen={vehiclesModalOpen}
+        onClose={() => setVehiclesModalOpen(false)}
+        onOpenVerification={() => setVerificationModalOpen(true)}
+      />
+
       <SearchResultsModal
         isOpen={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         searchParams={searchParams}
-        onOfferRide={() => setOfferModalOpen(true)}
+        onOfferRide={() => {
+          setOfferModalTab('PUBLISH');
+          setOfferModalOpen(true);
+        }}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenVerification={() => setVerificationModalOpen(true)}
       />
 
       <OfferRideModal
         isOpen={offerModalOpen}
         onClose={() => setOfferModalOpen(false)}
+        initialTab={offerModalTab}
+        onOpenVehicles={() => {
+          setOfferModalOpen(false);
+          setVehiclesModalOpen(true);
+        }}
+        onOpenVerification={() => {
+          setOfferModalOpen(false);
+          setVerificationModalOpen(true);
+        }}
+        onOpenAuth={() => {
+          setOfferModalOpen(false);
+          setAuthModalOpen(true);
+        }}
       />
+
 
       {/* Developer Diagnostics Drawer */}
       <DevDiagnosticsDrawer

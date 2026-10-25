@@ -103,6 +103,23 @@
   color: var(--text-primary);
 }
 
+.btn-danger {
+  background-color: var(--status-error);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.btn-danger:active:not(:disabled) {
+  background-color: #991b1b;
+  transform: translateY(0);
+}
+
 /* Badge System */
 .badge {
   display: inline-flex;

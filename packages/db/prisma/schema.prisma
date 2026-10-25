@@ -13,8 +13,6 @@ generator client {
 
 // -----------------------------------------------------------------------------
 // Milestone 1 Foundation Model
-// Full domain models (Users, Rides, Bookings, Alerts) are added in Milestones 2-7
-// in strict accordance with the incremental development roadmap.
 // -----------------------------------------------------------------------------
 
 model SystemHealthRecord {
@@ -26,3 +24,174 @@ model SystemHealthRecord {
 
   @@map("system_health_records")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 2 Identity, Verification & Audit Models
+// -----------------------------------------------------------------------------
+
+enum Audience {
+  STUDENT
+  FACULTY
+
+  @@map("audience_type")
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+
+  @@map("verification_status_type")
+}
+
+enum VerificationMethod {
+  AUTOMATIC_EMAIL
+  MANUAL_ID_REVIEW
+  ADMIN_OVERRIDE
+
+  @@map("verification_method_type")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+
+  @@map("user_role_type")
+}
+
+enum VerificationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("verification_request_status_type")
+}
+
+model User {
+  id                 String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  authUserId         String              @unique @map("auth_user_id") @db.Uuid
+  email              String              @unique @db.VarChar(255)
+  audience           Audience?
+  verificationStatus VerificationStatus  @default(PENDING) @map("verification_status")
+  verificationMethod VerificationMethod? @map("verification_method")
+  verifiedAt         DateTime?           @map("verified_at") @db.Timestamptz(6)
+  authUpdatedAt      DateTime?           @map("auth_updated_at") @db.Timestamptz(6)
+  role               UserRole            @default(USER)
+  fullName           String              @map("full_name") @db.VarChar(255)
+  phoneNumber        String?             @map("phone_number") @db.VarChar(32)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  verificationRequests        VerificationRequest[] @relation("UserVerificationRequests")
+  reviewedVerificationRequests VerificationRequest[] @relation("AdminReviewedRequests")
+  vehicles                    Vehicle[]             @relation("UserVehicles")
+  rides                       Ride[]                @relation("DriverRides")
+
+  @@unique([id, audience])
+  @@map("users")
+}
+
+
+model VerificationRequest {
+  id                     String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                 String                    @map("user_id") @db.Uuid
+  requestedAudience      Audience                  @map("requested_audience")
+  institutionalEmail     String                    @map("institutional_email") @db.VarChar(255)
+  idCardDocumentPath     String?                   @map("id_card_document_path") @db.VarChar(1024)
+  idCardDocumentPurgedAt DateTime?                 @map("id_card_document_purged_at") @db.Timestamptz(6)
+  status                 VerificationRequestStatus @default(PENDING)
+  reviewedBy             String?                   @map("reviewed_by") @db.Uuid
+  reviewedAt             DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes            String?                   @map("review_notes") @db.Text
+  createdAt              DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User  @relation("UserVerificationRequests", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("AdminReviewedRequests", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([userId])
+  @@map("verification_requests")
+}
+
+model AuditLog {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  actorId    String?   @map("actor_id") @db.Uuid
+  actorRole  UserRole? @map("actor_role")
+  action     String    @db.VarChar(100)
+  targetType String    @map("target_type") @db.VarChar(100)
+  targetId   String    @map("target_id") @db.Uuid
+  changes    Json      @default("{}")
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  userAgent  String?   @map("user_agent") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 3.1 Vehicle Model
+// -----------------------------------------------------------------------------
+
+model Vehicle {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  make               String    @db.VarChar(64)
+  model              String    @db.VarChar(64)
+  color              String    @db.VarChar(32)
+  registrationNumber String    @map("registration_number") @db.VarChar(32)
+  capacity           Int       @db.Integer
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  user               User      @relation("UserVehicles", fields: [userId], references: [id], onDelete: Restrict)
+  rides              Ride[]    @relation("VehicleRides")
+
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("vehicles")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 3.2 Ride Publishing & Management Models
+// -----------------------------------------------------------------------------
+
+enum RideStatus {
+  SCHEDULED
+  CANCELLED
+
+  @@map("ride_status_type")
+}
+
+model Ride {
+  id                 String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  driverId           String     @map("driver_id") @db.Uuid
+  vehicleId          String     @map("vehicle_id") @db.Uuid
+  audience           Audience
+  origin             String     @db.VarChar(128)
+  destination        String     @db.VarChar(128)
+  pickupDescription  String?    @map("pickup_description") @db.VarChar(255)
+  dropoffDescription String?    @map("dropoff_description") @db.VarChar(255)
+  departureTime      DateTime   @map("departure_time") @db.Timestamptz(6)
+  availableSeats     Int        @map("available_seats") @db.Integer
+  costPerSeat        Int?       @map("cost_per_seat") @db.Integer
+  status             RideStatus @default(SCHEDULED)
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driver             User       @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
+  vehicle            Vehicle    @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([audience, status, departureTime])
+  @@index([departureTime])
+  @@map("rides")
+}
+
