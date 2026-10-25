@@ -9,6 +9,10 @@ let testPrivateKey: string | null = null;
 let testPublicKey: string | null = null;
 
 export function getTestKeyPair(): { privateKey: string; publicKey: string } {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Test keypair fixture is strictly forbidden in production');
+  }
+
   if (!testPrivateKey || !testPublicKey) {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
       modulusLength: 2048,
@@ -37,6 +41,10 @@ export function signTestJwt(payload: {
   kid?: string;
   algorithm?: jwt.Algorithm;
 }): string {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Test token signing is strictly forbidden in production');
+  }
+
   const { privateKey } = getTestKeyPair();
   const options: jwt.SignOptions = {
     algorithm: payload.algorithm ?? 'RS256',

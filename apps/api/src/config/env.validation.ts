@@ -31,7 +31,13 @@ export const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((val) => val === 'true'),
-});
+}).refine(
+  (data) => !(data.NODE_ENV === 'production' && data.JWT_TEST_MODE === true),
+  {
+    message: 'JWT_TEST_MODE must not be enabled in production environment',
+    path: ['JWT_TEST_MODE'],
+  },
+);
 
 export type EnvConfig = z.infer<typeof EnvSchema>;
 

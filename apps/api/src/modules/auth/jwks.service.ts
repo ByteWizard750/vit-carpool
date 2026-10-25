@@ -37,7 +37,10 @@ export class JwksService {
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
 
     this.jwksUrl = configuredJwksUrl || (supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json` : null);
-    this.isTestMode = (nodeEnv === 'test' || jwtTestMode) && !configuredJwksUrl;
+    this.isTestMode =
+      nodeEnv !== 'production' &&
+      (nodeEnv === 'test' || jwtTestMode === true) &&
+      !configuredJwksUrl;
   }
 
   /**

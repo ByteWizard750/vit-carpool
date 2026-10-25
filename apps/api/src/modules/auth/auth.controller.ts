@@ -7,6 +7,8 @@ import {
   UnauthorizedException,
   Logger,
   BadRequestException,
+  NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -41,31 +43,87 @@ export class AuthController {
       status?: VerificationStatus;
     },
   ) {
-    if (this.config.get('NODE_ENV') === 'production') {
-      throw new BadRequestException('Development login endpoint is disabled in production.');
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const jwtTestMode = this.config.get<boolean>('JWT_TEST_MODE');
+    const isAllowed =
+      (nodeEnv === 'development' || nodeEnv === 'test') && jwtTestMode === true;
+
+    // Fail closed: development login is strictly permitted only in local development or test with JWT_TEST_MODE=true.
+    // In unset, unknown, or production environments, return 404 Not Found.
+    if (!isAllowed) {
+      throw new NotFoundException('Development login endpoint is not available');
     }
 
-    if (!body?.email) {
-      throw new BadRequestException('Email is required');
+    if (!body?.email || typeof body.email !== 'string' || !body.email.includes('@')) {
+      throw new BadRequestException('A valid email address is required');
     }
 
     const email = body.email.trim().toLowerCase();
+
+    // Strict institutional domain evaluation
+    const isStudentEmail = /^[a-zA-Z0-9._%+-]+@vitstudent\.ac\.in$/i.test(email);
+    const isFacultyEmail =
+      !isStudentEmail && /^[a-zA-Z0-9._%+-]+@vit\.ac\.in$/i.test(email);
+
     let user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      const audience =
-        body.audience || (email.includes('faculty') ? Audience.FACULTY : Audience.STUDENT);
+
+    if (user) {
+      // Security: dev-login cannot be used to authenticate/impersonate administrative accounts
+      if (user.role === UserRole.ADMIN) {
+        throw new ForbiddenException(
+          'Development login cannot be used to authenticate administrative accounts.',
+        );
+      }
+      // Authoritative database record is preserved; client-supplied audience/status cannot override DB state
+    } else {
+      // Determine audience strictly from verified institutional email patterns
+      let derivedAudience: Audience | null = null;
+      let defaultStatus: VerificationStatus = VerificationStatus.PENDING;
+
+      if (isStudentEmail) {
+        derivedAudience = Audience.STUDENT;
+        defaultStatus = VerificationStatus.VERIFIED;
+      } else if (isFacultyEmail) {
+        derivedAudience = Audience.FACULTY;
+        defaultStatus = VerificationStatus.VERIFIED;
+      }
+
+      // Allow testing PENDING, SUSPENDED, or REJECTED states if requested for testing,
+      // but non-institutional emails CAN NEVER be VERIFIED or have an audience
+      let initialStatus: VerificationStatus = defaultStatus;
+      if (derivedAudience === null) {
+        // Non-institutional email: must always be PENDING with no audience
+        initialStatus = VerificationStatus.PENDING;
+      } else if (
+        body.status === VerificationStatus.PENDING ||
+        body.status === VerificationStatus.SUSPENDED ||
+        body.status === VerificationStatus.REJECTED
+      ) {
+        initialStatus = body.status;
+      }
+
+      const isVerified = initialStatus === VerificationStatus.VERIFIED;
+
       user = await this.prisma.user.create({
         data: {
           authUserId: crypto.randomUUID(),
           email,
           fullName:
-            body.fullName ||
-            (audience === Audience.FACULTY ? 'Prof. Faculty Member' : 'Student Commuter'),
-          audience,
-          verificationStatus: body.status || VerificationStatus.VERIFIED,
-          verificationMethod: VerificationMethod.MANUAL_ID_REVIEW,
-          verifiedAt: new Date(),
-          role: UserRole.USER,
+            body.fullName?.trim() ||
+            (derivedAudience === Audience.FACULTY
+              ? 'Prof. Faculty Member'
+              : derivedAudience === Audience.STUDENT
+              ? 'Student Commuter'
+              : email.split('@')[0]),
+          audience: isVerified
+            ? derivedAudience
+            : initialStatus === VerificationStatus.SUSPENDED
+            ? derivedAudience
+            : null,
+          verificationStatus: initialStatus,
+          verificationMethod: isVerified ? VerificationMethod.MANUAL_ID_REVIEW : null,
+          verifiedAt: isVerified ? new Date() : null,
+          role: UserRole.USER, // Never permit ADMIN elevation
         },
       });
     }

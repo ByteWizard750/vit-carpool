@@ -1360,5 +1360,195 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
       expect(afterRes.body.rides.some((r: any) => r.id === tempRide.id)).toBe(false);
     });
   });
+
+  // ===========================================================================
+  // 10. Asia/Kolkata Local Date Correctness & Deterministic Pagination
+  // ===========================================================================
+  describe('10. Asia/Kolkata Local Date Correctness & Deterministic Pagination', () => {
+    const kolkataTargetDate = '2027-04-15';
+    let earlyMorningRideId: string;
+    let lateNightRideId: string;
+    let nextDayMidnightRideId: string;
+
+    beforeAll(async () => {
+      // 1. Early morning IST: 2027-04-15 00:30:00 IST -> 2027-04-14 19:00:00 UTC
+      const rEarly = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'IST Early Morning Origin',
+          destination: 'VIT Chennai',
+          departureTime: new Date('2027-04-14T19:00:00.000Z'),
+          availableSeats: 3,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+      earlyMorningRideId = rEarly.id;
+
+      // 2. Late night IST: 2027-04-15 23:30:00 IST -> 2027-04-15 18:00:00 UTC
+      const rLate = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'IST Late Night Origin',
+          destination: 'VIT Chennai',
+          departureTime: new Date('2027-04-15T18:00:00.000Z'),
+          availableSeats: 3,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+      lateNightRideId = rLate.id;
+
+      // 3. Exactly next day 00:00 IST: 2027-04-16 00:00:00 IST -> 2027-04-15 18:30:00 UTC
+      // Must be excluded by the exclusive [start, nextDayStart) boundary
+      const rNext = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'IST Next Day Midnight Origin',
+          destination: 'VIT Chennai',
+          departureTime: new Date('2027-04-15T18:30:00.000Z'),
+          availableSeats: 3,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+      nextDayMidnightRideId = rNext.id;
+    });
+
+    it('matches correct calendar day in Asia/Kolkata (IST UTC+05:30) and respects exclusive upper bound', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/rides?departureDate=${kolkataTargetDate}`)
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const returnedIds = res.body.rides.map((r: any) => r.id);
+
+      // 00:30 IST on 2027-04-15 (19:00 UTC on 2027-04-14) must be matched!
+      expect(returnedIds).toContain(earlyMorningRideId);
+
+      // 23:30 IST on 2027-04-15 (18:00 UTC on 2027-04-15) must be matched!
+      expect(returnedIds).toContain(lateNightRideId);
+
+      // 00:00 IST on 2027-04-16 (18:30 UTC on 2027-04-15) must be EXCLUDED (exclusive upper bound)
+      expect(returnedIds).not.toContain(nextDayMidnightRideId);
+    });
+
+    it('does not leak rides into previous calendar day in Asia/Kolkata', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides?departureDate=2027-04-14')
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const returnedIds = res.body.rides.map((r: any) => r.id);
+
+      // The ride departing at 19:00 UTC on 2027-04-14 is 00:30 IST on 2027-04-15,
+      // so it MUST NOT appear when searching for IST calendar day 2027-04-14!
+      expect(returnedIds).not.toContain(earlyMorningRideId);
+    });
+
+    it('rejects invalid calendar dates (e.g. Feb 30, April 31) with 400 Bad Request', async () => {
+      await request(app.getHttpServer())
+        .get('/rides?departureDate=2027-02-30')
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .get('/rides?departureDate=2027-04-31')
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+    });
+
+    it('rejects contradictory departure range where departureTo is earlier than departureFrom or in past', async () => {
+      const from = '2027-06-10T12:00:00.000Z';
+      const to = '2027-06-10T10:00:00.000Z'; // Contradictory: to < from
+
+      await request(app.getHttpServer())
+        .get(`/rides?departureFrom=${encodeURIComponent(from)}&departureTo=${encodeURIComponent(to)}`)
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+    });
+
+    it('maintains deterministic sorting and pagination when multiple rides share the exact same departure time', async () => {
+      const collidingDeparture = '2027-07-20T10:00:00.000Z';
+
+      // Create 3 rides with identical departure time
+      const r1 = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Colliding Origin A',
+          destination: 'VIT Chennai',
+          departureTime: new Date(collidingDeparture),
+          availableSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const r2 = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Colliding Origin B',
+          destination: 'VIT Chennai',
+          departureTime: new Date(collidingDeparture),
+          availableSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const r3 = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Colliding Origin C',
+          destination: 'VIT Chennai',
+          departureTime: new Date(collidingDeparture),
+          availableSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const expectedIdsInOrder = [r1.id, r2.id, r3.id].sort();
+
+      // Paginate 1 item at a time across pages 1, 2, 3
+      const [p1, p2, p3] = await Promise.all([
+        request(app.getHttpServer())
+          .get(`/rides?origin=Colliding&page=1&limit=1`)
+          .set('Authorization', `Bearer ${studentRiderToken}`),
+        request(app.getHttpServer())
+          .get(`/rides?origin=Colliding&page=2&limit=1`)
+          .set('Authorization', `Bearer ${studentRiderToken}`),
+        request(app.getHttpServer())
+          .get(`/rides?origin=Colliding&page=3&limit=1`)
+          .set('Authorization', `Bearer ${studentRiderToken}`),
+      ]);
+
+      expect(p1.status).toBe(200);
+      expect(p2.status).toBe(200);
+      expect(p3.status).toBe(200);
+
+      expect(p1.body.rides.length).toBe(1);
+      expect(p2.body.rides.length).toBe(1);
+      expect(p3.body.rides.length).toBe(1);
+
+      const returnedP1Id = p1.body.rides[0].id;
+      const returnedP2Id = p2.body.rides[0].id;
+      const returnedP3Id = p3.body.rides[0].id;
+
+      // Verify each page returned a distinct ride
+      const allRetrieved = [returnedP1Id, returnedP2Id, returnedP3Id];
+      const uniqueRetrieved = Array.from(new Set(allRetrieved));
+      expect(uniqueRetrieved.length).toBe(3);
+
+      // Verify the order is deterministic by id asc
+      expect(allRetrieved).toEqual(expectedIdsInOrder);
+    });
+  });
 });
 

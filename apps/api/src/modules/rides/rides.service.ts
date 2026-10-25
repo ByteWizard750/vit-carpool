@@ -193,47 +193,59 @@ export class RidesService {
     const now = new Date();
     let fromTime = now;
     let toTime: Date | undefined = undefined;
+    let toExclusive: Date | undefined = undefined;
 
     if (dto.departureDate) {
-      // YYYY-MM-DD format parsed to local/UTC day bounds
-      const [year, month, day] = dto.departureDate.split('-').map(Number);
-      if (
-        isNaN(year) ||
-        isNaN(month) ||
-        isNaN(day) ||
-        month < 1 ||
-        month > 12 ||
-        day < 1 ||
-        day > 31
-      ) {
-        throw new BadRequestException('Invalid departure date.');
+      // YYYY-MM-DD format representing the calendar day in Asia/Kolkata (+05:30)
+      const dateIsoKolkata = `${dto.departureDate}T00:00:00.000+05:30`;
+      const startOfKolkataDay = new Date(dateIsoKolkata);
+      if (isNaN(startOfKolkataDay.getTime())) {
+        throw new BadRequestException('Invalid departure date format.');
       }
 
-      const startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-      if (
-        startOfDay.getUTCFullYear() !== year ||
-        startOfDay.getUTCMonth() !== month - 1 ||
-        startOfDay.getUTCDate() !== day
-      ) {
+      // Validate valid calendar day in Asia/Kolkata (reject invalid dates like 2026-02-30 or 2026-11-31)
+      const kolkataFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      if (kolkataFormatter.format(startOfKolkataDay) !== dto.departureDate) {
         throw new BadRequestException('Invalid departure date format or calendar day.');
       }
 
-      const endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-      if (endOfDay.getTime() < now.getTime()) {
+      // Next day boundary in Asia/Kolkata (exclusive: [startOfKolkataDay, nextKolkataDayStart))
+      // Indian Standard Time (IST) does not observe DST; 1 day is exactly 24 hours (86,400,000 ms).
+      const nextKolkataDayStart = new Date(startOfKolkataDay.getTime() + 24 * 60 * 60 * 1000);
+
+      // Exclude past calendar days
+      if (nextKolkataDayStart.getTime() <= now.getTime()) {
         throw new BadRequestException('Departure date cannot be in the past.');
       }
 
-      fromTime = new Date(Math.max(now.getTime(), startOfDay.getTime()));
-      toTime = endOfDay;
+      // Exclude rides departing before current instant
+      fromTime = new Date(Math.max(now.getTime(), startOfKolkataDay.getTime()));
+      toExclusive = nextKolkataDayStart;
     } else {
       if (dto.departureFrom) {
         const parsedFrom = new Date(dto.departureFrom);
+        if (isNaN(parsedFrom.getTime())) {
+          throw new BadRequestException('Invalid departureFrom timestamp format.');
+        }
         fromTime = new Date(Math.max(now.getTime(), parsedFrom.getTime()));
       }
       if (dto.departureTo) {
         const parsedTo = new Date(dto.departureTo);
+        if (isNaN(parsedTo.getTime())) {
+          throw new BadRequestException('Invalid departureTo timestamp format.');
+        }
         if (parsedTo.getTime() < now.getTime()) {
           throw new BadRequestException('departureTo cannot be in the past.');
+        }
+        if (parsedTo.getTime() < fromTime.getTime()) {
+          throw new BadRequestException(
+            'departureTo cannot be earlier than departureFrom or current time.',
+          );
         }
         toTime = parsedTo;
       }
@@ -244,7 +256,7 @@ export class RidesService {
       status: RideStatus.SCHEDULED, // Never return cancelled rides
       departureTime: {
         gte: fromTime,
-        ...(toTime ? { lte: toTime } : {}),
+        ...(toExclusive ? { lt: toExclusive } : toTime ? { lte: toTime } : {}),
       },
       availableSeats: {
         gte: dto.minSeats ?? 1,
@@ -279,9 +291,10 @@ export class RidesService {
           driver: true,
           vehicle: true,
         },
-        orderBy: {
-          departureTime: dto.sortOrder ?? 'asc',
-        },
+        orderBy: [
+          { departureTime: dto.sortOrder ?? 'asc' },
+          { id: 'asc' }, // Deterministic tie-breaker for pagination
+        ],
         skip,
         take: limit,
       }),
