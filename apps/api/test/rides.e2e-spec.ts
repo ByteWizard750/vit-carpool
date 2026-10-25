@@ -53,6 +53,7 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
     await testPrisma.$connect();
 
     // Clean tables before starting
+    await testPrisma.booking.deleteMany();
     await testPrisma.ride.deleteMany();
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();
@@ -989,7 +990,7 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
       ).rejects.toThrow(); // PostgreSQL foreign key constraint violation on (vehicle_id, driver_id)
     });
 
-    it('Database Engine rejects available_seats = 0 or > 6 via check constraint', async () => {
+    it('Database Engine rejects available_seats < 0 or > 6 via check constraint', async () => {
       await expect(
         testPrisma.ride.create({
           data: {
@@ -999,7 +1000,21 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
             origin: 'Tambaram',
             destination: 'VIT Chennai',
             departureTime: new Date(Date.now() + 3600 * 1000),
-            availableSeats: 0, // chk_rides_available_seats
+            availableSeats: -1, // chk_rides_available_seats
+          },
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        testPrisma.ride.create({
+          data: {
+            driverId: studentDriverId,
+            vehicleId: studentVehicleId,
+            audience: Audience.STUDENT,
+            origin: 'Tambaram',
+            destination: 'VIT Chennai',
+            departureTime: new Date(Date.now() + 3600 * 1000),
+            availableSeats: 7, // chk_rides_available_seats
           },
         }),
       ).rejects.toThrow();

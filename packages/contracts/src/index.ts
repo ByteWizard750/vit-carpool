@@ -59,3 +59,18 @@ export {
   type SearchRidesResponseDto,
 } from './ride.contract';
 
+export {
+  BookingStatusSchema,
+  type BookingStatus,
+  CreateBookingRequestSchema,
+  type CreateBookingRequestDto,
+  RejectBookingSchema,
+  type RejectBookingDto,
+  CancelBookingSchema,
+  type CancelBookingDto,
+  PassengerBookingResponseSchema,
+  type PassengerBookingResponseDto,
+  DriverBookingResponseSchema,
+  type DriverBookingResponseDto,
+} from './booking.contract';
+

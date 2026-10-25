@@ -122,6 +122,7 @@ export const DriverRideResponseSchema = z.object({
   dropoffDescription: z.string().nullable(),
   departureTime: z.string().datetime(),
   availableSeats: z.number().int(),
+  totalSeats: z.number().int().optional(),
   costPerSeat: z.number().int().nullable(),
   status: RideStatusSchema,
   createdAt: z.string().datetime(),

@@ -56,6 +56,7 @@ describe('Milestone 2.2: Identity, Auth & Verification Security Review (e2e)', (
     await appUserPrisma.$connect();
 
     // Clean test database tables before starting
+    await testPrisma.booking.deleteMany();
     await testPrisma.ride.deleteMany();
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();

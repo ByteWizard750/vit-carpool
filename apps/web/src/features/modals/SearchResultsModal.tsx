@@ -13,6 +13,8 @@ import {
   Loader2,
   ChevronRight,
   Lock,
+  Ticket,
+  CheckCircle2,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -33,6 +35,7 @@ interface SearchResultsModalProps {
   onOfferRide: () => void;
   onOpenAuth?: () => void;
   onOpenVerification?: () => void;
+  onOpenBookings?: () => void;
 }
 
 export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
@@ -42,6 +45,7 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
   onOfferRide,
   onOpenAuth,
   onOpenVerification,
+  onOpenBookings,
 }) => {
   const { user, token } = useAuth();
 
@@ -61,6 +65,54 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
 
   // Selected ride for detail view
   const [selectedRide, setSelectedRide] = useState<PublicRideSummaryDto | null>(null);
+
+  // Booking state for selected ride
+  const [requestedSeats, setRequestedSeats] = useState<number>(1);
+  const [bookingLoading, setBookingLoading] = useState<boolean>(false);
+  const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  // Reset booking state when selected ride changes
+  useEffect(() => {
+    setRequestedSeats(1);
+    setBookingSuccess(null);
+    setBookingError(null);
+  }, [selectedRide]);
+
+  const handleRequestBooking = async () => {
+    if (!token || !selectedRide) return;
+    setBookingLoading(true);
+    setBookingSuccess(null);
+    setBookingError(null);
+
+    try {
+      const res = await fetch('/bookings', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          rideId: selectedRide.id,
+          requestedSeats,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || `Booking request failed with status ${res.status}`);
+      }
+
+      setBookingSuccess(
+        `Seat request submitted for ${requestedSeats} seat${requestedSeats > 1 ? 's' : ''}! Waiting for ${selectedRide.driverName} to approve.`,
+      );
+    } catch (err: any) {
+      setBookingError(err.message || 'Unable to submit booking request.');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
 
   // Sync initial searchParams when modal opens or params change
   useEffect(() => {
@@ -444,30 +496,211 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
             </span>
           </div>
 
-          {/* Privacy & Milestone 4.2 Booking Disclosure Notice */}
+          {/* Milestone 4.2 Interactive Seat Request Card */}
           <div
             style={{
-              padding: '12px 14px',
+              padding: '16px',
               backgroundColor: '#f8fafc',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              fontSize: '0.8rem',
-              color: 'var(--text-secondary)',
+              borderRadius: '10px',
+              border: '1px solid var(--border-medium)',
               display: 'flex',
               flexDirection: 'column',
+              gap: '12px',
+            }}
+            id="ride-booking-panel"
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                <Ticket size={16} style={{ color: 'var(--color-brand-600)' }} />
+                <span>Request Seats on this Corridor</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: selectedRide.availableSeats > 0 ? '#15803d' : '#991b1b',
+                  backgroundColor: selectedRide.availableSeats > 0 ? '#dcfce7' : '#fee2e2',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                {selectedRide.availableSeats > 0 ? `${selectedRide.availableSeats} Available` : 'Fully Booked'}
+              </span>
+            </div>
+
+            {/* Check if driver is viewing their own ride */}
+            {user?.fullName === selectedRide.driverName ? (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  backgroundColor: 'var(--color-brand-50)',
+                  border: '1px solid var(--color-brand-200)',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  color: 'var(--color-brand-800)',
+                }}
+              >
+                You are the driver of this ride. Manage passenger booking requests from your <strong>Bookings</strong> dashboard.
+              </div>
+            ) : selectedRide.availableSeats <= 0 ? (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  color: '#991b1b',
+                }}
+              >
+                This ride has no seats remaining. You can search for other corridors or check back if seats are cancelled.
+              </div>
+            ) : bookingSuccess ? (
+              <div
+                style={{
+                  padding: '14px',
+                  backgroundColor: '#dcfce7',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+                id="booking-success-box"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#15803d', fontWeight: 700, fontSize: '0.875rem' }}>
+                  <CheckCircle2 size={16} /> Request Successfully Sent!
+                </div>
+                <p style={{ margin: 0, fontSize: '0.825rem', color: '#166534' }}>
+                  {bookingSuccess}
+                </p>
+                {onOpenBookings && (
+                  <div style={{ marginTop: '4px' }}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedRide(null);
+                        onClose();
+                        onOpenBookings();
+                      }}
+                    >
+                      View in My Bookings
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {bookingError && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      backgroundColor: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      color: '#991b1b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    id="booking-error-box"
+                  >
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    <span>{bookingError}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Select Number of Seats:
+                  </label>
+                  <select
+                    value={requestedSeats}
+                    onChange={(e) => setRequestedSeats(Number(e.target.value))}
+                    disabled={bookingLoading}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      backgroundColor: '#ffffff',
+                    }}
+                    id="select-booking-seats"
+                  >
+                    {Array.from({ length: Math.min(selectedRide.availableSeats, 4) }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n} Seat{n > 1 ? 's' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedRide.costPerSeat !== null && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '0.8rem',
+                      padding: '8px 10px',
+                      backgroundColor: 'var(--bg-subtle)',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)' }}>Estimated Cost Contribution:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                      ₹{selectedRide.costPerSeat * requestedSeats} ({requestedSeats} × ₹{selectedRide.costPerSeat})
+                    </strong>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={bookingLoading}
+                    onClick={handleRequestBooking}
+                    leftIcon={
+                      bookingLoading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Ticket size={14} />
+                      )
+                    }
+                    id="btn-submit-booking-request"
+                  >
+                    {bookingLoading
+                      ? 'Submitting Request...'
+                      : `Request ${requestedSeats} Seat${requestedSeats > 1 ? 's' : ''}`}
+                  </Button>
+
+                  <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.3' }}>
+                    Booking requests do not reserve seats until approved by the driver. No payments are handled in the app.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Privacy & Safety Guarantee */}
+          <div
+            style={{
+              padding: '10px 12px',
+              backgroundColor: '#f1f5f9',
+              borderRadius: '6px',
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
               gap: '6px',
             }}
           >
-            <div style={{ fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Lock size={13} style={{ color: '#64748b' }} />
-              <span>Campus Privacy & Booking Policy</span>
-            </div>
-            <p style={{ margin: 0, lineHeight: '1.4' }}>
-              • Vehicle license plate numbers and private residential pickup notes are never disclosed in search results.
-            </p>
-            <p style={{ margin: 0, lineHeight: '1.4' }}>
-              • Searching for a ride does not reserve a seat. Booking requests and driver approval workflows will unlock in Milestone 4.2.
-            </p>
+            <Lock size={12} style={{ color: '#64748b', flexShrink: 0 }} />
+            <span>
+              <strong>Campus Privacy:</strong> Landmark pickup/dropoff descriptions and driver phone contacts are securely disclosed only after the driver confirms your booking request.
+            </span>
           </div>
         </div>
       ) : (

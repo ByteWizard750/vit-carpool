@@ -44,6 +44,7 @@ describe('Milestone 3.1: Vehicle Management (e2e)', () => {
     await testPrisma.$connect();
 
     // Clean tables before starting
+    await testPrisma.booking.deleteMany();
     await testPrisma.ride.deleteMany();
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();

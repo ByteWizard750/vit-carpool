@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car, Menu, X, ArrowRight, ShieldCheck, LogOut, AlertCircle, CheckCircle, Clock, Calendar } from 'lucide-react';
+import { Car, Menu, X, ArrowRight, ShieldCheck, LogOut, AlertCircle, CheckCircle, Clock, Calendar, Ticket } from 'lucide-react';
 import { Button } from '../common/Button';
 import { useAuth } from '../../features/auth/AuthContext';
 
@@ -10,6 +10,7 @@ interface NavbarProps {
   onOpenVerification?: () => void;
   onOpenVehicles?: () => void;
   onOpenMyRides?: () => void;
+  onOpenBookings?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenVerification,
   onOpenVehicles,
   onOpenMyRides,
+  onOpenBookings,
 }) => {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -166,6 +168,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     My Rides
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onOpenBookings}
+                    leftIcon={<Ticket size={13} />}
+                    id="nav-my-bookings-btn"
+                    title="View bookings and passenger requests"
+                  >
+                    Bookings
+                  </Button>
                 </>
               )}
 
@@ -292,6 +304,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                       leftIcon={<Calendar size={16} />}
                     >
                       My Rides
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="md"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onOpenBookings?.();
+                      }}
+                      leftIcon={<Ticket size={16} />}
+                      id="mobile-nav-bookings-btn"
+                    >
+                      Bookings & Requests
                     </Button>
                   </>
                 )}

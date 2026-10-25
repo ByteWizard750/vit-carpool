@@ -9,6 +9,7 @@ import { SearchResultsModal } from './features/modals/SearchResultsModal';
 import { OfferRideModal } from './features/modals/OfferRideModal';
 import { VerificationRequestModal } from './features/modals/VerificationRequestModal';
 import { VehicleManagementModal } from './features/vehicles/VehicleManagementModal';
+import { BookingsModal } from './features/modals/BookingsModal';
 import { DevDiagnosticsDrawer } from './components/dev/DevDiagnosticsDrawer';
 import { useAuth } from './features/auth/AuthContext';
 import { Terminal, ShieldAlert, AlertTriangle } from 'lucide-react';
@@ -32,6 +33,8 @@ export const App: React.FC = () => {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [vehiclesModalOpen, setVehiclesModalOpen] = useState(false);
+  const [bookingsModalOpen, setBookingsModalOpen] = useState(false);
+  const [bookingsModalTab, setBookingsModalTab] = useState<'PASSENGER' | 'DRIVER'>('PASSENGER');
   const [devDrawerOpen, setDevDrawerOpen] = useState(false);
 
 
@@ -150,6 +153,10 @@ export const App: React.FC = () => {
         onOpenAuth={() => setAuthModalOpen(true)}
         onOpenVerification={() => setVerificationModalOpen(true)}
         onOpenVehicles={() => setVehiclesModalOpen(true)}
+        onOpenBookings={() => {
+          setBookingsModalTab('PASSENGER');
+          setBookingsModalOpen(true);
+        }}
       />
 
       {/* Main Product Landing Experience */}
@@ -190,6 +197,10 @@ export const App: React.FC = () => {
         }}
         onOpenAuth={() => setAuthModalOpen(true)}
         onOpenVerification={() => setVerificationModalOpen(true)}
+        onOpenBookings={() => {
+          setBookingsModalTab('PASSENGER');
+          setBookingsModalOpen(true);
+        }}
       />
 
       <OfferRideModal
@@ -207,6 +218,22 @@ export const App: React.FC = () => {
         onOpenAuth={() => {
           setOfferModalOpen(false);
           setAuthModalOpen(true);
+        }}
+      />
+
+      <BookingsModal
+        isOpen={bookingsModalOpen}
+        onClose={() => setBookingsModalOpen(false)}
+        initialTab={bookingsModalTab}
+        onFindRides={() => {
+          setBookingsModalOpen(false);
+          const searchEl = document.getElementById('search');
+          searchEl?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onOpenOffer={() => {
+          setBookingsModalOpen(false);
+          setOfferModalTab('PUBLISH');
+          setOfferModalOpen(true);
         }}
       />
 

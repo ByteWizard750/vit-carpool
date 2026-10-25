@@ -87,6 +87,8 @@ model User {
   reviewedVerificationRequests VerificationRequest[] @relation("AdminReviewedRequests")
   vehicles                    Vehicle[]             @relation("UserVehicles")
   rides                       Ride[]                @relation("DriverRides")
+  passengerBookings           Booking[]             @relation("PassengerBookings")
+  driverBookings              Booking[]             @relation("DriverBookings")
 
   @@unique([id, audience])
   @@map("users")
@@ -180,6 +182,7 @@ model Ride {
   dropoffDescription String?    @map("dropoff_description") @db.VarChar(255)
   departureTime      DateTime   @map("departure_time") @db.Timestamptz(6)
   availableSeats     Int        @map("available_seats") @db.Integer
+  totalSeats         Int        @default(6) @map("total_seats") @db.Integer
   costPerSeat        Int?       @map("cost_per_seat") @db.Integer
   status             RideStatus @default(SCHEDULED)
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -187,11 +190,55 @@ model Ride {
 
   driver             User       @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
   vehicle            Vehicle    @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+  bookings           Booking[]  @relation("RideBookings")
 
+  @@unique([id, audience])
+  @@unique([id, driverId])
   @@index([driverId])
   @@index([vehicleId])
   @@index([audience, status, departureTime])
   @@index([departureTime])
   @@map("rides")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 4.2 Booking Requests & Seat Allocation Models
+// -----------------------------------------------------------------------------
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+
+  @@map("booking_status_type")
+}
+
+model Booking {
+  id                 String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rideId             String        @map("ride_id") @db.Uuid
+  passengerId        String        @map("passenger_id") @db.Uuid
+  driverId           String        @map("driver_id") @db.Uuid
+  audience           Audience
+  requestedSeats     Int           @map("requested_seats") @db.Integer
+  status             BookingStatus @default(PENDING)
+  confirmedAt        DateTime?     @map("confirmed_at") @db.Timestamptz(6)
+  rejectedAt         DateTime?     @map("rejected_at") @db.Timestamptz(6)
+  cancelledAt        DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason String?       @map("cancellation_reason") @db.VarChar(255)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ride      Ride @relation("RideBookings", fields: [rideId, audience], references: [id, audience], onDelete: Restrict)
+  passenger User @relation("PassengerBookings", fields: [passengerId, audience], references: [id, audience], onDelete: Restrict)
+  driver    User @relation("DriverBookings", fields: [driverId], references: [id], onDelete: Restrict)
+
+  @@index([rideId])
+  @@index([passengerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([audience, status])
+  @@map("bookings")
+}
+
 
