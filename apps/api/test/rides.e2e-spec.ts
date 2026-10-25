@@ -1565,5 +1565,225 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
       expect(allRetrieved).toEqual(expectedIdsInOrder);
     });
   });
+
+  // ===========================================================================
+  // 11. Milestone 5.1: Location Autocomplete & Geographic Proximity Search
+  // ===========================================================================
+  describe('11. Milestone 5.1: Location Autocomplete & Geographic Proximity Search', () => {
+    let spatialRideId: string;
+    const futureDeparture = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+
+    it('publishes a ride with valid coordinates and persists spatial attributes', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({
+          vehicleId: studentVehicleId,
+          origin: 'Vandalur Flyover',
+          originAddress: 'Vandalur, GST Road, Chennai 600048',
+          originLatitude: 12.8914,
+          originLongitude: 80.0815,
+          originPlaceId: 'mock-chennai-vandalur',
+          destination: 'VIT Chennai North Gate',
+          destinationAddress: 'VIT Chennai Campus, Vandalur-Kelambakkam Rd',
+          destinationLatitude: 12.8406,
+          destinationLongitude: 80.1534,
+          destinationPlaceId: 'mock-chennai-vit-campus',
+          departureTime: futureDeparture,
+          availableSeats: 3,
+          costPerSeat: 50,
+        })
+        .expect(201);
+
+      expect(response.body).toBeDefined();
+      expect(response.body.origin).toBe('Vandalur Flyover');
+      expect(response.body.originLatitude).toBeCloseTo(12.8914, 4);
+      expect(response.body.originLongitude).toBeCloseTo(80.0815, 4);
+      expect(response.body.destinationLatitude).toBeCloseTo(12.8406, 4);
+      expect(response.body.destinationLongitude).toBeCloseTo(80.1534, 4);
+
+      spatialRideId = response.body.id;
+    });
+
+    it('matches rides within origin proximity radius (PostGIS ST_DWithin)', async () => {
+      // Query near Vandalur (approx 100m away, radius 2km)
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8910,
+          originLon: 80.0820,
+          originRadiusKm: 2,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const rideIds = res.body.rides.map((r: any) => r.id);
+      expect(rideIds).toContain(spatialRideId);
+    });
+
+    it('excludes rides outside proximity radius', async () => {
+      // Query from Central Chennai (13.0827, 80.2707 - ~25km away from Vandalur) with radius 3km
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 13.0827,
+          originLon: 80.2707,
+          originRadiusKm: 3,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const rideIds = res.body.rides.map((r: any) => r.id);
+      expect(rideIds).not.toContain(spatialRideId);
+    });
+
+    it('does not allow rides with missing coordinates to match spatial queries', async () => {
+      // Create a legacy text-only ride without coordinates
+      const legacyRide = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Legacy No Coordinates',
+          destination: 'VIT Campus',
+          departureTime: new Date(Date.now() + 5 * 60 * 60 * 1000),
+          availableSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8914,
+          originLon: 80.0815,
+          originRadiusKm: 10,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const rideIds = res.body.rides.map((r: any) => r.id);
+      expect(rideIds).not.toContain(legacyRide.id);
+
+      // Clean up legacy ride
+      await testPrisma.ride.delete({ where: { id: legacyRide.id } });
+    });
+
+    it('preserves legacy text-search fallback when coordinates are omitted', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          origin: 'Vandalur Flyover',
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const rideIds = res.body.rides.map((r: any) => r.id);
+      expect(rideIds).toContain(spatialRideId);
+    });
+
+    it('strictly preserves student/faculty cohort isolation in geographic search', async () => {
+      // Faculty user searching near Vandalur must NOT receive the student ride
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8914,
+          originLon: 80.0815,
+          originRadiusKm: 5,
+        })
+        .set('Authorization', `Bearer ${facultyDriverToken}`)
+        .expect(200);
+
+      const rideIds = res.body.rides.map((r: any) => r.id);
+      expect(rideIds).not.toContain(spatialRideId);
+    });
+
+    it('updating ride coordinates correctly synchronizes PostGIS geometry and updates spatial discovery', async () => {
+      // Driver updates origin coordinates from Vandalur to Guindy
+      const updateRes = await request(app.getHttpServer())
+        .patch(`/rides/${spatialRideId}`)
+        .send({
+          origin: 'Guindy Kathipara',
+          originAddress: 'Kathipara Junction, Guindy, Chennai',
+          originLatitude: 13.0067,
+          originLongitude: 80.2025,
+        })
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      expect(updateRes.body.originLatitude).toBeCloseTo(13.0067, 4);
+      expect(updateRes.body.originLongitude).toBeCloseTo(80.2025, 4);
+
+      // Verify geometry point in DB was updated by trigger
+      const rawRows = await testPrisma.$queryRaw<Array<{ has_origin_geom: boolean }>>`
+        SELECT (origin_geom IS NOT NULL) AS has_origin_geom
+        FROM rides
+        WHERE id = ${spatialRideId}::uuid
+      `;
+      expect(rawRows[0].has_origin_geom).toBe(true);
+
+      // Search near Guindy (within 3km) matches the updated ride
+      const guindySearch = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 13.0065,
+          originLon: 80.2020,
+          originRadiusKm: 3,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const guindyRideIds = guindySearch.body.rides.map((r: any) => r.id);
+      expect(guindyRideIds).toContain(spatialRideId);
+
+      // Search near Vandalur (within 3km) NO LONGER matches the updated ride
+      const vandalurSearch = await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8914,
+          originLon: 80.0815,
+          originRadiusKm: 3,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const vandalurRideIds = vandalurSearch.body.rides.map((r: any) => r.id);
+      expect(vandalurRideIds).not.toContain(spatialRideId);
+    });
+
+    it('rejects ride update with mismatched coordinate pairs (latitude without longitude)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/rides/${spatialRideId}`)
+        .send({
+          originLatitude: 13.05,
+          // originLongitude omitted
+        })
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(400);
+    });
+
+    it('rejects spatial search with out-of-bound coordinates or radius', async () => {
+      // Latitude > 90
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 95.0,
+          originLon: 80.0,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+
+      // Radius > 50 km
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.89,
+          originLon: 80.08,
+          originRadiusKm: 100,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+    });
+  });
 });
 

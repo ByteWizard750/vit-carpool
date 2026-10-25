@@ -25,6 +25,14 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      '/locations': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/bookings': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

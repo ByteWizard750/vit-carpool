@@ -14,6 +14,7 @@ import { DevDiagnosticsDrawer } from './components/dev/DevDiagnosticsDrawer';
 import { useAuth } from './features/auth/AuthContext';
 import { Terminal, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { getLocalTodayDate } from './utils/date';
+import { SearchPanelParams } from './features/search/RideSearchPanel';
 
 export const App: React.FC = () => {
   const { user } = useAuth();
@@ -37,14 +38,8 @@ export const App: React.FC = () => {
   const [bookingsModalTab, setBookingsModalTab] = useState<'PASSENGER' | 'DRIVER'>('PASSENGER');
   const [devDrawerOpen, setDevDrawerOpen] = useState(false);
 
-
   // Search parameters for modal preview
-  const [searchParams, setSearchParams] = useState<{
-    origin: string;
-    destination: string;
-    date: string;
-    seats: number;
-  } | null>(null);
+  const [searchParams, setSearchParams] = useState<SearchPanelParams | null>(null);
 
   // Check URL hash for direct dev access
   useEffect(() => {
@@ -53,12 +48,7 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const handleSearchSubmit = (params: {
-    origin: string;
-    destination: string;
-    date: string;
-    seats: number;
-  }) => {
+  const handleSearchSubmit = (params: SearchPanelParams) => {
     setSearchParams(params);
     setSearchModalOpen(true);
   };

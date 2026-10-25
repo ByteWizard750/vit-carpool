@@ -800,3 +800,51 @@ a:hover {
 .dev-live-dot.loading {
   background-color: var(--status-warning);
 }
+
+/* Location Autocomplete Styles */
+.location-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.location-badge.station {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.location-badge.campus {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.location-badge.locality {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.location-badge.landmark {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.filter-autocomplete-input {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 0.825rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background-color: #ffffff;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.filter-autocomplete-input:focus {
+  border-color: var(--color-brand-600);
+}
+
+

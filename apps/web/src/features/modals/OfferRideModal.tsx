@@ -15,10 +15,12 @@ import {
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
+import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';
 import { useAuth } from '../auth/AuthContext';
 import {
   DriverRideResponseDto,
   VehicleResponseDto,
+  LocationSuggestionDto,
 } from '@vit-carpool/contracts';
 
 interface OfferRideModalProps {
@@ -67,7 +69,9 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
   const [editingRideId, setEditingRideId] = useState<string | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [origin, setOrigin] = useState('');
+  const [originLocation, setOriginLocation] = useState<LocationSuggestionDto | null>(null);
   const [destination, setDestination] = useState('');
+  const [destLocation, setDestLocation] = useState<LocationSuggestionDto | null>(null);
   const [pickupDescription, setPickupDescription] = useState('');
   const [dropoffDescription, setDropoffDescription] = useState('');
   const [departureTime, setDepartureTime] = useState('');
@@ -158,7 +162,9 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
   const resetForm = () => {
     setEditingRideId(null);
     setOrigin('');
+    setOriginLocation(null);
     setDestination('');
+    setDestLocation(null);
     setPickupDescription('');
     setDropoffDescription('');
     setDepartureTime(getDefaultDepartureTime());
@@ -173,7 +179,31 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
     setEditingRideId(ride.id);
     setSelectedVehicleId(ride.vehicleId);
     setOrigin(ride.origin);
+    if (ride.originLatitude !== undefined && ride.originLongitude !== undefined && ride.originLatitude !== null && ride.originLongitude !== null) {
+      setOriginLocation({
+        id: ride.originPlaceId || 'edit-origin',
+        name: ride.origin,
+        address: ride.originAddress || ride.origin,
+        latitude: ride.originLatitude,
+        longitude: ride.originLongitude,
+      });
+    } else {
+      setOriginLocation(null);
+    }
+
     setDestination(ride.destination);
+    if (ride.destinationLatitude !== undefined && ride.destinationLongitude !== undefined && ride.destinationLatitude !== null && ride.destinationLongitude !== null) {
+      setDestLocation({
+        id: ride.destinationPlaceId || 'edit-dest',
+        name: ride.destination,
+        address: ride.destinationAddress || ride.destination,
+        latitude: ride.destinationLatitude,
+        longitude: ride.destinationLongitude,
+      });
+    } else {
+      setDestLocation(null);
+    }
+
     setPickupDescription(ride.pickupDescription || '');
     setDropoffDescription(ride.dropoffDescription || '');
     setAvailableSeats(ride.availableSeats);
@@ -201,7 +231,15 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
 
       const payload: Record<string, any> = {
         origin: origin.trim(),
+        originAddress: originLocation?.address || null,
+        originLatitude: originLocation?.latitude ?? null,
+        originLongitude: originLocation?.longitude ?? null,
+        originPlaceId: originLocation?.id ?? null,
         destination: destination.trim(),
+        destinationAddress: destLocation?.address || null,
+        destinationLatitude: destLocation?.latitude ?? null,
+        destinationLongitude: destLocation?.longitude ?? null,
+        destinationPlaceId: destLocation?.id ?? null,
         pickupDescription: pickupDescription.trim() || null,
         dropoffDescription: dropoffDescription.trim() || null,
         departureTime: new Date(departureTime).toISOString(),
@@ -568,21 +606,17 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                   Origin Location *
                 </label>
-                <input
-                  type="text"
-                  list="corridor-locations"
-                  placeholder="e.g. Tambaram"
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-medium)',
-                    fontSize: '0.85rem',
-                  }}
+                <LocationAutocomplete
                   id="ride-origin-input"
+                  value={origin}
+                  onChange={(val, loc) => {
+                    setOrigin(val);
+                    setOriginLocation(loc || null);
+                  }}
+                  selectedLocation={originLocation}
+                  placeholder="e.g. Tambaram, Guindy..."
+                  required
+                  inputClassName="filter-autocomplete-input"
                 />
               </div>
 
@@ -590,21 +624,17 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                   Destination Location *
                 </label>
-                <input
-                  type="text"
-                  list="corridor-locations"
-                  placeholder="e.g. VIT Chennai"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-medium)',
-                    fontSize: '0.85rem',
-                  }}
+                <LocationAutocomplete
                   id="ride-destination-input"
+                  value={destination}
+                  onChange={(val, loc) => {
+                    setDestination(val);
+                    setDestLocation(loc || null);
+                  }}
+                  selectedLocation={destLocation}
+                  placeholder="e.g. VIT Chennai Campus..."
+                  required
+                  inputClassName="filter-autocomplete-input"
                 />
               </div>
             </div>

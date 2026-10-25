@@ -22,6 +22,14 @@ export const CreateRideSchema = z
       .trim()
       .min(1, 'Destination location is required')
       .max(128, 'Destination cannot exceed 128 characters'),
+    originAddress: z.string().trim().max(255).optional().nullable(),
+    originLatitude: z.number().min(-90).max(90).optional().nullable(),
+    originLongitude: z.number().min(-180).max(180).optional().nullable(),
+    originPlaceId: z.string().trim().max(128).optional().nullable(),
+    destinationAddress: z.string().trim().max(255).optional().nullable(),
+    destinationLatitude: z.number().min(-90).max(90).optional().nullable(),
+    destinationLongitude: z.number().min(-180).max(180).optional().nullable(),
+    destinationPlaceId: z.string().trim().max(128).optional().nullable(),
     pickupDescription: z
       .string()
       .trim()
@@ -50,7 +58,21 @@ export const CreateRideSchema = z
       .optional()
       .nullable(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) => {
+      const hasOriginLat = data.originLatitude !== undefined && data.originLatitude !== null;
+      const hasOriginLon = data.originLongitude !== undefined && data.originLongitude !== null;
+      if (hasOriginLat !== hasOriginLon) return false;
+      const hasDestLat = data.destinationLatitude !== undefined && data.destinationLatitude !== null;
+      const hasDestLon = data.destinationLongitude !== undefined && data.destinationLongitude !== null;
+      if (hasDestLat !== hasDestLon) return false;
+      return true;
+    },
+    {
+      message: 'Both latitude and longitude must be provided together for coordinates.',
+    },
+  );
 
 export type CreateRideDto = z.infer<typeof CreateRideSchema>;
 
@@ -71,6 +93,14 @@ export const UpdateRideSchema = z
       .min(1, 'Destination location cannot be empty')
       .max(128, 'Destination cannot exceed 128 characters')
       .optional(),
+    originAddress: z.string().trim().max(255).optional().nullable(),
+    originLatitude: z.number().min(-90).max(90).optional().nullable(),
+    originLongitude: z.number().min(-180).max(180).optional().nullable(),
+    originPlaceId: z.string().trim().max(128).optional().nullable(),
+    destinationAddress: z.string().trim().max(255).optional().nullable(),
+    destinationLatitude: z.number().min(-90).max(90).optional().nullable(),
+    destinationLongitude: z.number().min(-180).max(180).optional().nullable(),
+    destinationPlaceId: z.string().trim().max(128).optional().nullable(),
     pickupDescription: z
       .string()
       .trim()
@@ -104,7 +134,31 @@ export const UpdateRideSchema = z
   .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided for update',
-  });
+  })
+  .refine(
+    (data) => {
+      const hasOriginLat = data.originLatitude !== undefined && data.originLatitude !== null;
+      const hasOriginLon = data.originLongitude !== undefined && data.originLongitude !== null;
+      if (
+        (data.originLatitude !== undefined || data.originLongitude !== undefined) &&
+        hasOriginLat !== hasOriginLon
+      ) {
+        return false;
+      }
+      const hasDestLat = data.destinationLatitude !== undefined && data.destinationLatitude !== null;
+      const hasDestLon = data.destinationLongitude !== undefined && data.destinationLongitude !== null;
+      if (
+        (data.destinationLatitude !== undefined || data.destinationLongitude !== undefined) &&
+        hasDestLat !== hasDestLon
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Both latitude and longitude must be provided together for coordinates.',
+    },
+  );
 
 export type UpdateRideDto = z.infer<typeof UpdateRideSchema>;
 
@@ -117,7 +171,15 @@ export const DriverRideResponseSchema = z.object({
   vehicleId: z.string().uuid(),
   audience: AudienceTypeSchema,
   origin: z.string(),
+  originAddress: z.string().nullable().optional(),
+  originLatitude: z.number().nullable().optional(),
+  originLongitude: z.number().nullable().optional(),
+  originPlaceId: z.string().nullable().optional(),
   destination: z.string(),
+  destinationAddress: z.string().nullable().optional(),
+  destinationLatitude: z.number().nullable().optional(),
+  destinationLongitude: z.number().nullable().optional(),
+  destinationPlaceId: z.string().nullable().optional(),
   pickupDescription: z.string().nullable(),
   dropoffDescription: z.string().nullable(),
   departureTime: z.string().datetime(),
@@ -142,7 +204,15 @@ export const PublicRideSummarySchema = z.object({
   driverName: z.string(),
   audience: AudienceTypeSchema,
   origin: z.string(),
+  originAddress: z.string().nullable().optional(),
+  originLatitude: z.number().nullable().optional(),
+  originLongitude: z.number().nullable().optional(),
+  originPlaceId: z.string().nullable().optional(),
   destination: z.string(),
+  destinationAddress: z.string().nullable().optional(),
+  destinationLatitude: z.number().nullable().optional(),
+  destinationLongitude: z.number().nullable().optional(),
+  destinationPlaceId: z.string().nullable().optional(),
   departureTime: z.string().datetime(),
   availableSeats: z.number().int(),
   costPerSeat: z.number().int().nullable(),
@@ -155,7 +225,8 @@ export type PublicRideSummaryDto = z.infer<typeof PublicRideSummarySchema>;
 
 /**
  * Zod schema for searching available rides.
- * Supports origin, destination, date or date range, minimum passenger seats, pagination, and sorting.
+ * Supports origin, destination, geographic proximity (originLat/originLon/destLat/destLon),
+ * date or date range, minimum passenger seats, pagination, and sorting.
  */
 export const SearchRidesQuerySchema = z
   .object({
@@ -171,6 +242,12 @@ export const SearchRidesQuerySchema = z
       .max(128, 'Destination search filter cannot exceed 128 characters')
       .optional()
       .transform((val) => (val === '' ? undefined : val)),
+    originLat: z.coerce.number().min(-90).max(90).optional(),
+    originLon: z.coerce.number().min(-180).max(180).optional(),
+    originRadiusKm: z.coerce.number().min(0.5).max(50).default(3.0),
+    destLat: z.coerce.number().min(-90).max(90).optional(),
+    destLon: z.coerce.number().min(-180).max(180).optional(),
+    destRadiusKm: z.coerce.number().min(0.5).max(50).default(3.0),
     departureDate: z
       .string()
       .trim()
@@ -219,6 +296,20 @@ export const SearchRidesQuerySchema = z
     {
       message: 'departureTo cannot be earlier than departureFrom',
       path: ['departureTo'],
+    },
+  )
+  .refine(
+    (data) => {
+      const hasOriginLat = data.originLat !== undefined;
+      const hasOriginLon = data.originLon !== undefined;
+      if (hasOriginLat !== hasOriginLon) return false;
+      const hasDestLat = data.destLat !== undefined;
+      const hasDestLon = data.destLon !== undefined;
+      if (hasDestLat !== hasDestLon) return false;
+      return true;
+    },
+    {
+      message: 'Both latitude and longitude must be provided together for spatial search.',
     },
   );
 

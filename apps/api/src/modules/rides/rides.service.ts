@@ -37,7 +37,15 @@ export class RidesService {
       vehicleId: ride.vehicleId,
       audience: ride.audience,
       origin: ride.origin,
+      originAddress: ride.originAddress ?? undefined,
+      originLatitude: ride.originLatitude ?? undefined,
+      originLongitude: ride.originLongitude ?? undefined,
+      originPlaceId: ride.originPlaceId ?? undefined,
       destination: ride.destination,
+      destinationAddress: ride.destinationAddress ?? undefined,
+      destinationLatitude: ride.destinationLatitude ?? undefined,
+      destinationLongitude: ride.destinationLongitude ?? undefined,
+      destinationPlaceId: ride.destinationPlaceId ?? undefined,
       pickupDescription: ride.pickupDescription,
       dropoffDescription: ride.dropoffDescription,
       departureTime: ride.departureTime.toISOString(),
@@ -76,7 +84,15 @@ export class RidesService {
       driverName: ride.driver?.fullName || 'Verified Member',
       audience: ride.audience,
       origin: ride.origin,
+      originAddress: ride.originAddress ?? undefined,
+      originLatitude: ride.originLatitude ?? undefined,
+      originLongitude: ride.originLongitude ?? undefined,
+      originPlaceId: ride.originPlaceId ?? undefined,
       destination: ride.destination,
+      destinationAddress: ride.destinationAddress ?? undefined,
+      destinationLatitude: ride.destinationLatitude ?? undefined,
+      destinationLongitude: ride.destinationLongitude ?? undefined,
+      destinationPlaceId: ride.destinationPlaceId ?? undefined,
       departureTime: ride.departureTime.toISOString(),
       availableSeats: ride.availableSeats,
       costPerSeat: ride.costPerSeat,
@@ -143,7 +159,15 @@ export class RidesService {
           vehicleId: vehicle.id,
           audience: user.audience!,
           origin: dto.origin.trim(),
+          originAddress: dto.originAddress?.trim() || null,
+          originLatitude: dto.originLatitude ?? null,
+          originLongitude: dto.originLongitude ?? null,
+          originPlaceId: dto.originPlaceId?.trim() || null,
           destination: dto.destination.trim(),
+          destinationAddress: dto.destinationAddress?.trim() || null,
+          destinationLatitude: dto.destinationLatitude ?? null,
+          destinationLongitude: dto.destinationLongitude ?? null,
+          destinationPlaceId: dto.destinationPlaceId?.trim() || null,
           pickupDescription: dto.pickupDescription?.trim() || null,
           dropoffDescription: dto.dropoffDescription?.trim() || null,
           departureTime: depTime,
@@ -253,6 +277,38 @@ export class RidesService {
       }
     }
 
+    const spatialConditions: Prisma.Sql[] = [];
+    if (dto.originLat !== undefined && dto.originLon !== undefined) {
+      const radiusMeters = (dto.originRadiusKm ?? 5) * 1000;
+      spatialConditions.push(Prisma.sql`
+        r.origin_geom IS NOT NULL AND ST_DWithin(
+          r.origin_geom,
+          ST_SetSRID(ST_MakePoint(${dto.originLon}, ${dto.originLat}), 4326)::geography,
+          ${radiusMeters}
+        )
+      `);
+    }
+
+    if (dto.destLat !== undefined && dto.destLon !== undefined) {
+      const radiusMeters = (dto.destRadiusKm ?? 5) * 1000;
+      spatialConditions.push(Prisma.sql`
+        r.destination_geom IS NOT NULL AND ST_DWithin(
+          r.destination_geom,
+          ST_SetSRID(ST_MakePoint(${dto.destLon}, ${dto.destLat}), 4326)::geography,
+          ${radiusMeters}
+        )
+      `);
+    }
+
+    let spatialRideIds: string[] | null = null;
+    if (spatialConditions.length > 0) {
+      const whereSql = Prisma.join(spatialConditions, ' AND ');
+      const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT r.id FROM rides r WHERE ${whereSql}
+      `;
+      spatialRideIds = rows.map((r) => r.id);
+    }
+
     const where: Prisma.RideWhereInput = {
       audience: user.audience, // Strict database-level cohort isolation
       status: RideStatus.SCHEDULED, // Never return cancelled rides
@@ -266,16 +322,27 @@ export class RidesService {
       vehicle: {
         deletedAt: null, // Exclude rides whose vehicle has been deactivated
       },
+      ...(spatialRideIds !== null ? { id: { in: spatialRideIds } } : {}),
     };
 
-    if (dto.origin && dto.origin.trim().length > 0) {
+    // If spatial search was NOT applied for origin, fallback to case-insensitive text search
+    if (
+      (dto.originLat === undefined || dto.originLon === undefined) &&
+      dto.origin &&
+      dto.origin.trim().length > 0
+    ) {
       where.origin = {
         contains: dto.origin.trim(),
         mode: 'insensitive',
       };
     }
 
-    if (dto.destination && dto.destination.trim().length > 0) {
+    // If spatial search was NOT applied for destination, fallback to case-insensitive text search
+    if (
+      (dto.destLat === undefined || dto.destLon === undefined) &&
+      dto.destination &&
+      dto.destination.trim().length > 0
+    ) {
       where.destination = {
         contains: dto.destination.trim(),
         mode: 'insensitive',
@@ -382,7 +449,15 @@ export class RidesService {
     const dataToUpdate: Record<string, any> = {};
 
     if (dto.origin !== undefined) dataToUpdate.origin = dto.origin.trim();
+    if (dto.originAddress !== undefined) dataToUpdate.originAddress = dto.originAddress?.trim() || null;
+    if (dto.originLatitude !== undefined) dataToUpdate.originLatitude = dto.originLatitude ?? null;
+    if (dto.originLongitude !== undefined) dataToUpdate.originLongitude = dto.originLongitude ?? null;
+    if (dto.originPlaceId !== undefined) dataToUpdate.originPlaceId = dto.originPlaceId?.trim() || null;
     if (dto.destination !== undefined) dataToUpdate.destination = dto.destination.trim();
+    if (dto.destinationAddress !== undefined) dataToUpdate.destinationAddress = dto.destinationAddress?.trim() || null;
+    if (dto.destinationLatitude !== undefined) dataToUpdate.destinationLatitude = dto.destinationLatitude ?? null;
+    if (dto.destinationLongitude !== undefined) dataToUpdate.destinationLongitude = dto.destinationLongitude ?? null;
+    if (dto.destinationPlaceId !== undefined) dataToUpdate.destinationPlaceId = dto.destinationPlaceId?.trim() || null;
     if (dto.pickupDescription !== undefined) {
       dataToUpdate.pickupDescription = dto.pickupDescription?.trim() || null;
     }

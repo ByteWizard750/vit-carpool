@@ -74,3 +74,12 @@ export {
   type DriverBookingResponseDto,
 } from './booking.contract';
 
+export {
+  LocationSuggestionSchema,
+  type LocationSuggestionDto,
+  LocationAutocompleteQuerySchema,
+  type LocationAutocompleteQueryDto,
+  LocationAutocompleteResponseSchema,
+  type LocationAutocompleteResponseDto,
+} from './location.contract';
+

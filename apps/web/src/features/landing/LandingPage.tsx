@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldCheck, GraduationCap, Car, Sparkles, ArrowRight } from 'lucide-react';
-import { RideSearchPanel } from '../search/RideSearchPanel';
+import { RideSearchPanel, SearchPanelParams } from '../search/RideSearchPanel';
 import { SeparationBanner } from '../safety/SeparationBanner';
 import { PopularRoutesGrid } from '../search/PopularRoutesGrid';
 import { HowItWorksSection } from '../how-it-works/HowItWorksSection';
@@ -8,7 +8,7 @@ import { TrustCharterSection } from '../safety/TrustCharterSection';
 import { Button } from '../../components/common/Button';
 
 interface LandingPageProps {
-  onSearch: (params: { origin: string; destination: string; date: string; seats: number }) => void;
+  onSearch: (params: SearchPanelParams) => void;
   onOfferRide: () => void;
   onSelectRoute: (origin: string, destination: string) => void;
   onOpenAuth: () => void;

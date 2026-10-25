@@ -18,14 +18,19 @@ import {
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
+import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';
 import { useAuth } from '../auth/AuthContext';
-import { PublicRideSummaryDto, SearchRidesResponseDto } from '@vit-carpool/contracts';
+import { PublicRideSummaryDto, SearchRidesResponseDto, LocationSuggestionDto } from '@vit-carpool/contracts';
 
 interface SearchParams {
   origin: string;
   destination: string;
   date: string;
   seats: number;
+  originLat?: number;
+  originLon?: number;
+  destLat?: number;
+  destLon?: number;
 }
 
 interface SearchResultsModalProps {
@@ -51,7 +56,9 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
 
   // Local filter states
   const [filterOrigin, setFilterOrigin] = useState('');
+  const [filterOriginLocation, setFilterOriginLocation] = useState<LocationSuggestionDto | null>(null);
   const [filterDestination, setFilterDestination] = useState('');
+  const [filterDestLocation, setFilterDestLocation] = useState<LocationSuggestionDto | null>(null);
   const [filterDate, setFilterDate] = useState('');
   const [filterSeats, setFilterSeats] = useState<number>(1);
 
@@ -121,6 +128,30 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
       setFilterDestination(searchParams.destination || '');
       setFilterDate(searchParams.date || '');
       setFilterSeats(searchParams.seats || 1);
+
+      if (searchParams.originLat !== undefined && searchParams.originLon !== undefined) {
+        setFilterOriginLocation({
+          id: 'search-origin-coord',
+          name: searchParams.origin,
+          address: searchParams.origin,
+          latitude: searchParams.originLat,
+          longitude: searchParams.originLon,
+        });
+      } else {
+        setFilterOriginLocation(null);
+      }
+
+      if (searchParams.destLat !== undefined && searchParams.destLon !== undefined) {
+        setFilterDestLocation({
+          id: 'search-dest-coord',
+          name: searchParams.destination,
+          address: searchParams.destination,
+          latitude: searchParams.destLat,
+          longitude: searchParams.destLon,
+        });
+      } else {
+        setFilterDestLocation(null);
+      }
     }
   }, [searchParams, isOpen]);
 
@@ -142,6 +173,14 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
         }
         if (filterDestination.trim()) {
           queryParams.set('destination', filterDestination.trim());
+        }
+        if (filterOriginLocation?.latitude !== undefined && filterOriginLocation?.longitude !== undefined) {
+          queryParams.set('originLat', filterOriginLocation.latitude.toString());
+          queryParams.set('originLon', filterOriginLocation.longitude.toString());
+        }
+        if (filterDestLocation?.latitude !== undefined && filterDestLocation?.longitude !== undefined) {
+          queryParams.set('destLat', filterDestLocation.latitude.toString());
+          queryParams.set('destLon', filterDestLocation.longitude.toString());
         }
         if (filterDate.trim()) {
           queryParams.set('departureDate', filterDate.trim());
@@ -177,7 +216,7 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
         setLoading(false);
       }
     },
-    [token, user, filterOrigin, filterDestination, filterDate, filterSeats],
+    [token, user, filterOrigin, filterDestination, filterDate, filterSeats, filterOriginLocation, filterDestLocation],
   );
 
   // Trigger search on modal open or when authenticated
@@ -194,7 +233,9 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
 
   const handleClearFilters = () => {
     setFilterOrigin('');
+    setFilterOriginLocation(null);
     setFilterDestination('');
+    setFilterDestLocation(null);
     setFilterDate('');
     setFilterSeats(1);
     // Execute fresh search with empty filters
@@ -735,20 +776,16 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
                   Origin Point
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={filterOrigin}
-                    onChange={(e) => setFilterOrigin(e.target.value)}
-                    placeholder="Leaving from..."
-                    style={{
-                      width: '100%',
-                      padding: '7px 9px',
-                      fontSize: '0.825rem',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-medium)',
-                      backgroundColor: '#ffffff',
-                    }}
+                  <LocationAutocomplete
                     id="filter-origin-input"
+                    value={filterOrigin}
+                    onChange={(val, loc) => {
+                      setFilterOrigin(val);
+                      setFilterOriginLocation(loc || null);
+                    }}
+                    selectedLocation={filterOriginLocation}
+                    placeholder="Leaving from..."
+                    inputClassName="filter-autocomplete-input"
                   />
                 </div>
               </div>
@@ -759,20 +796,16 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
                   Destination
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={filterDestination}
-                    onChange={(e) => setFilterDestination(e.target.value)}
-                    placeholder="Going to..."
-                    style={{
-                      width: '100%',
-                      padding: '7px 9px',
-                      fontSize: '0.825rem',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-medium)',
-                      backgroundColor: '#ffffff',
-                    }}
+                  <LocationAutocomplete
                     id="filter-destination-input"
+                    value={filterDestination}
+                    onChange={(val, loc) => {
+                      setFilterDestination(val);
+                      setFilterDestLocation(loc || null);
+                    }}
+                    selectedLocation={filterDestLocation}
+                    placeholder="Going to..."
+                    inputClassName="filter-autocomplete-input"
                   />
                 </div>
               </div>

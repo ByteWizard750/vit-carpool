@@ -31,11 +31,32 @@ export const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((val) => val === 'true'),
+
+  // Location Autocomplete Configuration
+  LOCATION_PROVIDER: z.enum(['mock', 'mapbox']).default('mock'),
+  MAPBOX_ACCESS_TOKEN: z.string().optional().or(z.literal('')),
+  MAPBOX_SEARCH_BBOX: z.string().default('79.80,12.60,80.35,13.35'),
+  MAPBOX_PROXIMITY: z.string().default('80.1534,12.8406'),
+  LOCATION_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(500).max(30000).default(5000),
+  LOCATION_RATE_LIMIT_TTL: z.coerce.number().int().min(1).default(60),
+  LOCATION_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(30),
 }).refine(
   (data) => !(data.NODE_ENV === 'production' && data.JWT_TEST_MODE === true),
   {
     message: 'JWT_TEST_MODE must not be enabled in production environment',
     path: ['JWT_TEST_MODE'],
+  },
+).refine(
+  (data) => !(data.NODE_ENV === 'production' && data.LOCATION_PROVIDER === 'mock'),
+  {
+    message: 'LOCATION_PROVIDER cannot be mock in production environment. A valid mapbox provider configuration must be used.',
+    path: ['LOCATION_PROVIDER'],
+  },
+).refine(
+  (data) => !(data.LOCATION_PROVIDER === 'mapbox' && (!data.MAPBOX_ACCESS_TOKEN || !data.MAPBOX_ACCESS_TOKEN.trim())),
+  {
+    message: 'MAPBOX_ACCESS_TOKEN is required when LOCATION_PROVIDER is set to mapbox',
+    path: ['MAPBOX_ACCESS_TOKEN'],
   },
 );
 

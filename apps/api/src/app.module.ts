@@ -11,6 +11,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { RidesModule } from './modules/rides/rides.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { LocationsModule } from './modules/locations/locations.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
     VehiclesModule,
     RidesModule,
     BookingsModule,
+    LocationsModule,
     HealthModule,
   ],
 })

@@ -1,66 +1,101 @@
 import React, { useState } from 'react';
 import { MapPin, Navigation, Calendar, Users, Search, ArrowRightLeft } from 'lucide-react';
 import { Button } from '../../components/common/Button';
+import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';
+import { LocationSuggestionDto } from '@vit-carpool/contracts';
 import { getLocalTodayDate } from '../../utils/date';
 
+export interface SearchPanelParams {
+  origin: string;
+  destination: string;
+  date: string;
+  seats: number;
+  originLat?: number;
+  originLon?: number;
+  destLat?: number;
+  destLon?: number;
+}
+
 interface RideSearchPanelProps {
-  onSearch: (params: { origin: string; destination: string; date: string; seats: number }) => void;
+  onSearch: (params: SearchPanelParams) => void;
   onOfferRide: () => void;
 }
 
 export const RideSearchPanel: React.FC<RideSearchPanelProps> = ({ onSearch, onOfferRide }) => {
   const todayStr = getLocalTodayDate();
   const [origin, setOrigin] = useState('Tambaram Station / GST Rd');
+  const [originLocation, setOriginLocation] = useState<LocationSuggestionDto | null>(null);
+
   const [destination, setDestination] = useState('VIT Chennai Campus (Vandalur-Kelambakkam)');
+  const [destLocation, setDestLocation] = useState<LocationSuggestionDto | null>(null);
+
   const [date, setDate] = useState(todayStr);
   const [seats, setSeats] = useState(1);
 
   const handleSwap = () => {
-    const temp = origin;
+    const tempText = origin;
+    const tempLoc = originLocation;
     setOrigin(destination);
-    setDestination(temp);
+    setOriginLocation(destLocation);
+    setDestination(tempText);
+    setDestLocation(tempLoc);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch({ origin, destination, date, seats });
+    onSearch({
+      origin,
+      destination,
+      date,
+      seats,
+      originLat: originLocation?.latitude,
+      originLon: originLocation?.longitude,
+      destLat: destLocation?.latitude,
+      destLon: destLocation?.longitude,
+    });
   };
 
   return (
     <section className="search-widget-container" id="search" aria-label="Search Rides Panel">
-      <form onSubmit={handleSubmit} className="search-box-card">
-        <div className="search-segments-grid">
+      <form onSubmit={handleSubmit} className="search-box-card" style={{ overflow: 'visible' }}>
+        <div className="search-segments-grid" style={{ overflow: 'visible' }}>
           {/* Origin Segment */}
-          <div className="search-segment">
+          <div className="search-segment" style={{ position: 'relative', overflow: 'visible' }}>
             <span className="search-segment-label">
               <MapPin size={12} style={{ color: '#2563eb' }} />
               Leaving From
             </span>
-            <input
-              type="text"
-              className="search-segment-input"
-              value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
-              placeholder="e.g. Tambaram, Velachery, OMR..."
-              required
+            <LocationAutocomplete
               id="search-origin"
+              value={origin}
+              onChange={(val, loc) => {
+                setOrigin(val);
+                setOriginLocation(loc || null);
+              }}
+              selectedLocation={originLocation}
+              placeholder="e.g. Vandalur, Tambaram, Velachery..."
+              required
+              inputClassName="search-segment-input"
             />
           </div>
 
           {/* Destination Segment */}
-          <div className="search-segment">
+          <div className="search-segment" style={{ position: 'relative', overflow: 'visible' }}>
             <span className="search-segment-label">
               <Navigation size={12} style={{ color: '#16a34a' }} />
               Going To
             </span>
-            <input
-              type="text"
-              className="search-segment-input"
+            <LocationAutocomplete
+              id="search-destination"
               value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              onChange={(val, loc) => {
+                setDestination(val);
+                setDestLocation(loc || null);
+              }}
+              selectedLocation={destLocation}
               placeholder="e.g. VIT Chennai Campus..."
               required
-              id="search-destination"
+              inputClassName="search-segment-input"
             />
           </div>
 
