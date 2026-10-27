@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
 import { User, Vehicle, Ride, RideStatus, BookingStatus, Prisma } from '@vit-carpool/db';
@@ -131,14 +133,68 @@ export class RidesService {
   }
 
   /**
-   * Publish a new ride for the authenticated, verified user.
+   * Computes a canonical SHA-256 hash of a ride creation payload to verify
+   * that retries using the same idempotency key carry identical request data.
    */
-  async publishRide(user: User, dto: CreateRideDto): Promise<DriverRideResponseDto> {
+  private computeRideRequestHash(dto: CreateRideDto): string {
+    const canonical = {
+      vehicleId: dto.vehicleId,
+      origin: dto.origin.trim().toLowerCase(),
+      destination: dto.destination.trim().toLowerCase(),
+      originLatitude: dto.originLatitude ?? null,
+      originLongitude: dto.originLongitude ?? null,
+      originPlaceId: dto.originPlaceId ?? null,
+      destinationLatitude: dto.destinationLatitude ?? null,
+      destinationLongitude: dto.destinationLongitude ?? null,
+      destinationPlaceId: dto.destinationPlaceId ?? null,
+      departureTime: new Date(dto.departureTime).toISOString(),
+      availableSeats: dto.availableSeats,
+      costPerSeat: dto.costPerSeat ?? null,
+      pickupDescription: dto.pickupDescription?.trim() || null,
+      dropoffDescription: dto.dropoffDescription?.trim() || null,
+    };
+    return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+  }
+
+  /**
+   * Publish a new ride for the authenticated, verified user.
+   * Supports persistent concurrency-safe publication idempotency when an idempotency key is provided.
+   */
+  async publishRide(
+    user: User,
+    dto: CreateRideDto,
+    idempotencyKey?: string,
+  ): Promise<DriverRideResponseDto> {
     if (!user.audience) {
       throw new BadRequestException('Driver must have an assigned institutional audience.');
     }
 
-    // 1. Verify vehicle ownership and active status
+    const trimmedKey = idempotencyKey?.trim() || undefined;
+    let requestHash: string | null = null;
+
+    // 1. If idempotency key provided, check if a previous attempt already succeeded
+    if (trimmedKey) {
+      requestHash = this.computeRideRequestHash(dto);
+      const existingKey = await this.prisma.idempotencyKey.findUnique({
+        where: {
+          userId_key: {
+            userId: user.id,
+            key: trimmedKey,
+          },
+        },
+      });
+
+      if (existingKey) {
+        if (existingKey.requestHash !== requestHash) {
+          throw new ConflictException(
+            `Idempotency key '${trimmedKey}' was previously used with a different request payload.`,
+          );
+        }
+        return existingKey.responseBody as unknown as DriverRideResponseDto;
+      }
+    }
+
+    // 2. Verify vehicle ownership and active status
     const vehicle = await this.prisma.vehicle.findFirst({
       where: {
         id: dto.vehicleId,
@@ -153,7 +209,7 @@ export class RidesService {
       );
     }
 
-    // 2. Validate passenger capacity (vehicle capacity includes the driver)
+    // 3. Validate passenger capacity (vehicle capacity includes the driver)
     const maxPassengerSeats = vehicle.capacity - 1;
     if (dto.availableSeats > maxPassengerSeats) {
       throw new BadRequestException(
@@ -161,7 +217,7 @@ export class RidesService {
       );
     }
 
-    // 3. Validate departure time (must be at least 10 minutes in the future)
+    // 4. Validate departure time (must be at least 10 minutes in the future)
     const depTime = new Date(dto.departureTime);
     if (isNaN(depTime.getTime())) {
       throw new BadRequestException('Invalid departure timestamp format.');
@@ -171,57 +227,115 @@ export class RidesService {
       throw new BadRequestException('Departure time must be at least 10 minutes in the future.');
     }
 
-    // 4. Create ride and audit log atomically in the same database transaction
-    return this.prisma.$transaction(async (tx) => {
-      const ride = await tx.ride.create({
-        data: {
-          driverId: user.id,
-          vehicleId: vehicle.id,
-          audience: user.audience!,
-          origin: dto.origin.trim(),
-          originAddress: dto.originAddress?.trim() || null,
-          originLatitude: dto.originLatitude ?? null,
-          originLongitude: dto.originLongitude ?? null,
-          originPlaceId: dto.originPlaceId?.trim() || null,
-          destination: dto.destination.trim(),
-          destinationAddress: dto.destinationAddress?.trim() || null,
-          destinationLatitude: dto.destinationLatitude ?? null,
-          destinationLongitude: dto.destinationLongitude ?? null,
-          destinationPlaceId: dto.destinationPlaceId?.trim() || null,
-          pickupDescription: dto.pickupDescription?.trim() || null,
-          dropoffDescription: dto.dropoffDescription?.trim() || null,
-          departureTime: depTime,
-          availableSeats: dto.availableSeats,
-          totalSeats: dto.availableSeats,
-          costPerSeat: dto.costPerSeat ?? null,
-          status: RideStatus.SCHEDULED,
-        },
-        include: {
-          vehicle: true,
-        },
-      });
+    // 5. Create ride, audit log, and idempotency key atomically in the same database transaction
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // If idempotency key provided, re-verify within transaction
+        if (trimmedKey && requestHash) {
+          const existingInTx = await tx.idempotencyKey.findUnique({
+            where: {
+              userId_key: {
+                userId: user.id,
+                key: trimmedKey,
+              },
+            },
+          });
+          if (existingInTx) {
+            if (existingInTx.requestHash !== requestHash) {
+              throw new ConflictException(
+                `Idempotency key '${trimmedKey}' was previously used with a different request payload.`,
+              );
+            }
+            return existingInTx.responseBody as unknown as DriverRideResponseDto;
+          }
+        }
 
-      await this.audit.log(
-        {
-          actorId: user.id,
-          actorRole: user.role,
-          action: 'RIDE_PUBLISHED',
-          targetType: 'RIDE',
-          targetId: ride.id,
-          changes: {
-            origin: ride.origin,
-            destination: ride.destination,
-            departureTime: ride.departureTime.toISOString(),
-            availableSeats: ride.availableSeats,
-            costPerSeat: ride.costPerSeat,
-            vehicleId: ride.vehicleId,
+        const ride = await tx.ride.create({
+          data: {
+            driverId: user.id,
+            vehicleId: vehicle.id,
+            audience: user.audience!,
+            origin: dto.origin.trim(),
+            originAddress: dto.originAddress?.trim() || null,
+            originLatitude: dto.originLatitude ?? null,
+            originLongitude: dto.originLongitude ?? null,
+            originPlaceId: dto.originPlaceId?.trim() || null,
+            destination: dto.destination.trim(),
+            destinationAddress: dto.destinationAddress?.trim() || null,
+            destinationLatitude: dto.destinationLatitude ?? null,
+            destinationLongitude: dto.destinationLongitude ?? null,
+            destinationPlaceId: dto.destinationPlaceId?.trim() || null,
+            pickupDescription: dto.pickupDescription?.trim() || null,
+            dropoffDescription: dto.dropoffDescription?.trim() || null,
+            departureTime: depTime,
+            availableSeats: dto.availableSeats,
+            totalSeats: dto.availableSeats,
+            costPerSeat: dto.costPerSeat ?? null,
+            status: RideStatus.SCHEDULED,
           },
-        },
-        tx,
-      );
+          include: {
+            vehicle: true,
+          },
+        });
 
-      return this.toDriverRideDto(ride);
-    });
+        await this.audit.log(
+          {
+            actorId: user.id,
+            actorRole: user.role,
+            action: 'RIDE_PUBLISHED',
+            targetType: 'RIDE',
+            targetId: ride.id,
+            changes: {
+              origin: ride.origin,
+              destination: ride.destination,
+              departureTime: ride.departureTime.toISOString(),
+              availableSeats: ride.availableSeats,
+              costPerSeat: ride.costPerSeat,
+              vehicleId: ride.vehicleId,
+            },
+          },
+          tx,
+        );
+
+        const dtoResponse = this.toDriverRideDto(ride);
+
+        if (trimmedKey && requestHash) {
+          await tx.idempotencyKey.create({
+            data: {
+              userId: user.id,
+              key: trimmedKey,
+              targetType: 'RIDE',
+              requestHash,
+              rideId: ride.id,
+              responseBody: dtoResponse as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+
+        return dtoResponse;
+      });
+    } catch (err: any) {
+      // Concurrency safety: handle unique constraint race condition on [userId, key] (Prisma P2002)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && trimmedKey) {
+        const raceExisting = await this.prisma.idempotencyKey.findUnique({
+          where: {
+            userId_key: {
+              userId: user.id,
+              key: trimmedKey,
+            },
+          },
+        });
+        if (raceExisting) {
+          if (raceExisting.requestHash !== requestHash) {
+            throw new ConflictException(
+              `Idempotency key '${trimmedKey}' was previously used with a different request payload.`,
+            );
+          }
+          return raceExisting.responseBody as unknown as DriverRideResponseDto;
+        }
+      }
+      throw err;
+    }
   }
 
   /**

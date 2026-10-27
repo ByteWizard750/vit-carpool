@@ -57,6 +57,7 @@ export const CreateRideSchema = z
       .max(1000, 'Cost share cannot exceed ₹1000 per seat')
       .optional()
       .nullable(),
+    idempotencyKey: z.string().max(128).optional().nullable(),
   })
   .strict()
   .refine(

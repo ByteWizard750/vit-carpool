@@ -2228,4 +2228,292 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
         .expect(400);
     });
   });
+
+  // ===========================================================================
+  // 13. Ride Creation Idempotency & Concurrency Safety
+  // ===========================================================================
+  describe('13. Ride Creation Idempotency', () => {
+    const baseRidePayload = () => ({
+      vehicleId: studentVehicleId,
+      origin: 'VIT Chennai Main Gate',
+      destination: 'Tambaram Railway Station',
+      departureTime: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+      availableSeats: 3,
+      costPerSeat: 50,
+    });
+
+    it('first request with Idempotency-Key creates exactly one ride and records key in database', async () => {
+      const key = `idemp-first-${Date.now()}`;
+      const payload = baseRidePayload();
+
+      const res = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send(payload)
+        .expect(201);
+
+      expect(res.body.id).toBeDefined();
+      expect(res.body.origin).toBe(payload.origin);
+
+      // Verify idempotency record in DB
+      const record = await testPrisma.idempotencyKey.findUnique({
+        where: {
+          userId_key: {
+            userId: studentDriverId,
+            key,
+          },
+        },
+      });
+      expect(record).toBeDefined();
+      expect(record?.rideId).toBe(res.body.id);
+    });
+
+    it('repeating the same request with the same key and payload returns original result without creating duplicate ride', async () => {
+      const key = `idemp-retry-${Date.now()}`;
+      const payload = baseRidePayload();
+
+      // First publication attempt
+      const firstRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send(payload)
+        .expect(201);
+
+      const originalRideId = firstRes.body.id;
+      expect(originalRideId).toBeDefined();
+
+      const rideCountBefore = await testPrisma.ride.count({
+        where: { driverId: studentDriverId, origin: payload.origin },
+      });
+
+      // Network retry attempt with same key and identical payload
+      const retryRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send(payload)
+        .expect(201);
+
+      // Returns the original ride ID
+      expect(retryRes.body.id).toBe(originalRideId);
+      expect(retryRes.body.origin).toBe(payload.origin);
+
+      // Verify no duplicate ride was created
+      const rideCountAfter = await testPrisma.ride.count({
+        where: { driverId: studentDriverId, origin: payload.origin },
+      });
+      expect(rideCountAfter).toBe(rideCountBefore);
+    });
+
+    it('reusing the same key with a modified payload returns 409 Conflict', async () => {
+      const key = `idemp-conflict-${Date.now()}`;
+      const payload = baseRidePayload();
+
+      // First request
+      await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send(payload)
+        .expect(201);
+
+      // Retry with modified costPerSeat
+      const conflictRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send({
+          ...payload,
+          costPerSeat: 80, // altered payload
+        })
+        .expect(409);
+
+      expect(conflictRes.body.message).toMatch(/idempotency key/i);
+    });
+
+    it('concurrent requests with the same key create no more than one ride', async () => {
+      const key = `idemp-concurrent-${Date.now()}`;
+      const payload = {
+        ...baseRidePayload(),
+        origin: 'VIT Concurrency Test Origin',
+      };
+
+      // Launch 5 concurrent publication requests
+      const promises = Array.from({ length: 5 }, () =>
+        request(app.getHttpServer())
+          .post('/rides')
+          .set('Authorization', `Bearer ${studentDriverToken}`)
+          .set('Idempotency-Key', key)
+          .send(payload),
+      );
+
+      const responses = await Promise.all(promises);
+
+      // All responses should succeed (201)
+      for (const res of responses) {
+        expect(res.status).toBe(201);
+      }
+
+      // All responses must return the EXACT same ride ID
+      const rideIds = responses.map((r) => r.body.id);
+      const uniqueIds = Array.from(new Set(rideIds));
+      expect(uniqueIds.length).toBe(1);
+
+      // Verify exactly 1 ride exists in the database
+      const ridesInDb = await testPrisma.ride.findMany({
+        where: { driverId: studentDriverId, origin: 'VIT Concurrency Test Origin' },
+      });
+      expect(ridesInDb.length).toBe(1);
+    });
+
+    it('two different keys can create two separate legitimate rides with same route and time', async () => {
+      const key1 = `idemp-diff-1-${Date.now()}`;
+      const key2 = `idemp-diff-2-${Date.now()}`;
+      const payload = baseRidePayload();
+
+      const res1 = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key1)
+        .send(payload)
+        .expect(201);
+
+      const res2 = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key2)
+        .send(payload)
+        .expect(201);
+
+      expect(res1.body.id).not.toBe(res2.body.id);
+
+      const ride1 = await testPrisma.ride.findUnique({ where: { id: res1.body.id } });
+      const ride2 = await testPrisma.ride.findUnique({ where: { id: res2.body.id } });
+      expect(ride1).toBeDefined();
+      expect(ride2).toBeDefined();
+    });
+
+    it('different authenticated drivers using the same key do not collide or leak each other results', async () => {
+      const sharedKey = `driver-isolated-${Date.now()}`;
+
+      // Student driver creates ride with sharedKey
+      const studentPayload = baseRidePayload();
+      const studentRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', sharedKey)
+        .send(studentPayload)
+        .expect(201);
+
+      // Faculty driver uses the same sharedKey with their own vehicle
+      const facultyPayload = {
+        vehicleId: facultyVehicleId,
+        origin: 'VIT Faculty Quarters',
+        destination: 'Chennai Central',
+        departureTime: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
+        availableSeats: 2,
+        costPerSeat: 60,
+      };
+
+      const facultyRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${facultyDriverToken}`)
+        .set('Idempotency-Key', sharedKey)
+        .send(facultyPayload)
+        .expect(201);
+
+      // Distinct rides created; faculty driver does NOT get student's ride
+      expect(studentRes.body.id).not.toBe(facultyRes.body.id);
+      expect(studentRes.body.driverId).toBe(studentDriverId);
+      expect(facultyRes.body.driverId).toBe(facultyDriverId);
+
+      // In DB, two separate idempotency records exist scoped by userId
+      const studentRecord = await testPrisma.idempotencyKey.findUnique({
+        where: { userId_key: { userId: studentDriverId, key: sharedKey } },
+      });
+      const facultyRecord = await testPrisma.idempotencyKey.findUnique({
+        where: { userId_key: { userId: facultyDriverId, key: sharedKey } },
+      });
+      expect(studentRecord?.rideId).toBe(studentRes.body.id);
+      expect(facultyRecord?.rideId).toBe(facultyRes.body.id);
+    });
+
+    it('requests without idempotency key continue to work as normal', async () => {
+      const payload = baseRidePayload();
+
+      const res = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        // No Idempotency-Key header
+        .send(payload)
+        .expect(201);
+
+      expect(res.body.id).toBeDefined();
+    });
+
+    it('a failed transaction does not leave an orphaned idempotency record', async () => {
+      const key = `idemp-failed-${Date.now()}`;
+
+      // Invalid request: past departure time fails validation before/during creation
+      await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key)
+        .send({
+          ...baseRidePayload(),
+          departureTime: new Date(Date.now() - 3600000).toISOString(),
+        })
+        .expect(400);
+
+      // Verify no idempotency record was created
+      const record = await testPrisma.idempotencyKey.findUnique({
+        where: { userId_key: { userId: studentDriverId, key } },
+      });
+      expect(record).toBeNull();
+    });
+
+    it('submitting modified payload with a new key after a previous attempt succeeds cleanly without conflict', async () => {
+      const key1 = `idemp-attempt1-${Date.now()}`;
+      const payload1 = baseRidePayload();
+
+      // Attempt 1 with key1
+      const res1 = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key1)
+        .send(payload1)
+        .expect(201);
+
+      // Attempt 2 with modified payload (e.g. 2 seats instead of 3, cost 75) and fresh key2
+      const key2 = `idemp-attempt2-${Date.now()}`;
+      const payload2 = {
+        ...payload1,
+        availableSeats: 2,
+        costPerSeat: 75,
+      };
+
+      const res2 = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .set('Idempotency-Key', key2)
+        .send(payload2)
+        .expect(201);
+
+      expect(res1.body.id).not.toBe(res2.body.id);
+      expect(res2.body.availableSeats).toBe(2);
+      expect(res2.body.costPerSeat).toBe(75);
+
+      // Both keys recorded for their respective rides
+      const rec1 = await testPrisma.idempotencyKey.findUnique({
+        where: { userId_key: { userId: studentDriverId, key: key1 } },
+      });
+      const rec2 = await testPrisma.idempotencyKey.findUnique({
+        where: { userId_key: { userId: studentDriverId, key: key2 } },
+      });
+      expect(rec1?.rideId).toBe(res1.body.id);
+      expect(rec2?.rideId).toBe(res2.body.id);
+    });
+  });
 });

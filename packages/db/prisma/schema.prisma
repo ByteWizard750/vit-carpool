@@ -94,6 +94,7 @@ model User {
   sentMessages                Message[]             @relation("SentMessages")
   passengerRatings            DriverRating[]        @relation("PassengerRatings")
   driverRatings               DriverRating[]        @relation("DriverRatings")
+  idempotencyKeys             IdempotencyKey[]
 
   @@unique([id, audience])
   @@map("users")
@@ -207,6 +208,7 @@ model Ride {
   bookings           Booking[]      @relation("RideBookings")
   conversations      Conversation[]
   ratings            DriverRating[]
+  idempotencyKeys    IdempotencyKey[]
 
   @@unique([id, audience])
   @@unique([id, driverId])
@@ -324,4 +326,27 @@ model DriverRating {
   @@index([passengerId])
   @@index([rideId])
   @@map("driver_ratings")
+}
+
+// -----------------------------------------------------------------------------
+// Quick Ride & Publication Idempotency Models
+// -----------------------------------------------------------------------------
+
+model IdempotencyKey {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  key          String    @db.VarChar(128)
+  targetType   String    @default("RIDE") @map("target_type") @db.VarChar(64)
+  requestHash  String    @map("request_hash") @db.VarChar(64)
+  rideId       String?   @map("ride_id") @db.Uuid
+  responseBody Json      @map("response_body")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ride         Ride?     @relation(fields: [rideId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }

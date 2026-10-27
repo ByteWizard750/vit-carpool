@@ -9,8 +9,9 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { RidesService } from './rides.service';
 import { VerifiedUserGuard } from '../auth/guards/verified-user.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -52,10 +53,12 @@ export class RidesController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Publish a new ride (Verified drivers only)' })
+  @ApiOperation({ summary: 'Publish a new ride (Verified drivers only, idempotent with Idempotency-Key)' })
+  @ApiHeader({ name: 'idempotency-key', required: false, description: 'Optional unique key for publication retry deduplication' })
   async publishRide(
     @CurrentUser() user: User,
     @Body() body: unknown,
+    @Headers('idempotency-key') headerKey?: string,
   ): Promise<DriverRideResponseDto> {
     const parsed = CreateRideSchema.safeParse(body);
     if (!parsed.success) {
@@ -67,7 +70,8 @@ export class RidesController {
       });
     }
 
-    return this.ridesService.publishRide(user, parsed.data);
+    const key = (headerKey && headerKey.trim() !== '') ? headerKey.trim() : (parsed.data.idempotencyKey || undefined);
+    return this.ridesService.publishRide(user, parsed.data, key);
   }
 
   @Get('mine')

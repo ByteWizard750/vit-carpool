@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Car,
@@ -28,44 +28,12 @@ import {
   DriverRideResponseDto,
   QuickRideTemplatesResponseDto,
   ReusableRideTemplateDto,
+  toKolkataInputString,
+  formatKolkataDisplay,
+  getTomorrowPresetKolkata,
+  parseKolkataDateTimeInput,
+  generateIdempotencyKey,
 } from '@vit-carpool/contracts';
-
-// Convert a Date to YYYY-MM-DDTHH:mm string in Asia/Kolkata timezone
-const toKolkataInputString = (date: Date): string => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-
-  const get = (type: string) => parts.find((p) => p.type === type)?.value || '00';
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
-};
-
-// Format a datetime string to readable display in Asia/Kolkata
-const formatKolkataDisplay = (isoOrInputStr: string): string => {
-  try {
-    const d = new Date(isoOrInputStr);
-    if (isNaN(d.getTime())) return isoOrInputStr;
-    return (
-      new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }).format(d) + ' IST'
-    );
-  } catch {
-    return isoOrInputStr;
-  }
-};
 
 export const OfferRidePage: React.FC = () => {
   const { user, token } = useAuth();
@@ -87,6 +55,11 @@ export const OfferRidePage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Idempotency state: tracks the active key bound to its submitted payload.
+  // Reuses the key on exact retry; generates a fresh key if payload is edited or after confirmed success.
+  const quickAttemptRef = useRef<{ key: string; payloadStr: string } | null>(null);
+  const customAttemptRef = useRef<{ key: string; payloadStr: string } | null>(null);
 
   // Quick Ride state
   const [templates, setTemplates] = useState<QuickRideTemplatesResponseDto | null>(null);
@@ -247,15 +220,13 @@ export const OfferRidePage: React.FC = () => {
 
   // Quick Preset buttons (+30m, +1h, +2h, Tomorrow 8:30am)
   const setQuickPresetTime = (offsetMinutes: number, explicitHour?: number, explicitMinute?: number) => {
-    const d = new Date();
     if (explicitHour !== undefined) {
-      // Set to tomorrow at explicit hour/minute in Asia/Kolkata
-      d.setDate(d.getDate() + 1);
-      d.setHours(explicitHour, explicitMinute || 0, 0, 0);
+      // Deterministically select 8:30 AM Asia/Kolkata on the next Kolkata calendar day
+      setQuickDepartureTime(getTomorrowPresetKolkata(new Date(), explicitHour, explicitMinute || 0));
     } else {
-      d.setMinutes(d.getMinutes() + offsetMinutes);
+      const d = new Date(Date.now() + offsetMinutes * 60 * 1000);
+      setQuickDepartureTime(toKolkataInputString(d));
     }
-    setQuickDepartureTime(toKolkataInputString(d));
   };
 
   // Copy template data into Custom Form if driver wants advanced customization
@@ -312,8 +283,8 @@ export const OfferRidePage: React.FC = () => {
       return;
     }
 
-    const depDate = new Date(quickDepartureTime);
-    if (depDate.getTime() <= Date.now() + 5 * 60 * 1000) {
+    const depDate = parseKolkataDateTimeInput(quickDepartureTime);
+    if (isNaN(depDate.getTime()) || depDate.getTime() <= Date.now() + 10 * 60 * 1000) {
       setError('Departure time must be scheduled at least 10 minutes in the future.');
       return;
     }
@@ -344,20 +315,35 @@ export const OfferRidePage: React.FC = () => {
         payload.destinationLongitude = selectedTemplate.destinationLongitude;
       }
 
+      const payloadStr = JSON.stringify(payload);
+      let key: string;
+      if (quickAttemptRef.current && quickAttemptRef.current.payloadStr === payloadStr) {
+        // Exact retry with identical payload
+        key = quickAttemptRef.current.key;
+      } else {
+        // New attempt or payload was edited after previous attempt
+        key = generateIdempotencyKey();
+        quickAttemptRef.current = { key, payloadStr };
+      }
+
       const res = await fetch('/rides', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
+          'Idempotency-Key': key,
         },
-        body: JSON.stringify(payload),
+        body: payloadStr,
       });
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body.message || `Failed to publish quick ride (${res.status})`);
       }
+
+      // Confirmed success: clear active attempt so any subsequent publication gets a fresh key
+      quickAttemptRef.current = null;
 
       setSuccessMsg('Quick Ride successfully published to campus corridors!');
       setTimeout(() => {
@@ -391,8 +377,8 @@ export const OfferRidePage: React.FC = () => {
       return;
     }
 
-    const depDate = new Date(departureTime);
-    if (depDate.getTime() <= Date.now() + 5 * 60 * 1000) {
+    const depDate = parseKolkataDateTimeInput(departureTime);
+    if (isNaN(depDate.getTime()) || depDate.getTime() <= Date.now() + 10 * 60 * 1000) {
       setError('Departure time must be scheduled at least 10 minutes in the future.');
       return;
     }
@@ -432,19 +418,38 @@ export const OfferRidePage: React.FC = () => {
       const url = editRideId ? `/rides/${editRideId}` : '/rides';
       const method = editRideId ? 'PATCH' : 'POST';
 
+      const payloadStr = JSON.stringify(payload);
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
+
+      if (!editRideId) {
+        let key: string;
+        if (customAttemptRef.current && customAttemptRef.current.payloadStr === payloadStr) {
+          key = customAttemptRef.current.key;
+        } else {
+          key = generateIdempotencyKey();
+          customAttemptRef.current = { key, payloadStr };
+        }
+        headers['Idempotency-Key'] = key;
+      }
+
       const res = await fetch(url, {
         method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
+        headers,
+        body: payloadStr,
       });
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body.message || `Failed to ${editRideId ? 'update' : 'publish'} ride (${res.status})`);
+      }
+
+      if (!editRideId) {
+        // Confirmed success: clear active attempt so subsequent publications get a fresh key
+        customAttemptRef.current = null;
       }
 
       setSuccessMsg(editRideId ? 'Ride successfully updated!' : 'Ride successfully published to campus corridors!');
