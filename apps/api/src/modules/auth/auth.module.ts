@@ -11,6 +11,7 @@ import { VerificationModule } from '../verification/verification.module';
 import { JwksService } from './jwks.service';
 
 import { AuthService } from './auth.service';
+import { EmailService } from './email.service';
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ import { AuthService } from './auth.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    EmailService,
     JwksService,
     SupabaseAuthGuard,
     VerifiedUserGuard,
@@ -28,7 +30,7 @@ import { AuthService } from './auth.service';
       useClass: SupabaseAuthGuard,
     },
   ],
-  exports: [AuthService, JwksService, SupabaseAuthGuard, VerifiedUserGuard, AdminGuard, AudienceGuard],
+  exports: [AuthService, EmailService, JwksService, SupabaseAuthGuard, VerifiedUserGuard, AdminGuard, AudienceGuard],
 })
 export class AuthModule {}
 

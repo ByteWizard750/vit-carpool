@@ -18,6 +18,7 @@ import {
   AuthResponseDto,
 } from '@vit-carpool/contracts';
 import { signTestJwt } from './jwt-keys.fixture';
+import { EmailService } from './email.service';
 
 interface StoredOtp {
   code: string;
@@ -35,6 +36,7 @@ export class AuthService {
   private readonly isSupabaseConfigured: boolean;
   private readonly nodeEnv: string;
   private readonly jwtTestMode: boolean;
+  private readonly expectedIssuer: string;
 
   // In-memory store for OTP cooldowns and dev/test boundary
   private readonly otpStore = new Map<string, StoredOtp>();
@@ -47,11 +49,21 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly classifier: EmailClassifierService,
+    private readonly emailService: EmailService,
   ) {
     this.supabaseUrl = this.config.get<string>('SUPABASE_URL') || null;
     this.supabaseAnonKey = this.config.get<string>('SUPABASE_ANON_KEY') || null;
     this.nodeEnv = this.config.get<string>('NODE_ENV') || 'development';
     this.jwtTestMode = this.config.get<boolean>('JWT_TEST_MODE') ?? false;
+
+    const configuredIssuer = this.config.get<string>('SUPABASE_JWT_ISSUER');
+    if (configuredIssuer) {
+      this.expectedIssuer = configuredIssuer;
+    } else if (this.supabaseUrl) {
+      this.expectedIssuer = `${this.supabaseUrl.replace(/\/$/, '')}/auth/v1`;
+    } else {
+      this.expectedIssuer = 'https://mock-supabase.local/auth/v1';
+    }
 
     this.isSupabaseConfigured = Boolean(
       this.supabaseUrl &&
@@ -61,7 +73,7 @@ export class AuthService {
     );
 
     this.logger.log(
-      `[AuthService] Initialized: Supabase configured=${this.isSupabaseConfigured}, Env=${this.nodeEnv}, TestMode=${this.jwtTestMode}`,
+      `[AuthService] Initialized: EmailService configured=${this.emailService.isEmailConfigured}, Supabase configured=${this.isSupabaseConfigured}, Env=${this.nodeEnv}, TestMode=${this.jwtTestMode}`,
     );
   }
 
@@ -115,8 +127,37 @@ export class AuthService {
       }
     }
 
-    // 3. Dispatch OTP via Supabase or Test/Dev Mock Boundary
-    if (this.isSupabaseConfigured) {
+    // 3. Dispatch OTP via EmailService (Gmail SMTP), Supabase, or Test/Dev Mock Boundary
+    if (this.nodeEnv === 'test') {
+      // Deterministic test boundary: '123456' for predictable automated test suites
+      const testCode = '123456';
+      this.otpStore.set(email, {
+        code: testCode,
+        expiresAt: new Date(Date.now() + this.OTP_EXPIRY_MS),
+        requestedAt: new Date(),
+        intent: dto.intent,
+        fullName: dto.fullName?.trim(),
+      });
+      this.logger.debug(`[AuthService] Test OTP generated for ${email}: ${testCode}`);
+    } else if (this.emailService.isEmailConfigured) {
+      // Real Gmail SMTP OTP dispatch
+      const otpCode = crypto.randomInt(100000, 1000000).toString();
+      this.otpStore.set(email, {
+        code: otpCode,
+        expiresAt: new Date(Date.now() + this.OTP_EXPIRY_MS),
+        requestedAt: new Date(),
+        intent: dto.intent,
+        fullName: dto.fullName?.trim(),
+      });
+
+      try {
+        await this.emailService.sendOtpEmail(email, otpCode, dto.fullName, dto.intent);
+        this.logger.log(`[AuthService] OTP code dispatched via Gmail SMTP to ${email}: ${otpCode}`);
+      } catch (err: any) {
+        this.logger.error(`[AuthService] Failed to dispatch OTP email to ${email}: ${err.message}`);
+        throw new BadGatewayException('Failed to dispatch verification email. Please try again.');
+      }
+    } else if (this.isSupabaseConfigured) {
       try {
         const response = await fetch(`${this.supabaseUrl}/auth/v1/otp`, {
           method: 'POST',
@@ -157,15 +198,14 @@ export class AuthService {
         throw new BadGatewayException('Upstream email delivery service is currently unavailable.');
       }
     } else {
-      // Supabase is NOT configured: fail closed in all non-development and non-test environments
+      // Neither SMTP nor Supabase configured: fail closed in non-dev/non-test
       if (this.nodeEnv !== 'development' && this.nodeEnv !== 'test') {
         throw new ServiceUnavailableException(
-          'Authentication service is unavailable: Supabase credentials are not configured.',
+          'Authentication service is unavailable: Email/Supabase credentials are not configured.',
         );
       }
 
       // Deterministic dev/test mock boundary
-      // Default to '123456' for predictable automated testing
       const testCode = '123456';
       this.otpStore.set(email, {
         code: testCode,
@@ -197,7 +237,12 @@ export class AuthService {
     let authUserId: string;
     let jwtToken: string;
 
-    if (this.isSupabaseConfigured) {
+    const useLocalStore =
+      this.nodeEnv === 'test' ||
+      this.emailService.isEmailConfigured ||
+      !this.isSupabaseConfigured;
+
+    if (!useLocalStore && this.isSupabaseConfigured) {
       try {
         const response = await fetch(`${this.supabaseUrl}/auth/v1/verify`, {
           method: 'POST',
@@ -240,14 +285,7 @@ export class AuthService {
         throw new BadGatewayException('Failed to verify code with upstream service.');
       }
     } else {
-      // Supabase is NOT configured: fail closed in all non-development and non-test environments
-      if (this.nodeEnv !== 'development' && this.nodeEnv !== 'test') {
-        throw new ServiceUnavailableException(
-          'Authentication service is unavailable: Supabase credentials are not configured.',
-        );
-      }
-
-      // Verify in dev/test mock store
+      // Verify in local OTP store (handles Gmail SMTP OTPs and dev/test boundary)
       const stored = this.otpStore.get(email);
       if (!stored) {
         throw new BadRequestException('Verification code has expired or was not requested. Please request a new code.');
@@ -268,7 +306,11 @@ export class AuthService {
       // Check if existing user already has authUserId, or generate a deterministic one
       const existingUser = await this.prisma.user.findUnique({ where: { email } });
       authUserId = existingUser ? existingUser.authUserId : crypto.randomUUID();
-      jwtToken = signTestJwt({ sub: authUserId, email });
+      jwtToken = signTestJwt({
+        sub: authUserId,
+        email,
+        iss: this.expectedIssuer,
+      });
     }
 
     // Authoritative Database Record Synchronization

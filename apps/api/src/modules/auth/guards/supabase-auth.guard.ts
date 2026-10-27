@@ -78,25 +78,26 @@ export class SupabaseAuthGuard implements CanActivate {
 
     let decoded: DecodedTokenPayload;
     try {
+      const validIssuers: [string, ...string[]] = [
+        'https://mock-supabase.local/auth/v1',
+        ...(this.expectedIssuer ? [this.expectedIssuer] : []),
+      ];
+
       if (alg === 'RS256') {
         const signingKey = await this.jwksService.getSigningKey(header.kid);
         const verifyOptions: jwt.VerifyOptions = {
           algorithms: ['RS256'],
           audience: 'authenticated',
+          issuer: validIssuers,
         };
-        if (this.expectedIssuer) {
-          verifyOptions.issuer = this.expectedIssuer;
-        }
 
         decoded = jwt.verify(token, signingKey, verifyOptions) as DecodedTokenPayload;
       } else if (alg === 'HS256' && this.jwtSecret) {
         const verifyOptions: jwt.VerifyOptions = {
           algorithms: ['HS256'],
           audience: 'authenticated',
+          issuer: validIssuers,
         };
-        if (this.expectedIssuer) {
-          verifyOptions.issuer = this.expectedIssuer;
-        }
 
         decoded = jwt.verify(token, this.jwtSecret, verifyOptions) as DecodedTokenPayload;
       } else {

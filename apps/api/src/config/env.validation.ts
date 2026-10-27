@@ -33,6 +33,17 @@ export const EnvSchema = z.object({
     .default('false')
     .transform((val) => val === 'true'),
 
+  // SMTP Email Delivery Configuration (Gmail / Custom SMTP)
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((val) => val === 'true'),
+  SMTP_USER: z.string().optional().or(z.literal('')),
+  SMTP_PASS: z.string().optional().or(z.literal('')),
+  SMTP_FROM: z.string().default('VIT Carpool <vitcarpool.app@gmail.com>'),
+
   // Location Autocomplete Configuration
   LOCATION_PROVIDER: z.enum(['mock', 'mapbox']).default('mock'),
   MAPBOX_ACCESS_TOKEN: z.string().optional().or(z.literal('')),
