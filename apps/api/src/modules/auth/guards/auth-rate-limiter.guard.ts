@@ -78,8 +78,15 @@ export class AuthRateLimiterGuard implements CanActivate {
   }
 
   /**
-   * Safely resolve client IP without blindly trusting arbitrary headers.
-   * Prioritizes Express req.ip (when trust proxy is configured) then socket remote address.
+   * Safely resolve client IP without trusting arbitrary spoofed headers.
+   *
+   * Security architecture:
+   * 1. When Express 'trust proxy' is configured (via TRUST_PROXY env var in main.ts),
+   *    Express authoritatively evaluates proxy hops and populates req.ip.
+   * 2. When 'trust proxy' is not configured (default / direct connection), req.ip
+   *    equals req.socket.remoteAddress and untrusted X-Forwarded-For headers are ignored.
+   * 3. Fallback uses socket remote address directly.
+   * Raw req.headers['x-forwarded-for'] is NEVER inspected directly to prevent client spoofing.
    */
   private extractClientIp(req: Request): string {
     if (req.ip && req.ip.trim().length > 0) {
@@ -89,15 +96,6 @@ export class AuthRateLimiterGuard implements CanActivate {
     const socketAddr = req.socket?.remoteAddress;
     if (socketAddr && socketAddr.trim().length > 0) {
       return socketAddr.trim();
-    }
-
-    // Fallback: evaluate x-forwarded-for taking only the first IP if valid
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      const rawFirst = (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0]).trim();
-      if (rawFirst.length > 0) {
-        return rawFirst;
-      }
     }
 
     return 'unknown-ip';

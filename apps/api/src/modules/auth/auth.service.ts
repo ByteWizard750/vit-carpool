@@ -297,6 +297,11 @@ export class AuthService {
           this.testMockCodes.delete(email);
           throw new BadRequestException('Verification code has expired. Please request a new code.');
         }
+        if (testMock.intent && testMock.intent !== dto.intent) {
+          throw new BadRequestException(
+            `Verification intent mismatch: code was requested for ${testMock.intent}, not ${dto.intent}.`,
+          );
+        }
         if (testMock.failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
           this.testMockCodes.delete(email);
           throw new BadRequestException(
@@ -329,7 +334,14 @@ export class AuthService {
         throw new BadRequestException('Verification code has expired. Please request a new code.');
       }
 
-      // 2. Enforce maximum failed attempts limit
+      // 2. Enforce intent matching (prevents signup/signin flow confusion)
+      if (record.intent !== dto.intent) {
+        throw new BadRequestException(
+          `Verification intent mismatch: code was requested for ${record.intent}, not ${dto.intent}.`,
+        );
+      }
+
+      // 3. Enforce maximum failed attempts limit before evaluating candidate
       if (record.failedAttempts >= record.maxAttempts) {
         await this.prisma.otpVerification.deleteMany({ where: { email } });
         throw new BadRequestException(
@@ -337,14 +349,29 @@ export class AuthService {
         );
       }
 
-      // 3. Timing-safe verification using keyed HMAC
+      // 4. Timing-safe verification using keyed HMAC
       const candidateHash = this.computeVerifier(email, tokenInput, record.salt);
       const isMatch =
         candidateHash.length === record.verifierHash.length &&
         crypto.timingSafeEqual(Buffer.from(candidateHash, 'hex'), Buffer.from(record.verifierHash, 'hex'));
 
       if (!isMatch) {
-        const updatedAttempts = record.failedAttempts + 1;
+        // Concurrency-safe atomic SQL increment
+        let updatedAttempts: number;
+        try {
+          const updated = await this.prisma.otpVerification.update({
+            where: { email },
+            data: { failedAttempts: { increment: 1 } },
+            select: { failedAttempts: true, maxAttempts: true },
+          });
+          updatedAttempts = updated.failedAttempts;
+        } catch {
+          // Record was already deleted by a concurrent 5th failed attempt
+          throw new BadRequestException(
+            'Too many incorrect verification attempts. This code has been invalidated. Please request a new code.',
+          );
+        }
+
         if (updatedAttempts >= record.maxAttempts) {
           await this.prisma.otpVerification.deleteMany({ where: { email } });
           if (this.nodeEnv === 'test') {
@@ -355,27 +382,26 @@ export class AuthService {
           );
         }
 
-        await this.prisma.otpVerification.update({
-          where: { email },
-          data: { failedAttempts: updatedAttempts },
-        });
-
         const remaining = record.maxAttempts - updatedAttempts;
         throw new BadRequestException(`Invalid verification code. ${remaining} attempt(s) remaining.`);
       }
 
-      // 4. Single-use consumption: atomic conditional delete prevents concurrent reuse
+      // 5. Single-use consumption: atomic conditional delete prevents concurrent reuse
+      // and ensures code cannot be consumed if it has already reached maxAttempts
       const deleted = await this.prisma.otpVerification.deleteMany({
         where: {
           email,
           verifierHash: record.verifierHash,
+          failedAttempts: { lt: record.maxAttempts },
         },
       });
       if (this.nodeEnv === 'test') {
         this.testMockCodes.delete(email);
       }
       if (deleted.count === 0) {
-        throw new BadRequestException('Verification code was already used or invalidated.');
+        throw new BadRequestException(
+          'Verification code was already used, expired, or invalidated due to maximum attempts.',
+        );
       }
     }
 
@@ -389,10 +415,11 @@ export class AuthService {
 
     let userRecord;
     if (dto.intent === 'signup') {
+      const resolvedFullName = dto.fullName?.trim() || record?.fullName || undefined;
       userRecord = await this.usersService.findOrCreateUser({
         authUserId,
         email,
-        fullName: dto.fullName || undefined,
+        fullName: resolvedFullName,
       });
     } else {
       userRecord = await this.prisma.user.findUnique({ where: { email } });

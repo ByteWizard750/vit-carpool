@@ -37,6 +37,7 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();
     await testPrisma.user.deleteMany();
+    await testPrisma.otpVerification.deleteMany();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -61,6 +62,7 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
     if (app) {
       await app.close();
     }
+    await testPrisma.otpVerification.deleteMany();
     await testPrisma.$disconnect();
   });
 

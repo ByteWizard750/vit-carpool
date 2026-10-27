@@ -13,6 +13,7 @@ import { JwksService } from './jwks.service';
 
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
+import { OtpCleanupService } from './otp-cleanup.service';
 
 @Global()
 @Module({
@@ -23,6 +24,7 @@ import { EmailService } from './email.service';
     EmailService,
     JwksService,
     AuthRateLimiterGuard,
+    OtpCleanupService,
     SupabaseAuthGuard,
     VerifiedUserGuard,
     AdminGuard,
@@ -37,6 +39,7 @@ import { EmailService } from './email.service';
     EmailService,
     JwksService,
     AuthRateLimiterGuard,
+    OtpCleanupService,
     SupabaseAuthGuard,
     VerifiedUserGuard,
     AdminGuard,

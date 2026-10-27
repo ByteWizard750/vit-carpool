@@ -81,12 +81,23 @@ export class SupabaseAuthGuard implements CanActivate {
 
     let decoded: DecodedTokenPayload;
     try {
+      const isProduction = this.config.get<string>('NODE_ENV') === 'production';
       const customIssuer = this.config.get<string>('JWT_ISSUER');
-      const validIssuers: [string, ...string[]] = [
-        'https://mock-supabase.local/auth/v1',
+      const validIssuersList: string[] = [
         ...(this.expectedIssuer ? [this.expectedIssuer] : []),
         ...(customIssuer && customIssuer !== this.expectedIssuer ? [customIssuer] : []),
       ];
+
+      // In non-production environments (test/development), allow mock Supabase issuer for test compatibility
+      if (!isProduction) {
+        validIssuersList.push('https://mock-supabase.local/auth/v1');
+      }
+
+      if (validIssuersList.length === 0) {
+        throw new UnauthorizedException('Authentication issuer is not configured');
+      }
+
+      const validIssuers = validIssuersList as [string, ...string[]];
 
       if (alg === 'RS256') {
         const signingKey = await this.jwksService.getSigningKey(header.kid);

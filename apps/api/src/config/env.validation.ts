@@ -69,6 +69,8 @@ export const EnvSchema = z.object({
   // Authentication IP Rate Limiting Configuration
   AUTH_RATE_LIMIT_TTL: z.coerce.number().int().min(1).default(60),
   AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(10),
+  TRUST_PROXY: z.string().optional().default(''),
+  OTP_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).default(30 * 60 * 1000),
 
   // Supabase Auth Integration
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),
@@ -124,8 +126,6 @@ export const EnvSchema = z.object({
 ).refine(
   (data) => {
     if (data.NODE_ENV !== 'production') return true;
-    const hasSupabase = Boolean(data.SUPABASE_URL && data.SUPABASE_JWKS_URL);
-    if (hasSupabase) return true;
     return Boolean(data.JWT_PRIVATE_KEY && data.JWT_PUBLIC_KEY);
   },
   {

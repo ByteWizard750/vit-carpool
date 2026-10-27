@@ -8,6 +8,8 @@ import { PrismaClient, UserRole, VerificationStatus, Audience } from '@vit-carpo
 import { AuthService } from '../src/modules/auth/auth.service';
 import { JwksService } from '../src/modules/auth/jwks.service';
 import { AuthRateLimiterGuard } from '../src/modules/auth/guards/auth-rate-limiter.guard';
+import { OtpCleanupService } from '../src/modules/auth/otp-cleanup.service';
+import { SupabaseAuthGuard } from '../src/modules/auth/guards/supabase-auth.guard';
 import { validateEnv, validateRsaKeyPair } from '../src/config/env.validation';
 
 describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy (e2e)', () => {
@@ -16,6 +18,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
   let authService: AuthService;
   let jwksService: JwksService;
   let rateLimiterGuard: AuthRateLimiterGuard;
+  let otpCleanupService: OtpCleanupService;
 
   const testDbUrl =
     process.env.TEST_DATABASE_URL ||
@@ -28,6 +31,34 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
+  const testEmails = [
+    'student.success@vitstudent.ac.in',
+    'student.bruteforce@vitstudent.ac.in',
+    'student.resend@vitstudent.ac.in',
+    'student.cluster@vitstudent.ac.in',
+    'concurrent.bruteforce@vitstudent.ac.in',
+    'concurrent.valid@vitstudent.ac.in',
+    'intent.signup@vitstudent.ac.in',
+    'intent.signin@vitstudent.ac.in',
+    'intent.resend@vitstudent.ac.in',
+    'active.otp@vitstudent.ac.in',
+    'abandoned.otp@vitstudent.ac.in',
+    'active.cron@vitstudent.ac.in',
+    'abandoned.cron@vitstudent.ac.in',
+    'attacker@vitstudent.ac.in',
+    'expired@vitstudent.ac.in',
+    'badaud@vitstudent.ac.in',
+    'spam1@vitstudent.ac.in',
+    'spam2@vitstudent.ac.in',
+    'spam3@vitstudent.ac.in',
+    'spam4@vitstudent.ac.in',
+    'spoof1@vitstudent.ac.in',
+    'spoof2@vitstudent.ac.in',
+    'spoof3@vitstudent.ac.in',
+    'spoof4@vitstudent.ac.in',
+    'privacy.student@vitstudent.ac.in',
+  ];
+
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.DATABASE_URL = testDbUrl;
@@ -38,22 +69,6 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
     await testPrisma.$connect();
 
     // Clean test tables for remediation test emails only to avoid FK conflicts
-    const testEmails = [
-      'student.success@vitstudent.ac.in',
-      'student.bruteforce@vitstudent.ac.in',
-      'student.resend@vitstudent.ac.in',
-      'student.cluster@vitstudent.ac.in',
-      'active.otp@vitstudent.ac.in',
-      'abandoned.otp@vitstudent.ac.in',
-      'attacker@vitstudent.ac.in',
-      'expired@vitstudent.ac.in',
-      'badaud@vitstudent.ac.in',
-      'spam1@vitstudent.ac.in',
-      'spam2@vitstudent.ac.in',
-      'spam3@vitstudent.ac.in',
-      'spam4@vitstudent.ac.in',
-      'privacy.student@vitstudent.ac.in',
-    ];
     await testPrisma.otpVerification.deleteMany({ where: { email: { in: testEmails } } });
     await testPrisma.user.deleteMany({ where: { email: { in: testEmails } } });
 
@@ -74,19 +89,35 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
     authService = app.get(AuthService);
     jwksService = app.get(JwksService);
     rateLimiterGuard = app.get(AuthRateLimiterGuard);
+    otpCleanupService = app.get(OtpCleanupService);
   });
 
   afterAll(async () => {
+    if (rateLimiterGuard) {
+      (rateLimiterGuard as any).maxLimit = 100;
+      rateLimiterGuard.reset();
+    }
     if (app) {
       await app.close();
     }
-    await testPrisma.otpVerification.deleteMany();
+    await testPrisma.otpVerification.deleteMany({ where: { email: { in: testEmails } } });
+    await testPrisma.user.deleteMany({ where: { email: { in: testEmails } } });
     await testPrisma.$disconnect();
   });
 
   beforeEach(async () => {
-    rateLimiterGuard.reset();
-    await testPrisma.otpVerification.deleteMany();
+    if (rateLimiterGuard) {
+      (rateLimiterGuard as any).maxLimit = 100;
+      rateLimiterGuard.reset();
+    }
+    await testPrisma.otpVerification.deleteMany({ where: { email: { in: testEmails } } });
+  });
+
+  afterEach(() => {
+    if (rateLimiterGuard) {
+      (rateLimiterGuard as any).maxLimit = 100;
+      rateLimiterGuard.reset();
+    }
   });
 
   // ===========================================================================
@@ -271,6 +302,182 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       const abandonedExists = await testPrisma.otpVerification.findUnique({ where: { email: abandonedEmail } });
       expect(abandonedExists).toBeNull();
     });
+
+    it('concurrent parallel incorrect guesses atomically increment failedAttempts and lockout without undercounting', async () => {
+      const email = 'concurrent.bruteforce@vitstudent.ac.in';
+      const fullName = 'Concurrent Bruteforce Target';
+
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, fullName, intent: 'signup' })
+        .expect(201);
+
+      // Fire 5 simultaneous parallel guesses with incorrect codes
+      const responses = await Promise.all([
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '999901', intent: 'signup' }),
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '999902', intent: 'signup' }),
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '999903', intent: 'signup' }),
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '999904', intent: 'signup' }),
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '999905', intent: 'signup' }),
+      ]);
+
+      // All 5 must be rejected with 400
+      responses.forEach((res) => expect(res.status).toBe(400));
+
+      // At least one response must indicate that attempts have been exhausted / invalidated
+      const hasInvalidatedResponse = responses.some((res) =>
+        /Too many incorrect verification attempts.*invalidated/i.test(res.body.message),
+      );
+      expect(hasInvalidatedResponse).toBe(true);
+
+      // The record must now be deleted from PostgreSQL
+      const dbRecord = await testPrisma.otpVerification.findUnique({ where: { email } });
+      expect(dbRecord).toBeNull();
+
+      // Subsequent attempt with the real code ('123456') must fail
+      const subsequentRes = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signup' })
+        .expect(400);
+
+      expect(subsequentRes.body.message).toMatch(/expired or was not requested/i);
+    });
+
+    it('concurrent parallel valid verification requests issue exactly ONE session and reject duplicates', async () => {
+      const email = 'concurrent.valid@vitstudent.ac.in';
+      const fullName = 'Concurrent Valid Target';
+
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, fullName, intent: 'signup' })
+        .expect(201);
+
+      // Fire 2 simultaneous parallel verification requests with the valid code ('123456')
+      const [resA, resB] = await Promise.all([
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '123456', intent: 'signup', fullName }),
+        request(app.getHttpServer()).post('/auth/verify-otp').send({ email, token: '123456', intent: 'signup', fullName }),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      expect(statuses).toEqual([201, 400]);
+
+      const successRes = resA.status === 201 ? resA : resB;
+      const failRes = resA.status === 400 ? resA : resB;
+
+      expect(successRes.body.token).toBeDefined();
+      expect(failRes.body.message).toMatch(/already used, expired, or invalidated/i);
+
+      // Database OTP record must be deleted
+      const dbOtp = await testPrisma.otpVerification.findUnique({ where: { email } });
+      expect(dbOtp).toBeNull();
+    });
+  });
+
+  // ===========================================================================
+  // 1.1. OTP Intent Validation
+  // ===========================================================================
+  describe('1.1. OTP Intent Validation', () => {
+    it('rejects signup OTP submitted to signin verification without consuming state', async () => {
+      const email = 'intent.signup@vitstudent.ac.in';
+      const fullName = 'Intent Signup User';
+
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, fullName, intent: 'signup' })
+        .expect(201);
+
+      // Submit valid OTP with mismatched intent 'signin'
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signin' })
+        .expect(400);
+
+      expect(res.body.message).toMatch(/Verification intent mismatch.*requested for signup, not signin/i);
+
+      // Verify OTP is NOT deleted/consumed by the mismatched attempt
+      const dbOtp = await testPrisma.otpVerification.findUnique({ where: { email } });
+      expect(dbOtp).not.toBeNull();
+      expect(dbOtp?.intent).toBe('signup');
+
+      // Now verify with correct intent 'signup' -> must succeed
+      const successRes = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signup', fullName })
+        .expect(201);
+
+      expect(successRes.body.token).toBeDefined();
+    });
+
+    it('rejects signin OTP submitted to signup verification', async () => {
+      const email = 'intent.signin@vitstudent.ac.in';
+      const fullName = 'Intent Signin User';
+
+      // Provision user via initial signup so signin request is allowed
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, fullName, intent: 'signup' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signup', fullName })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, intent: 'signin' })
+        .expect(201);
+
+      // Submit valid OTP with mismatched intent 'signup'
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signup', fullName })
+        .expect(400);
+
+      expect(res.body.message).toMatch(/Verification intent mismatch.*requested for signin, not signup/i);
+
+      // Verify with correct intent 'signin' -> succeeds
+      const successRes = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signin' })
+        .expect(201);
+
+      expect(successRes.body.token).toBeDefined();
+    });
+
+    it('resending an OTP preserves intent and registration full name', async () => {
+      const email = 'intent.resend@vitstudent.ac.in';
+      const fullName = 'Intent Resend User';
+
+      await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .send({ email, fullName, intent: 'signup' })
+        .expect(201);
+
+      // Fast-forward cooldown in DB
+      await testPrisma.otpVerification.update({
+        where: { email },
+        data: { cooldownUntil: new Date(Date.now() - 1000) },
+      });
+
+      // Resend signup OTP without supplying fullName in payload
+      await request(app.getHttpServer())
+        .post('/auth/resend-otp')
+        .send({ email, intent: 'signup' })
+        .expect(201);
+
+      const dbOtp = await testPrisma.otpVerification.findUniqueOrThrow({ where: { email } });
+      expect(dbOtp.intent).toBe('signup');
+      expect(dbOtp.fullName).toBe(fullName);
+
+      // Verify with correct intent succeeds
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-otp')
+        .send({ email, token: '123456', intent: 'signup' })
+        .expect(201);
+
+      expect(res.body.token).toBeDefined();
+      expect(res.body.user.fullName).toBe(fullName);
+    });
   });
 
   // ===========================================================================
@@ -413,6 +620,59 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
         });
       }).toThrow(/In production environment, both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured/);
     });
+
+    it('serves valid public JWKS at both /auth/.well-known/jwks.json and /auth/v1/.well-known/jwks.json', async () => {
+      const resPrimary = await request(app.getHttpServer())
+        .get('/auth/.well-known/jwks.json')
+        .expect(200);
+
+      const resAliased = await request(app.getHttpServer())
+        .get('/auth/v1/.well-known/jwks.json')
+        .expect(200);
+
+      expect(resPrimary.body.keys).toBeDefined();
+      expect(resAliased.body.keys).toBeDefined();
+      expect(resPrimary.body).toEqual(resAliased.body);
+    });
+
+    it('rejects mock Supabase issuer tokens when NODE_ENV is production in SupabaseAuthGuard', async () => {
+      const guard = new SupabaseAuthGuard(
+        { getAllAndOverride: () => false } as any,
+        {
+          get: (key: string) => {
+            if (key === 'NODE_ENV') return 'production';
+            if (key === 'JWT_ISSUER') return 'https://api.vitcarpool.app/auth/v1';
+            return null;
+          },
+        } as any,
+        {} as any,
+        jwksService,
+      );
+
+      // Token with mock Supabase issuer
+      const mockToken = jwt.sign(
+        { email: 'student@vitstudent.ac.in', role: 'authenticated' },
+        dynamicKeyPair.privateKey,
+        {
+          algorithm: 'RS256',
+          issuer: 'https://mock-supabase.local/auth/v1',
+          subject: 'prod-target-sub',
+          audience: 'authenticated',
+        },
+      );
+
+      const mockContext = {
+        getHandler: () => ({}),
+        getClass: () => ({}),
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: { authorization: `Bearer ${mockToken}` },
+          }),
+        }),
+      } as any;
+
+      await expect(guard.canActivate(mockContext)).rejects.toThrow();
+    });
   });
 
   // ===========================================================================
@@ -447,6 +707,30 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       expect(res.body.error).toBe('Too Many Requests');
       expect(res.body.message).toMatch(/Too many authentication attempts from this IP/i);
     });
+
+    it('ignores client-supplied X-Forwarded-For header when trust proxy is not configured', async () => {
+      // Reset rate limiter and configure limit to 4
+      rateLimiterGuard.reset();
+      (rateLimiterGuard as any).maxLimit = 4;
+
+      // Send 3 requests with varying fake X-Forwarded-For headers from the same client socket
+      for (let i = 1; i <= 3; i++) {
+        await request(app.getHttpServer())
+          .post('/auth/request-otp')
+          .set('X-Forwarded-For', `203.0.113.${10 + i}`)
+          .send({ email: `spoof${i}@vitstudent.ac.in`, fullName: `Spoof ${i}`, intent: 'signup' })
+          .expect(201);
+      }
+
+      // 4th request from same socket (even with another fake header) must trigger 429
+      const res = await request(app.getHttpServer())
+        .post('/auth/request-otp')
+        .set('X-Forwarded-For', '203.0.113.99')
+        .send({ email: 'spoof4@vitstudent.ac.in', fullName: 'Spoof 4', intent: 'signup' })
+        .expect(429);
+
+      expect(res.body.error).toBe('Too Many Requests');
+    });
   });
 
   // ===========================================================================
@@ -469,6 +753,63 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       expect(res.body.code).toBeUndefined();
       expect(res.body.message).toBe('Verification code sent to your institutional email.');
       expect(res.body.cooldownSeconds).toBe(30);
+    });
+  });
+
+  // ===========================================================================
+  // 5. Periodic OTP Cleanup Service
+  // ===========================================================================
+  describe('5. Periodic OTP Cleanup Service', () => {
+    it('prunes abandoned expired OTP records older than 1 hour without deleting active OTPs', async () => {
+      const activeEmail = 'active.cron@vitstudent.ac.in';
+      const abandonedEmail = 'abandoned.cron@vitstudent.ac.in';
+
+      // 1. Active OTP: expires in 5 minutes
+      await testPrisma.otpVerification.upsert({
+        where: { email: activeEmail },
+        create: {
+          email: activeEmail,
+          verifierHash: 'active-hash',
+          salt: 'active-salt',
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          cooldownUntil: new Date(),
+        },
+        update: {
+          verifierHash: 'active-hash',
+          salt: 'active-salt',
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          cooldownUntil: new Date(),
+        },
+      });
+
+      // 2. Abandoned OTP: expired 2 hours ago
+      await testPrisma.otpVerification.upsert({
+        where: { email: abandonedEmail },
+        create: {
+          email: abandonedEmail,
+          verifierHash: 'abandoned-hash',
+          salt: 'abandoned-salt',
+          expiresAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          cooldownUntil: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        },
+        update: {
+          verifierHash: 'abandoned-hash',
+          salt: 'abandoned-salt',
+          expiresAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          cooldownUntil: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        },
+      });
+
+      const deletedCount = await otpCleanupService.runCleanup();
+      expect(deletedCount).toBeGreaterThanOrEqual(1);
+
+      // Verify abandoned record is deleted
+      const checkAbandoned = await testPrisma.otpVerification.findUnique({ where: { email: abandonedEmail } });
+      expect(checkAbandoned).toBeNull();
+
+      // Verify active record is preserved
+      const checkActive = await testPrisma.otpVerification.findUnique({ where: { email: activeEmail } });
+      expect(checkActive).not.toBeNull();
     });
   });
 });

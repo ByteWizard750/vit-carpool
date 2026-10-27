@@ -16,6 +16,21 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
+  // Configure Express trust proxy when explicitly enabled via TRUST_PROXY
+  const trustProxyEnv = process.env.TRUST_PROXY?.trim();
+  if (trustProxyEnv) {
+    if (trustProxyEnv === 'true' || trustProxyEnv === '1') {
+      app.getHttpAdapter().getInstance().set('trust proxy', 1);
+      logger.log('[Bootstrap] Express trust proxy configured: 1 hop');
+    } else if (trustProxyEnv === 'false' || trustProxyEnv === '0') {
+      app.getHttpAdapter().getInstance().set('trust proxy', false);
+      logger.log('[Bootstrap] Express trust proxy disabled');
+    } else {
+      app.getHttpAdapter().getInstance().set('trust proxy', trustProxyEnv);
+      logger.log(`[Bootstrap] Express trust proxy configured: ${trustProxyEnv}`);
+    }
+  }
+
   // Enable global validation pipe with strict sanitization
   app.useGlobalPipes(
     new ValidationPipe({

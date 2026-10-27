@@ -85,7 +85,7 @@ export class AuthController {
   }
 
   @Public()
-  @Get('.well-known/jwks.json')
+  @Get(['.well-known/jwks.json', 'v1/.well-known/jwks.json'])
   @ApiOperation({ summary: 'Get public JWKS for RS256 token verification' })
   getJwks() {
     return this.jwksService.getPublicJwks();
