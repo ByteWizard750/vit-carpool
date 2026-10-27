@@ -30,11 +30,14 @@ export class SupabaseAuthGuard implements CanActivate {
     private readonly jwksService: JwksService,
   ) {
     this.jwtSecret = this.config.get<string>('SUPABASE_JWT_SECRET') ?? null;
+    const customIssuer = this.config.get<string>('JWT_ISSUER');
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
     const configuredIssuer = this.config.get<string>('SUPABASE_JWT_ISSUER');
 
     if (configuredIssuer) {
       this.expectedIssuer = configuredIssuer;
+    } else if (customIssuer) {
+      this.expectedIssuer = customIssuer;
     } else if (supabaseUrl) {
       this.expectedIssuer = `${supabaseUrl.replace(/\/$/, '')}/auth/v1`;
     }
@@ -78,9 +81,11 @@ export class SupabaseAuthGuard implements CanActivate {
 
     let decoded: DecodedTokenPayload;
     try {
+      const customIssuer = this.config.get<string>('JWT_ISSUER');
       const validIssuers: [string, ...string[]] = [
         'https://mock-supabase.local/auth/v1',
         ...(this.expectedIssuer ? [this.expectedIssuer] : []),
+        ...(customIssuer && customIssuer !== this.expectedIssuer ? [customIssuer] : []),
       ];
 
       if (alg === 'RS256') {

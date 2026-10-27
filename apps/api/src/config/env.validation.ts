@@ -1,4 +1,41 @@
 import { z } from 'zod';
+import * as crypto from 'crypto';
+
+export function normalizePem(raw?: string): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  if (trimmed.includes('-----BEGIN')) {
+    return trimmed.replace(/\\n/g, '\n');
+  }
+  try {
+    const decoded = Buffer.from(trimmed, 'base64').toString('utf8');
+    if (decoded.includes('-----BEGIN')) {
+      return decoded.replace(/\\n/g, '\n');
+    }
+  } catch {
+    // fallback
+  }
+  return trimmed;
+}
+
+export function validateRsaKeyPair(privateKeyRaw: string, publicKeyRaw: string): boolean {
+  try {
+    const privPem = normalizePem(privateKeyRaw);
+    const pubPem = normalizePem(publicKeyRaw);
+    const priv = crypto.createPrivateKey(privPem);
+    const pub = crypto.createPublicKey(pubPem);
+
+    if (priv.asymmetricKeyType !== 'rsa' || pub.asymmetricKeyType !== 'rsa') {
+      return false;
+    }
+
+    const testData = Buffer.from('vit-carpool-key-validation-challenge');
+    const signature = crypto.sign('sha256', testData, priv);
+    return crypto.verify('sha256', testData, pub, signature);
+  } catch {
+    return false;
+  }
+}
 
 export const EnvSchema = z.object({
   NODE_ENV: z
@@ -18,6 +55,20 @@ export const EnvSchema = z.object({
     .transform((val) => val === 'true'),
   STUDENT_EMAIL_REGEX: z.string().default('^[a-zA-Z0-9._%+-]+@vitstudent\\.ac\\.in$'),
   FACULTY_EMAIL_REGEX: z.string().default('^[a-zA-Z0-9._%+-]+@vit\\.ac\\.in$'),
+
+  // Custom RS256 JWT Authentication Key Pair
+  JWT_PRIVATE_KEY: z.string().optional().or(z.literal('')),
+  JWT_PUBLIC_KEY: z.string().optional().or(z.literal('')),
+  JWT_KEY_ID: z.string().default('vit-carpool-jwt-key-1'),
+  JWT_ISSUER: z.string().default('https://api.vitcarpool.app/auth/v1'),
+  JWT_AUDIENCE: z.string().default('authenticated'),
+
+  // Keyed HMAC Secret for OTP verification storage
+  OTP_HMAC_SECRET: z.string().optional().or(z.literal('')),
+
+  // Authentication IP Rate Limiting Configuration
+  AUTH_RATE_LIMIT_TTL: z.coerce.number().int().min(1).default(60),
+  AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(10),
 
   // Supabase Auth Integration
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),
@@ -69,6 +120,36 @@ export const EnvSchema = z.object({
   {
     message: 'MAPBOX_ACCESS_TOKEN is required when LOCATION_PROVIDER is set to mapbox',
     path: ['MAPBOX_ACCESS_TOKEN'],
+  },
+).refine(
+  (data) => {
+    if (data.NODE_ENV !== 'production') return true;
+    const hasSupabase = Boolean(data.SUPABASE_URL && data.SUPABASE_JWKS_URL);
+    if (hasSupabase) return true;
+    return Boolean(data.JWT_PRIVATE_KEY && data.JWT_PUBLIC_KEY);
+  },
+  {
+    message: 'In production environment, both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured for custom RS256 token signing and verification',
+    path: ['JWT_PRIVATE_KEY'],
+  },
+).refine(
+  (data) => {
+    if (!data.JWT_PRIVATE_KEY || !data.JWT_PUBLIC_KEY) return true;
+    return validateRsaKeyPair(data.JWT_PRIVATE_KEY, data.JWT_PUBLIC_KEY);
+  },
+  {
+    message: 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY do not form a valid, matching RSA keypair',
+    path: ['JWT_PUBLIC_KEY'],
+  },
+).refine(
+  (data) => {
+    if (data.NODE_ENV !== 'production') return true;
+    // In production, OTP HMAC secret must be provided
+    return Boolean(data.OTP_HMAC_SECRET && data.OTP_HMAC_SECRET.trim().length >= 16);
+  },
+  {
+    message: 'OTP_HMAC_SECRET must be configured with at least 16 characters in production environment',
+    path: ['OTP_HMAC_SECRET'],
   },
 );
 

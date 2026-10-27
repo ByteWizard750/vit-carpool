@@ -47,7 +47,7 @@ export class EmailService {
     intent: 'signup' | 'signin' = 'signup',
   ): Promise<void> {
     if (!this.transporter || !this.isConfigured) {
-      this.logger.warn(`[EmailService] Skipping SMTP dispatch to ${to} (transporter not configured). Code: ${otpCode}`);
+      this.logger.warn(`[EmailService] Skipping SMTP dispatch to ${to} (transporter not configured).`);
       return;
     }
 
@@ -101,7 +101,11 @@ export class EmailService {
       });
       this.logger.log(`[EmailService] OTP email sent successfully to ${to} (MessageId: ${info.messageId})`);
     } catch (err: any) {
-      this.logger.error(`[EmailService] Failed to send OTP email to ${to}: ${err.message}`, err.stack);
+      const sanitizedMessage = (err?.message || 'Unknown error').replace(
+        /pass(word)?\s*[:=]\s*\S+/gi,
+        'pass=***',
+      );
+      this.logger.error(`[EmailService] Failed to send OTP email to ${to}: ${sanitizedMessage}`);
       throw err;
     }
   }

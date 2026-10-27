@@ -4,6 +4,7 @@ import { SupabaseAuthGuard } from './guards/supabase-auth.guard';
 import { VerifiedUserGuard } from './guards/verified-user.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { AudienceGuard } from './guards/audience.guard';
+import { AuthRateLimiterGuard } from './guards/auth-rate-limiter.guard';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { VerificationModule } from '../verification/verification.module';
@@ -21,6 +22,7 @@ import { EmailService } from './email.service';
     AuthService,
     EmailService,
     JwksService,
+    AuthRateLimiterGuard,
     SupabaseAuthGuard,
     VerifiedUserGuard,
     AdminGuard,
@@ -30,7 +32,16 @@ import { EmailService } from './email.service';
       useClass: SupabaseAuthGuard,
     },
   ],
-  exports: [AuthService, EmailService, JwksService, SupabaseAuthGuard, VerifiedUserGuard, AdminGuard, AudienceGuard],
+  exports: [
+    AuthService,
+    EmailService,
+    JwksService,
+    AuthRateLimiterGuard,
+    SupabaseAuthGuard,
+    VerifiedUserGuard,
+    AdminGuard,
+    AudienceGuard,
+  ],
 })
 export class AuthModule {}
 

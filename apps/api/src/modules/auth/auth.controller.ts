@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Req,
   Body,
   Headers,
@@ -9,6 +10,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -19,6 +21,8 @@ import { VerificationService } from '../verification/verification.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Audience, VerificationStatus, VerificationMethod, UserRole } from '@vit-carpool/db';
 import { signTestJwt } from './jwt-keys.fixture';
+import { AuthRateLimiterGuard } from './guards/auth-rate-limiter.guard';
+import { JwksService } from './jwks.service';
 
 import { AuthService } from './auth.service';
 import {
@@ -38,9 +42,11 @@ export class AuthController {
     private readonly verificationService: VerificationService,
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly jwksService: JwksService,
   ) {}
 
   @Public()
+  @UseGuards(AuthRateLimiterGuard)
   @Post('request-otp')
   @ApiOperation({ summary: 'Request passwordless email OTP for Sign Up or Sign In' })
   async requestOtp(@Body() body: unknown): Promise<{ message: string; cooldownSeconds: number }> {
@@ -53,6 +59,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(AuthRateLimiterGuard)
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify email OTP and return authenticated session' })
   async verifyOtp(@Body() body: unknown): Promise<AuthResponseDto> {
@@ -65,6 +72,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(AuthRateLimiterGuard)
   @Post('resend-otp')
   @ApiOperation({ summary: 'Resend email OTP with cooldown protection' })
   async resendOtp(@Body() body: unknown): Promise<{ message: string; cooldownSeconds: number }> {
@@ -74,6 +82,13 @@ export class AuthController {
       throw new BadRequestException(errorMsg || 'Invalid resend payload');
     }
     return this.authService.resendOtp(parseResult.data);
+  }
+
+  @Public()
+  @Get('.well-known/jwks.json')
+  @ApiOperation({ summary: 'Get public JWKS for RS256 token verification' })
+  getJwks() {
+    return this.jwksService.getPublicJwks();
   }
 
   @Public()
