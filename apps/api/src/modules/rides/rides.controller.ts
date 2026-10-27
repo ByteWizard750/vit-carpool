@@ -22,6 +22,7 @@ import {
   PublicRideSummaryDto,
   SearchRidesQuerySchema,
   SearchRidesResponseDto,
+  QuickRideTemplatesResponseDto,
 } from '@vit-carpool/contracts';
 
 @ApiTags('rides')
@@ -75,6 +76,14 @@ export class RidesController {
     return this.ridesService.listMyRides(user);
   }
 
+  @Get('quick-templates')
+  @ApiOperation({ summary: 'Retrieve reusable ride templates for Quick Ride (Authenticated driver only)' })
+  async getQuickRideTemplates(
+    @CurrentUser() user: User,
+  ): Promise<QuickRideTemplatesResponseDto> {
+    return this.ridesService.getQuickRideTemplates(user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Retrieve ride details (Subject to audience isolation)' })
   async getRideById(
@@ -120,5 +129,14 @@ export class RidesController {
     @Param('id') id: string,
   ): Promise<DriverRideResponseDto> {
     return this.ridesService.cancelMyRide(user, id);
+  }
+
+  @Post(':id/complete')
+  @ApiOperation({ summary: 'Mark a ride as completed (Driver only)' })
+  async completeRide(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<DriverRideResponseDto> {
+    return this.ridesService.completeMyRide(user, id);
   }
 }

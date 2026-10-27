@@ -1,5 +1,6 @@
 import React from 'react';
-import { Car, ShieldCheck, Terminal, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Car, Terminal, ExternalLink } from 'lucide-react';
 
 interface FooterProps {
   onOpenDevStatus: () => void;
@@ -12,12 +13,12 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
         <div className="footer-top-grid">
           {/* Brand Info */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
               <div
                 style={{
                   width: '28px',
                   height: '28px',
-                  borderRadius: '6px',
+                  borderRadius: '8px',
                   backgroundColor: '#2563eb',
                   display: 'flex',
                   alignItems: 'center',
@@ -27,80 +28,66 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
               >
                 <Car size={16} />
               </div>
-              <h3 className="footer-brand-title">VIT Carpool</h3>
+              <h3 className="footer-brand-title" style={{ margin: 0, fontSize: '1.1rem' }}>VIT Carpool</h3>
             </div>
-            <p style={{ maxWidth: '420px', lineHeight: '1.6', fontSize: '0.85rem' }}>
-              Planned carpooling platform for the VIT Chennai student and faculty communities.
-              Designed for safe, cost-shared daily commutes between Chennai and the Vandalur-Kelambakkam campus.
+            <p style={{ maxWidth: '360px', lineHeight: '1.5', fontSize: '0.85rem', color: '#94a3b8', margin: '0 0 10px' }}>
+              Verified campus carpooling for the VIT Chennai student and faculty community.
             </p>
-            <div style={{ marginTop: '12px', fontSize: '0.8rem', color: '#64748b' }}>
-              Vandalur-Kelambakkam Road, Rajan Nagar, Chennai, Tamil Nadu 600127
+            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              Vandalur-Kelambakkam Road, Chennai 600127
             </div>
           </div>
 
-          {/* Platform Navigation */}
+          {/* Quick Explore */}
           <div>
-            <h4 className="footer-col-title">Platform Areas</h4>
+            <h4 className="footer-col-title">Explore</h4>
             <ul className="footer-links-list">
               <li>
-                <a href="#search">Route Search</a>
+                <Link to="/rides">Find Rides</Link>
               </li>
               <li>
-                <a href="#separation">Student & Faculty Separation</a>
+                <Link to="/offer-ride">Offer a Ride</Link>
               </li>
               <li>
-                <a href="#how-it-works">How Carpooling Works</a>
+                <Link to="/safety">Cohort Separation</Link>
               </li>
               <li>
-                <a href="#corridors">Campus Transit Corridors</a>
-              </li>
-              <li>
-                <a href="#charter">Trust Charter & Standards</a>
+                <Link to="/how-it-works">How It Works</Link>
               </li>
             </ul>
           </div>
 
-          {/* Community & Engineering */}
+          {/* Platform & Resources */}
           <div>
-            <h4 className="footer-col-title">Community & Tech</h4>
+            <h4 className="footer-col-title">Resources</h4>
             <ul className="footer-links-list">
-              <li>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={14} style={{ color: '#16a34a' }} />
-                  <span>Planned Verification Gate</span>
-                </span>
-              </li>
-              <li>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Strict Separation Design</span>
-                </span>
-              </li>
               <li>
                 <a
                   href="https://github.com/ByteWizard750/vit-carpool"
                   target="_blank"
                   rel="noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                 >
                   <span>Architecture Docs</span>
                   <ExternalLink size={12} />
                 </a>
               </li>
               {import.meta.env.DEV && (
-                <li style={{ paddingTop: '8px' }}>
+                <li>
                   <button
                     type="button"
                     onClick={onOpenDevStatus}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '5px',
                       color: '#60a5fa',
+                      fontSize: '0.825rem',
                     }}
                     id="footer-dev-diagnostics-btn"
                   >
-                    <Terminal size={14} />
-                    <span>Developer Diagnostics (Dev Mode)</span>
+                    <Terminal size={13} />
+                    <span>Dev Diagnostics</span>
                   </button>
                 </li>
               )}
@@ -109,15 +96,14 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
         </div>
 
         {/* Bottom Bar with Disclaimers */}
-        <div className="footer-bottom-bar">
-          <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            &copy; {new Date().getFullYear()} VIT Carpool. Independent community project for VIT Chennai.
-            Not an official VIT administrative service.
+        <div className="footer-bottom-bar" style={{ paddingTop: '16px', borderTop: '1px solid #1e293b' }}>
+          <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
+            &copy; {new Date().getFullYear()} VIT Carpool &bull; Independent student project &bull; Not an official VIT administrative service.
           </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.8rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', color: '#64748b' }}>
             <span>Cars Only Policy</span>
             <span>&bull;</span>
-            <span>Zero Platform Fees</span>
+            <span>Zero Fees</span>
             <span>&bull;</span>
             <span>Direct Cost Share</span>
           </div>

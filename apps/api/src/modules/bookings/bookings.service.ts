@@ -156,6 +156,10 @@ export class BookingsService {
       throw new BadRequestException('Cannot request seats on a cancelled ride.');
     }
 
+    if (ride.status === RideStatus.COMPLETED) {
+      throw new BadRequestException('Cannot request seats on a completed ride.');
+    }
+
     if (ride.departureTime.getTime() <= Date.now()) {
       throw new BadRequestException('Cannot request seats on a ride that has already departed.');
     }
@@ -372,6 +376,10 @@ export class BookingsService {
 
       if (ride.status === RideStatus.CANCELLED) {
         throw new BadRequestException('Cannot approve booking for a cancelled ride.');
+      }
+
+      if (ride.status === RideStatus.COMPLETED) {
+        throw new BadRequestException('Cannot approve booking for a completed ride.');
       }
 
       if (ride.departureTime.getTime() <= Date.now()) {

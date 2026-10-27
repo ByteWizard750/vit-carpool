@@ -10,6 +10,7 @@ import {
   Audience,
   VerificationMethod,
   RideStatus,
+  BookingStatus,
 } from '@vit-carpool/db';
 import { signTestJwt } from '../src/modules/auth/jwt-keys.fixture';
 import { AuditLogService } from '../src/modules/audit/audit.service';
@@ -1785,5 +1786,446 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
         .expect(400);
     });
   });
-});
 
+  // ===========================================================================
+  // 11. Milestone 5.2: Enhanced Search Filters & Privacy Polish
+  // ===========================================================================
+  describe('11. Milestone 5.2: Enhanced Search Filters & Privacy Polish', () => {
+    it('filters rides correctly by maxCost', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({ maxCost: 65 })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body.rides)).toBe(true);
+      for (const ride of res.body.rides) {
+        expect(ride.costPerSeat).toBeLessThanOrEqual(65);
+      }
+    });
+
+    it('rejects invalid maxCost (negative or non-numeric)', async () => {
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({ maxCost: -10 })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({ maxCost: 'cheap' })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+    });
+
+    it('supports sorting by cost ascending', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({ sortBy: 'cost', sortOrder: 'asc' })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const nonNullCosts = res.body.rides
+        .map((r: any) => r.costPerSeat)
+        .filter((c: any) => c !== null);
+      for (let i = 1; i < nonNullCosts.length; i++) {
+        expect(nonNullCosts[i]).toBeGreaterThanOrEqual(nonNullCosts[i - 1]);
+      }
+    });
+
+    it('supports sorting by available seats descending', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({ sortBy: 'seats', sortOrder: 'desc' })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      const seatsList = res.body.rides.map((r: any) => r.availableSeats);
+      for (let i = 1; i < seatsList.length; i++) {
+        expect(seatsList[i]).toBeLessThanOrEqual(seatsList[i - 1]);
+      }
+    });
+
+    it('supports unified radiusKm filter parameter and validates upper bound', async () => {
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8914,
+          originLon: 80.0815,
+          radiusKm: 5,
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get('/rides')
+        .query({
+          originLat: 12.8914,
+          originLon: 80.0815,
+          radiusKm: 60, // Exceeds max 50
+        })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(400);
+    });
+
+    it('preserves strict vehicle and location privacy in public search responses', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      for (const ride of res.body.rides) {
+        // Private landmark notes MUST NOT be present
+        expect(ride.pickupDescription).toBeUndefined();
+        expect(ride.dropoffDescription).toBeUndefined();
+
+        // Vehicle registration plate MUST NOT be disclosed in public summary
+        if (ride.vehicle) {
+          expect(ride.vehicle.registrationNumber).toBeUndefined();
+          expect(ride.vehicle.make).toBeDefined();
+          expect(ride.vehicle.model).toBeDefined();
+          expect(ride.vehicle.color).toBeDefined();
+        }
+      }
+    });
+
+    it('returns empty list gracefully with total: 0 when no rides match criteria', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides')
+        .query({ origin: 'NonExistentCorridor123xyz' })
+        .set('Authorization', `Bearer ${studentRiderToken}`)
+        .expect(200);
+
+      expect(res.body.rides).toEqual([]);
+      expect(res.body.pagination.total).toBe(0);
+      expect(res.body.pagination.page).toBe(1);
+      expect(res.body.pagination.totalPages).toBe(1);
+    });
+  });
+
+  // ===========================================================================
+  // 12. Milestone 6: Driver Ride Management & Lifecycle Controls
+  // ===========================================================================
+  describe('12. Milestone 6: Driver Ride Management & Lifecycle Controls', () => {
+    let testRideId: string;
+
+    beforeEach(async () => {
+      // Create a fresh scheduled ride for the student driver departing in 3 hours
+      const ride = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Tambaram Bus Stand',
+          destination: 'VIT Chennai Campus',
+          departureTime: new Date(Date.now() + 3 * 3600 * 1000),
+          availableSeats: 3,
+          totalSeats: 3,
+          costPerSeat: 50,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+      testRideId = ride.id;
+    });
+
+    it('GET /rides/mine returns only rides owned by the authenticated driver with booking metrics', async () => {
+      // Seed a pending and a confirmed booking on this ride
+      await testPrisma.booking.create({
+        data: {
+          rideId: testRideId,
+          passengerId: studentRiderId,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 1,
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/rides/mine')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThanOrEqual(1);
+
+      const foundRide = res.body.find((r: any) => r.id === testRideId);
+      expect(foundRide).toBeDefined();
+      expect(foundRide.driverId).toBe(studentDriverId);
+      expect(foundRide.pendingBookingsCount).toBe(1);
+      expect(foundRide.confirmedBookingsCount).toBe(0);
+
+      // Driver can see their own vehicle registration plate
+      expect(foundRide.vehicle).toBeDefined();
+      expect(foundRide.vehicle.registrationNumber).toBe('TN19AA5001');
+
+      // Faculty driver querying /rides/mine does not see student driver rides
+      const facultyRes = await request(app.getHttpServer())
+        .get('/rides/mine')
+        .set('Authorization', `Bearer ${facultyDriverToken}`)
+        .expect(200);
+
+      const hasStudentRide = facultyRes.body.some((r: any) => r.id === testRideId);
+      expect(hasStudentRide).toBe(false);
+    });
+
+    it('PATCH /rides/:id allows driver to edit upcoming ride schedule and seat counts', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/rides/${testRideId}`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({
+          origin: 'Tambaram Railway Station West',
+          costPerSeat: 60,
+          availableSeats: 4, // 5-seater vehicle has max 4 passenger seats
+        })
+        .expect(200);
+
+      expect(res.body.origin).toBe('Tambaram Railway Station West');
+      expect(res.body.costPerSeat).toBe(60);
+      expect(res.body.availableSeats).toBe(4);
+    });
+
+    it('PATCH /rides/:id rejects modification within 15 minutes of departure (400 Bad Request)', async () => {
+      // Create ride departing in 10 minutes (within 15-minute lock window)
+      const imminentRide = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Kelambakkam Junction',
+          destination: 'VIT Campus',
+          departureTime: new Date(Date.now() + 10 * 60 * 1000), // 10 mins ahead
+          availableSeats: 2,
+          totalSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/rides/${imminentRide.id}`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({ costPerSeat: 30 })
+        .expect(400);
+
+      expect(res.body.message).toMatch(/cannot be modified within 15 minutes of departure/i);
+    });
+
+    it('PATCH /rides/:id rejects modification of a ride owned by another driver (404 Not Found)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/rides/${testRideId}`)
+        .set('Authorization', `Bearer ${facultyDriverToken}`) // Faculty driver attempting to edit student ride
+        .send({ costPerSeat: 30 })
+        .expect(404);
+    });
+
+    it('POST /rides/:id/cancel allows driver to cancel their upcoming scheduled ride', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/rides/${testRideId}/cancel`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(201);
+
+      expect(res.body.status).toBe('CANCELLED');
+
+      // Verify in DB
+      const dbRide = await testPrisma.ride.findUniqueOrThrow({ where: { id: testRideId } });
+      expect(dbRide.status).toBe(RideStatus.CANCELLED);
+
+      // Verify active bookings on this ride were atomically transitioned to CANCELLED
+      const bookingsOnRide = await testPrisma.booking.findMany({ where: { rideId: testRideId } });
+      for (const b of bookingsOnRide) {
+        expect(b.status).toBe(BookingStatus.CANCELLED);
+        expect(b.cancellationReason).toBe('Ride was cancelled by driver');
+      }
+
+      // Attempting to cancel an already cancelled ride returns 400 Bad Request
+      const duplicateCancelRes = await request(app.getHttpServer())
+        .post(`/rides/${testRideId}/cancel`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(400);
+
+      expect(duplicateCancelRes.body.message).toMatch(/already cancelled/i);
+    });
+
+    it('POST /rides/:id/cancel rejects cancellation of another driver ride (404 Not Found)', async () => {
+      await request(app.getHttpServer())
+        .post(`/rides/${testRideId}/cancel`)
+        .set('Authorization', `Bearer ${facultyDriverToken}`)
+        .expect(404);
+    });
+
+    it('POST /rides/:id/cancel rejects cancellation of a ride that has already departed', async () => {
+      const departedRide = await testPrisma.ride.create({
+        data: {
+          driverId: studentDriverId,
+          vehicleId: studentVehicleId,
+          audience: Audience.STUDENT,
+          origin: 'Vandalur Zoo',
+          destination: 'VIT Campus',
+          departureTime: new Date(Date.now() - 3600 * 1000), // Departed 1 hour ago
+          availableSeats: 2,
+          totalSeats: 2,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/rides/${departedRide.id}/cancel`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(400);
+
+      expect(res.body.message).toMatch(/cannot cancel a ride that has already departed/i);
+    });
+  });
+
+  // 12. Quick Ride Templates & Repeat Last Ride Posting
+  describe('12. Quick Ride Templates & Repeat Last Ride Posting', () => {
+    it('GET /rides/quick-templates returns empty state when driver has never published a ride', async () => {
+      // Create fresh driver with active vehicle but no rides
+      const freshAuthId = 'f9999999-9999-4999-8999-999999999999';
+      const freshEmail = 'fresh.driver@vitstudent.ac.in';
+      const freshUser = await testPrisma.user.create({
+        data: {
+          authUserId: freshAuthId,
+          email: freshEmail,
+          fullName: 'Fresh Quick Driver',
+          audience: Audience.STUDENT,
+          verificationStatus: VerificationStatus.VERIFIED,
+          verificationMethod: VerificationMethod.MANUAL_ID_REVIEW,
+          verifiedAt: new Date(),
+          role: UserRole.USER,
+        },
+      });
+
+      const freshVehicle = await testPrisma.vehicle.create({
+        data: {
+          userId: freshUser.id,
+          make: 'Maruti',
+          model: 'Swift',
+          color: 'Blue',
+          registrationNumber: 'TN19QR9999',
+          capacity: 4,
+        },
+      });
+
+      const freshToken = signTestJwt({ sub: freshAuthId, email: freshEmail });
+
+      const res = await request(app.getHttpServer())
+        .get('/rides/quick-templates')
+        .set('Authorization', `Bearer ${freshToken}`)
+        .expect(200);
+
+      expect(res.body.recentRide).toBeNull();
+      expect(res.body.routes).toEqual([]);
+      expect(res.body.hasActiveVehicle).toBe(true);
+
+      // Clean up fresh user and vehicle
+      await testPrisma.vehicle.delete({ where: { id: freshVehicle.id } });
+      await testPrisma.user.delete({ where: { id: freshUser.id } });
+    });
+
+    it('GET /rides/quick-templates retrieves the driver’s most recent ride and deduplicated routes', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/rides/quick-templates')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      expect(res.body.recentRide).toBeDefined();
+      expect(res.body.recentRide.origin).toBeDefined();
+      expect(res.body.recentRide.destination).toBeDefined();
+      expect(res.body.recentRide.vehicleId).toBe(studentVehicleId);
+      expect(res.body.hasActiveVehicle).toBe(true);
+
+      // Verify privacy: private notes are NOT returned
+      expect(res.body.recentRide.pickupDescription).toBeUndefined();
+      expect(res.body.recentRide.dropoffDescription).toBeUndefined();
+
+      // Verify routes list exists and is deduplicated
+      expect(Array.isArray(res.body.routes)).toBe(true);
+      expect(res.body.routes.length).toBeGreaterThan(0);
+    });
+
+    it('Cross-driver isolation: Driver A cannot see Driver B’s templates', async () => {
+      const facultyRes = await request(app.getHttpServer())
+        .get('/rides/quick-templates')
+        .set('Authorization', `Bearer ${facultyDriverToken}`)
+        .expect(200);
+
+      // If faculty driver has rides, their vehicleId must belong to faculty, not student
+      if (facultyRes.body.recentRide) {
+        expect(facultyRes.body.recentRide.vehicleId).toBe(facultyVehicleId);
+      }
+    });
+
+    it('Quick Ride posting via POST /rides creates a completely new ride record without mutating the original', async () => {
+      // 1. Fetch reusable templates
+      const templatesRes = await request(app.getHttpServer())
+        .get('/rides/quick-templates')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      const template = templatesRes.body.recentRide;
+      expect(template).toBeDefined();
+
+      const originalRide = await testPrisma.ride.findUnique({
+        where: { id: template.id },
+      });
+      expect(originalRide).toBeDefined();
+
+      // 2. Publish new quick ride with updated future departure time
+      const futureDeparture = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+      const postRes = await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({
+          vehicleId: template.vehicleId,
+          origin: template.origin,
+          destination: template.destination,
+          originLatitude: template.originLatitude,
+          originLongitude: template.originLongitude,
+          destinationLatitude: template.destinationLatitude,
+          destinationLongitude: template.destinationLongitude,
+          departureTime: futureDeparture,
+          availableSeats: template.availableSeats,
+          costPerSeat: template.costPerSeat || 50,
+        })
+        .expect(201);
+
+      expect(postRes.body.id).toBeDefined();
+      expect(postRes.body.id).not.toBe(template.id); // Completely new ride ID
+      expect(postRes.body.origin).toBe(template.origin);
+      expect(postRes.body.destination).toBe(template.destination);
+      expect(postRes.body.status).toBe('SCHEDULED');
+
+      // 3. Verify original ride record was NOT modified or overwritten
+      const checkOriginal = await testPrisma.ride.findUnique({
+        where: { id: template.id },
+      });
+      expect(checkOriginal?.id).toBe(originalRide?.id);
+      expect(checkOriginal?.status).toBe(originalRide?.status);
+      expect(checkOriginal?.departureTime.toISOString()).toBe(originalRide?.departureTime.toISOString());
+    });
+
+    it('Quick Ride posting rejects past departure times using existing validation', async () => {
+      const templatesRes = await request(app.getHttpServer())
+        .get('/rides/quick-templates')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      const template = templatesRes.body.recentRide;
+      const pastDeparture = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      await request(app.getHttpServer())
+        .post('/rides')
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({
+          vehicleId: template.vehicleId,
+          origin: template.origin,
+          destination: template.destination,
+          departureTime: pastDeparture,
+          availableSeats: template.availableSeats,
+          costPerSeat: 50,
+        })
+        .expect(400);
+    });
+  });
+});

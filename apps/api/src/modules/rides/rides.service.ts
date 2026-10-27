@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
-import { User, Vehicle, Ride, RideStatus, Prisma } from '@vit-carpool/db';
+import { User, Vehicle, Ride, RideStatus, BookingStatus, Prisma } from '@vit-carpool/db';
 import {
   CreateRideDto,
   UpdateRideDto,
@@ -14,7 +14,10 @@ import {
   PublicRideSummaryDto,
   SearchRidesQueryDto,
   SearchRidesResponseDto,
+  ReusableRideTemplateDto,
+  QuickRideTemplatesResponseDto,
 } from '@vit-carpool/contracts';
+import { RatingsService } from '../ratings/ratings.service';
 
 @Injectable()
 export class RidesService {
@@ -23,14 +26,25 @@ export class RidesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly ratingsService: RatingsService,
   ) {}
 
   /**
    * Helper to format internal Ride entity with Vehicle to DriverRideResponseDto
    */
   private toDriverRideDto(
-    ride: Ride & { vehicle?: Vehicle | null },
+    ride: Ride & {
+      vehicle?: Vehicle | null;
+      bookings?: Array<{ id: string; status: BookingStatus; requestedSeats: number }>;
+    },
+    driverRating?: { average: number | null; count: number } | null,
   ): DriverRideResponseDto {
+    const confirmedBookings = ride.bookings?.filter((b) => b.status === BookingStatus.CONFIRMED);
+    const pendingBookings = ride.bookings?.filter((b) => b.status === BookingStatus.PENDING);
+    const confirmedSeatsCount = confirmedBookings
+      ? confirmedBookings.reduce((sum, b) => sum + b.requestedSeats, 0)
+      : (ride.totalSeats - ride.availableSeats);
+
     return {
       id: ride.id,
       driverId: ride.driverId,
@@ -53,6 +67,9 @@ export class RidesService {
       totalSeats: ride.totalSeats,
       costPerSeat: ride.costPerSeat,
       status: ride.status,
+      confirmedBookingsCount: confirmedBookings ? confirmedBookings.length : undefined,
+      confirmedSeatsCount,
+      pendingBookingsCount: pendingBookings ? pendingBookings.length : undefined,
       createdAt: ride.createdAt.toISOString(),
       updatedAt: ride.updatedAt.toISOString(),
       vehicle: ride.vehicle
@@ -68,6 +85,7 @@ export class RidesService {
             updatedAt: ride.vehicle.updatedAt.toISOString(),
           }
         : undefined,
+      driverRating: driverRating ?? undefined,
     };
   }
 
@@ -77,6 +95,7 @@ export class RidesService {
    */
   private toPublicRideDto(
     ride: Ride & { driver?: User | null; vehicle?: Vehicle | null },
+    driverRating?: { average: number | null; count: number } | null,
   ): PublicRideSummaryDto {
     return {
       id: ride.id,
@@ -107,6 +126,7 @@ export class RidesService {
             capacity: ride.vehicle.capacity,
           }
         : undefined,
+      driverRating: driverRating ?? undefined,
     };
   }
 
@@ -277,9 +297,12 @@ export class RidesService {
       }
     }
 
+    const originRadiusKm = dto.originRadiusKm ?? dto.radiusKm ?? 3.0;
+    const destRadiusKm = dto.destRadiusKm ?? dto.radiusKm ?? 3.0;
+
     const spatialConditions: Prisma.Sql[] = [];
     if (dto.originLat !== undefined && dto.originLon !== undefined) {
-      const radiusMeters = (dto.originRadiusKm ?? 5) * 1000;
+      const radiusMeters = originRadiusKm * 1000;
       spatialConditions.push(Prisma.sql`
         r.origin_geom IS NOT NULL AND ST_DWithin(
           r.origin_geom,
@@ -290,7 +313,7 @@ export class RidesService {
     }
 
     if (dto.destLat !== undefined && dto.destLon !== undefined) {
-      const radiusMeters = (dto.destRadiusKm ?? 5) * 1000;
+      const radiusMeters = destRadiusKm * 1000;
       spatialConditions.push(Prisma.sql`
         r.destination_geom IS NOT NULL AND ST_DWithin(
           r.destination_geom,
@@ -325,6 +348,12 @@ export class RidesService {
       ...(spatialRideIds !== null ? { id: { in: spatialRideIds } } : {}),
     };
 
+    if (dto.maxCost !== undefined) {
+      where.costPerSeat = {
+        lte: dto.maxCost,
+      };
+    }
+
     // If spatial search was NOT applied for origin, fallback to case-insensitive text search
     if (
       (dto.originLat === undefined || dto.originLon === undefined) &&
@@ -353,6 +382,27 @@ export class RidesService {
     const limit = Math.min(50, Math.max(1, dto.limit ?? 20));
     const skip = (page - 1) * limit;
 
+    const sortField = dto.sortBy || 'departureTime';
+    let orderBy: Prisma.RideOrderByWithRelationInput[];
+    if (sortField === 'cost') {
+      orderBy = [
+        { costPerSeat: { sort: dto.sortOrder ?? 'asc', nulls: 'last' } },
+        { departureTime: 'asc' },
+        { id: 'asc' },
+      ];
+    } else if (sortField === 'seats') {
+      orderBy = [
+        { availableSeats: dto.sortOrder ?? 'desc' },
+        { departureTime: 'asc' },
+        { id: 'asc' },
+      ];
+    } else {
+      orderBy = [
+        { departureTime: dto.sortOrder ?? 'asc' },
+        { id: 'asc' }, // Deterministic tie-breaker for pagination
+      ];
+    }
+
     const [rides, total] = await Promise.all([
       this.prisma.ride.findMany({
         where,
@@ -360,10 +410,7 @@ export class RidesService {
           driver: true,
           vehicle: true,
         },
-        orderBy: [
-          { departureTime: dto.sortOrder ?? 'asc' },
-          { id: 'asc' }, // Deterministic tie-breaker for pagination
-        ],
+        orderBy,
         skip,
         take: limit,
       }),
@@ -372,8 +419,11 @@ export class RidesService {
 
     const totalPages = Math.ceil(total / limit) || 1;
 
+    const driverIds = Array.from(new Set(rides.map((r) => r.driverId)));
+    const ratingMap = await this.ratingsService.getDriverRatingAggregates(driverIds);
+
     return {
-      rides: rides.map((r) => this.toPublicRideDto(r)),
+      rides: rides.map((r) => this.toPublicRideDto(r, ratingMap.get(r.driverId) || null)),
       pagination: {
         total,
         page,
@@ -393,13 +443,107 @@ export class RidesService {
       },
       include: {
         vehicle: true,
+        bookings: {
+          select: {
+            id: true,
+            status: true,
+            requestedSeats: true,
+          },
+        },
       },
       orderBy: {
         departureTime: 'desc',
       },
     });
 
-    return rides.map((r) => this.toDriverRideDto(r));
+    const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+    const driverRating = ratingMap.get(user.id) || null;
+
+    return rides.map((r) => this.toDriverRideDto(r, driverRating));
+  }
+
+  /**
+   * Retrieve reusable ride templates for Quick Ride posting.
+   * Strictly scoped to the authenticated driver.
+   * Excludes private pickup/dropoff notes and passenger bookings.
+   */
+  async getQuickRideTemplates(user: User): Promise<QuickRideTemplatesResponseDto> {
+    const activeVehiclesCount = await this.prisma.vehicle.count({
+      where: {
+        userId: user.id,
+        deletedAt: null,
+      },
+    });
+
+    const pastRides = await this.prisma.ride.findMany({
+      where: {
+        driverId: user.id,
+      },
+      include: {
+        vehicle: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 50,
+    });
+
+    if (pastRides.length === 0) {
+      return {
+        recentRide: null,
+        routes: [],
+        hasActiveVehicle: activeVehiclesCount > 0,
+      };
+    }
+
+    const formatTemplate = (r: (typeof pastRides)[0]): ReusableRideTemplateDto => ({
+      id: r.id,
+      vehicleId: r.vehicleId,
+      vehicle: r.vehicle
+        ? {
+            id: r.vehicle.id,
+            make: r.vehicle.make,
+            model: r.vehicle.model,
+            color: r.vehicle.color,
+            capacity: r.vehicle.capacity,
+            isDeleted: r.vehicle.deletedAt !== null,
+          }
+        : null,
+      origin: r.origin,
+      originAddress: r.originAddress,
+      originLatitude: r.originLatitude,
+      originLongitude: r.originLongitude,
+      originPlaceId: r.originPlaceId,
+      destination: r.destination,
+      destinationAddress: r.destinationAddress,
+      destinationLatitude: r.destinationLatitude,
+      destinationLongitude: r.destinationLongitude,
+      destinationPlaceId: r.destinationPlaceId,
+      availableSeats: r.availableSeats,
+      costPerSeat: r.costPerSeat,
+      departureTime: r.departureTime.toISOString(),
+      createdAt: r.createdAt.toISOString(),
+    });
+
+    const recentRide = formatTemplate(pastRides[0]);
+
+    const seenRoutes = new Set<string>();
+    const uniqueRoutes: ReusableRideTemplateDto[] = [];
+
+    for (const r of pastRides) {
+      const routeKey = `${r.origin.trim().toLowerCase()}->${r.destination.trim().toLowerCase()}`;
+      if (!seenRoutes.has(routeKey)) {
+        seenRoutes.add(routeKey);
+        uniqueRoutes.push(formatTemplate(r));
+        if (uniqueRoutes.length >= 10) break;
+      }
+    }
+
+    return {
+      recentRide,
+      routes: uniqueRoutes,
+      hasActiveVehicle: activeVehiclesCount > 0,
+    };
   }
 
   /**
@@ -417,6 +561,13 @@ export class RidesService {
       include: {
         driver: true,
         vehicle: true,
+        bookings: {
+          select: {
+            id: true,
+            status: true,
+            requestedSeats: true,
+          },
+        },
       },
     });
 
@@ -429,13 +580,16 @@ export class RidesService {
       throw new NotFoundException('Ride not found or not accessible.');
     }
 
+    const ratingMap = await this.ratingsService.getDriverRatingAggregates([ride.driverId]);
+    const driverRating = ratingMap.get(ride.driverId) || null;
+
     // If caller is the ride owner, return full driver DTO
     if (ride.driverId === user.id) {
-      return this.toDriverRideDto(ride);
+      return this.toDriverRideDto(ride, driverRating);
     }
 
     // Otherwise return privacy-preserving public summary
-    return this.toPublicRideDto(ride);
+    return this.toPublicRideDto(ride, driverRating);
   }
 
   /**
@@ -493,6 +647,13 @@ export class RidesService {
         },
         include: {
           vehicle: true,
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              requestedSeats: true,
+            },
+          },
         },
       });
 
@@ -504,6 +665,10 @@ export class RidesService {
         throw new BadRequestException('Cannot modify a ride that has already been cancelled.');
       }
 
+      if (ride.status === RideStatus.COMPLETED) {
+        throw new BadRequestException('Cannot modify a ride that has already been completed.');
+      }
+
       // Policy: Scheduled rides cannot be edited within 15 minutes of departure or after departure
       if (ride.departureTime.getTime() <= Date.now() + 15 * 60 * 1000) {
         throw new BadRequestException(
@@ -512,19 +677,33 @@ export class RidesService {
       }
 
       if (dto.availableSeats !== undefined) {
+        const confirmedBookings = ride.bookings.filter((b) => b.status === BookingStatus.CONFIRMED);
+        const confirmedSeats = confirmedBookings.reduce((sum, b) => sum + b.requestedSeats, 0);
         const maxPassengerSeats = ride.vehicle.capacity - 1;
-        if (dto.availableSeats > maxPassengerSeats) {
+
+        if (dto.availableSeats + confirmedSeats > maxPassengerSeats) {
           throw new BadRequestException(
-            `Cannot offer more than ${maxPassengerSeats} passenger seats for this vehicle.`,
+            `Cannot offer more than ${maxPassengerSeats} passenger seats for this vehicle${confirmedSeats > 0 ? ` (${confirmedSeats} already booked)` : ''}.`,
           );
         }
+
         dataToUpdate.availableSeats = dto.availableSeats;
+        dataToUpdate.totalSeats = Math.max(ride.totalSeats, dto.availableSeats + confirmedSeats);
       }
 
       const updated = await tx.ride.update({
         where: { id: rideId },
         data: dataToUpdate,
-        include: { vehicle: true },
+        include: {
+          vehicle: true,
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              requestedSeats: true,
+            },
+          },
+        },
       });
 
       await this.audit.log(
@@ -566,6 +745,13 @@ export class RidesService {
         },
         include: {
           vehicle: true,
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              requestedSeats: true,
+            },
+          },
         },
       });
 
@@ -577,16 +763,42 @@ export class RidesService {
         throw new BadRequestException('This ride is already cancelled.');
       }
 
+      if (ride.status === RideStatus.COMPLETED) {
+        throw new BadRequestException('Cannot cancel a completed ride.');
+      }
+
       if (ride.departureTime.getTime() <= Date.now()) {
         throw new BadRequestException('Cannot cancel a ride that has already departed.');
       }
+
+      // When a ride is cancelled by driver, transition any active passenger bookings to CANCELLED
+      await tx.booking.updateMany({
+        where: {
+          rideId,
+          status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancellationReason: 'Ride was cancelled by driver',
+        },
+      });
 
       const cancelled = await tx.ride.update({
         where: { id: rideId },
         data: {
           status: RideStatus.CANCELLED,
         },
-        include: { vehicle: true },
+        include: {
+          vehicle: true,
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              requestedSeats: true,
+            },
+          },
+        },
       });
 
       await this.audit.log(
@@ -605,6 +817,85 @@ export class RidesService {
       );
 
       return this.toDriverRideDto(cancelled);
+    });
+  }
+
+  /**
+   * Mark a scheduled ride as completed (Driver only).
+   */
+  async completeMyRide(user: User, rideId: string): Promise<DriverRideResponseDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const lockedRides = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM rides
+        WHERE id = ${rideId}::uuid AND driver_id = ${user.id}::uuid
+        FOR UPDATE
+      `;
+
+      if (!lockedRides.length) {
+        throw new NotFoundException('Ride not found or you do not have permission to complete it.');
+      }
+
+      const ride = await tx.ride.findFirst({
+        where: { id: rideId, driverId: user.id },
+        include: {
+          vehicle: true,
+          bookings: {
+            select: { id: true, status: true, requestedSeats: true },
+          },
+        },
+      });
+
+      if (!ride) {
+        throw new NotFoundException('Ride not found.');
+      }
+
+      if (ride.status === RideStatus.CANCELLED) {
+        throw new BadRequestException('Cannot complete a cancelled ride.');
+      }
+
+      if (ride.status === RideStatus.COMPLETED) {
+        const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+        return this.toDriverRideDto(ride, ratingMap.get(user.id) || null);
+      }
+
+      // When a ride is completed by driver, transition any remaining PENDING passenger bookings to CANCELLED
+      await tx.booking.updateMany({
+        where: {
+          rideId,
+          status: BookingStatus.PENDING,
+        },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancellationReason: 'Ride completed without accepting pending booking request',
+        },
+      });
+
+      const completed = await tx.ride.update({
+        where: { id: rideId },
+        data: { status: RideStatus.COMPLETED },
+        include: {
+          vehicle: true,
+          bookings: {
+            select: { id: true, status: true, requestedSeats: true },
+          },
+        },
+      });
+
+      await this.audit.log(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'RIDE_COMPLETED',
+          targetType: 'RIDE',
+          targetId: rideId,
+          changes: { status: 'COMPLETED' },
+        },
+        tx,
+      );
+
+      const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+      return this.toDriverRideDto(completed, ratingMap.get(user.id) || null);
     });
   }
 }

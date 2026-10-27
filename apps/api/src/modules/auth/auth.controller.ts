@@ -20,6 +20,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Audience, VerificationStatus, VerificationMethod, UserRole } from '@vit-carpool/db';
 import { signTestJwt } from './jwt-keys.fixture';
 
+import { AuthService } from './auth.service';
+import {
+  RequestOtpSchema,
+  VerifyOtpSchema,
+  ResendOtpSchema,
+  AuthResponseDto,
+} from '@vit-carpool/contracts';
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -29,7 +37,51 @@ export class AuthController {
     private readonly config: ConfigService,
     private readonly verificationService: VerificationService,
     private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
   ) {}
+
+  @Public()
+  @Post('request-otp')
+  @ApiOperation({ summary: 'Request passwordless email OTP for Sign Up or Sign In' })
+  async requestOtp(@Body() body: unknown): Promise<{ message: string; cooldownSeconds: number }> {
+    const parseResult = RequestOtpSchema.safeParse(body);
+    if (!parseResult.success) {
+      const errorMsg = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new BadRequestException(errorMsg || 'Invalid request payload');
+    }
+    return this.authService.requestOtp(parseResult.data);
+  }
+
+  @Public()
+  @Post('verify-otp')
+  @ApiOperation({ summary: 'Verify email OTP and return authenticated session' })
+  async verifyOtp(@Body() body: unknown): Promise<AuthResponseDto> {
+    const parseResult = VerifyOtpSchema.safeParse(body);
+    if (!parseResult.success) {
+      const errorMsg = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new BadRequestException(errorMsg || 'Invalid verification payload');
+    }
+    return this.authService.verifyOtp(parseResult.data);
+  }
+
+  @Public()
+  @Post('resend-otp')
+  @ApiOperation({ summary: 'Resend email OTP with cooldown protection' })
+  async resendOtp(@Body() body: unknown): Promise<{ message: string; cooldownSeconds: number }> {
+    const parseResult = ResendOtpSchema.safeParse(body);
+    if (!parseResult.success) {
+      const errorMsg = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new BadRequestException(errorMsg || 'Invalid resend payload');
+    }
+    return this.authService.resendOtp(parseResult.data);
+  }
+
+  @Public()
+  @Post('logout')
+  @ApiOperation({ summary: 'End authenticated session' })
+  async logout(): Promise<{ message: string }> {
+    return { message: 'Logged out successfully' };
+  }
 
   @Public()
   @Post('dev-login')

@@ -1,36 +1,65 @@
 import React, { useState } from 'react';
-import { Car, Menu, X, ArrowRight, ShieldCheck, LogOut, AlertCircle, CheckCircle, Clock, Calendar, Ticket } from 'lucide-react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import {
+  Car,
+  Home,
+  Menu,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  LogOut,
+  AlertCircle,
+  Clock,
+  Calendar,
+  Ticket,
+  User,
+  LayoutDashboard,
+  Search,
+  MessageSquare,
+} from 'lucide-react';
 import { Button } from '../common/Button';
 import { useAuth } from '../../features/auth/AuthContext';
 
 interface NavbarProps {
-  onOpenSearch: () => void;
-  onOpenOffer: () => void;
-  onOpenAuth: () => void;
   onOpenVerification?: () => void;
-  onOpenVehicles?: () => void;
-  onOpenMyRides?: () => void;
-  onOpenBookings?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  onOpenSearch,
-  onOpenOffer,
-  onOpenAuth,
-  onOpenVerification,
-  onOpenVehicles,
-  onOpenMyRides,
-  onOpenBookings,
-}) => {
-
+export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const { user, token, logout } = useAuth();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!user || !token) return;
+    const checkUnread = () => {
+      fetch('/chat/unread-count', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (typeof d?.unreadCount === 'number') setUnreadCount(d.unreadCount);
+        })
+        .catch(() => {});
+    };
+    checkUnread();
+    const interval = setInterval(checkUnread, 8000);
+    return () => clearInterval(interval);
+  }, [user, token]);
+
+  const handleSignOut = () => {
+    logout();
+    navigate('/');
+  };
+
+  const getNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+    isActive ? 'nav-link active' : 'nav-link';
 
   return (
     <header className="site-header">
       <div className="container nav-container">
         {/* Brand Wordmark */}
-        <a href="#hero" className="brand-link" aria-label="VIT Carpool Home">
+        <Link to="/" className="brand-link" aria-label="VIT Carpool Home" onClick={() => setMobileMenuOpen(false)}>
           <div className="brand-logo-mark">
             <Car size={22} strokeWidth={2.2} />
           </div>
@@ -38,68 +67,104 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="brand-name">VIT Carpool</div>
             <div className="brand-tagline">VIT Chennai Campus</div>
           </div>
-        </a>
+        </Link>
 
         {/* Desktop Navigation Links */}
         <nav className="nav-desktop-links" aria-label="Primary Navigation">
-          <a
-            href="#search"
-            className="nav-link"
-            onClick={(e) => {
-              e.preventDefault();
-              onOpenSearch();
-            }}
-          >
-            Find Rides
-          </a>
-          <a href="#separation" className="nav-link">
-            Separation & Safety
-          </a>
-          <a href="#how-it-works" className="nav-link">
-            How It Works
-          </a>
-          <a href="#corridors" className="nav-link">
-            Campus Corridors
-          </a>
-          <a href="#charter" className="nav-link">
-            Trust Charter
-          </a>
+          {user ? (
+            <>
+              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home">
+                Home
+              </NavLink>
+              <NavLink to="/dashboard" className={getNavLinkClass} id="nav-link-dashboard">
+                Dashboard
+              </NavLink>
+              <NavLink to="/rides" className={getNavLinkClass} id="nav-link-rides">
+                Find Rides
+              </NavLink>
+              <NavLink to="/offer-ride" className={getNavLinkClass} id="nav-link-offer">
+                Offer a Ride
+              </NavLink>
+              <NavLink to="/my-rides" className={getNavLinkClass} id="nav-link-my-rides">
+                My Rides
+              </NavLink>
+              <NavLink to="/bookings" className={getNavLinkClass} id="nav-link-bookings">
+                Bookings
+              </NavLink>
+              <NavLink to="/vehicles" className={getNavLinkClass} id="nav-link-vehicles">
+                Vehicles
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home">
+                Home
+              </NavLink>
+              <NavLink to="/rides" className={getNavLinkClass} id="nav-link-rides">
+                Find Rides
+              </NavLink>
+              <NavLink to="/how-it-works" className={getNavLinkClass} id="nav-link-how-it-works">
+                How It Works
+              </NavLink>
+              <NavLink to="/safety" className={getNavLinkClass} id="nav-link-safety">
+                Separation & Safety
+              </NavLink>
+            </>
+          )}
         </nav>
 
         {/* Desktop Actions */}
         <div className="nav-actions">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenOffer}
-            id="nav-offer-ride-btn"
-          >
-            Offer a Ride
-          </Button>
-
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Verification Status Pill */}
-              {user.verificationStatus === 'VERIFIED' && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 10px',
-                    borderRadius: '9999px',
-                    backgroundColor: user.audience === 'FACULTY' ? '#f3e8ff' : '#dcfce7',
-                    color: user.audience === 'FACULTY' ? '#6b21a8' : '#15803d',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                  }}
-                  id="nav-verified-badge"
-                >
-                  <CheckCircle size={13} />
-                  <span>{user.audience === 'FACULTY' ? 'Faculty Verified' : 'Student Verified'}</span>
-                </div>
-              )}
-
+              {/* Messages Quick-Action Icon Button on Top */}
+              <NavLink
+                to="/messages"
+                title="Messages & Ride Chats"
+                id="nav-messages-icon-btn"
+                style={({ isActive }) => ({
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: isActive ? '#eff6ff' : '#ffffff',
+                  border: isActive ? '1.5px solid #3b82f6' : '1px solid var(--border-medium)',
+                  color: isActive ? '#2563eb' : 'var(--text-secondary)',
+                  textDecoration: 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                })}
+              >
+                <MessageSquare size={18} />
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      backgroundColor: '#ef4444',
+                      color: '#ffffff',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      minWidth: '18px',
+                      height: '18px',
+                      padding: '0 4px',
+                      borderRadius: '9999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid #ffffff',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                    id="nav-unread-badge"
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </NavLink>
               {user.verificationStatus === 'PENDING' && (
                 <button
                   type="button"
@@ -145,51 +210,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* My Vehicles & My Rides Buttons for Verified Users */}
-              {user.verificationStatus === 'VERIFIED' && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onOpenVehicles}
-                    leftIcon={<Car size={13} />}
-                    id="nav-my-vehicles-btn"
-                    title="Manage your registered vehicles"
-                  >
-                    My Vehicles
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onOpenMyRides || onOpenOffer}
-                    leftIcon={<Calendar size={13} />}
-                    id="nav-my-rides-btn"
-                    title="Manage your published rides"
-                  >
-                    My Rides
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onOpenBookings}
-                    leftIcon={<Ticket size={13} />}
-                    id="nav-my-bookings-btn"
-                    title="View bookings and passenger requests"
-                  >
-                    Bookings
-                  </Button>
-                </>
-              )}
+              {/* Profile Link Button */}
+              <Link to="/profile" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<User size={14} />}
+                  id="nav-profile-btn"
+                  title="View account profile"
+                >
+                  {user.fullName.split(' ')[0]}
+                </Button>
+              </Link>
 
-              {/* User Name & Sign Out */}
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                {user.fullName}
-              </span>
-
+              {/* Logout Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={logout}
+                onClick={handleSignOut}
                 leftIcon={<LogOut size={13} />}
                 id="nav-signout-btn"
                 title="Sign out of current account"
@@ -197,17 +235,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Sign Out
               </Button>
             </div>
-
           ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={onOpenAuth}
-              leftIcon={<ShieldCheck size={14} />}
-              id="nav-signin-btn"
-            >
-              Sign In
-            </Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Link to="/offer-ride" style={{ textDecoration: 'none' }}>
+                <Button variant="ghost" size="sm" id="nav-offer-ride-btn">
+                  Offer a Ride
+                </Button>
+              </Link>
+              <Link to="/auth" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<ShieldCheck size={14} />}
+                  id="nav-signin-btn"
+                >
+                  Sign In / Sign Up
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
 
@@ -225,139 +270,96 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="mobile-nav-panel">
-          <a
-            href="#search"
-            className="nav-link"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              onOpenSearch();
-            }}
-          >
-            Find Rides
-          </a>
-          <a
-            href="#separation"
-            className="nav-link"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Separation & Safety
-          </a>
-          <a
-            href="#how-it-works"
-            className="nav-link"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            How It Works
-          </a>
-          <a
-            href="#corridors"
-            className="nav-link"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Campus Corridors
-          </a>
-          <a
-            href="#charter"
-            className="nav-link"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Trust Charter
-          </a>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
-            {user ? (
-              <>
-                <div style={{ padding: '8px 12px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  Signed in as {user.fullName} ({user.verificationStatus})
-                </div>
-                {user.verificationStatus === 'PENDING' && (
-                  <Button
-                    variant="outline"
-                    size="md"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      onOpenVerification?.();
+          {user ? (
+            <>
+              <div style={{ padding: '8px 12px', fontSize: '0.85rem', fontWeight: 600, borderBottom: '1px solid var(--border-light)' }}>
+                Signed in as {user.fullName} ({user.audience || 'Campus Member'})
+              </div>
+              <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Home size={16} style={{ marginRight: '6px' }} /> Home
+              </Link>
+              <Link to="/dashboard" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <LayoutDashboard size={16} style={{ marginRight: '6px' }} /> Dashboard
+              </Link>
+              <Link to="/rides" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Search size={16} style={{ marginRight: '6px' }} /> Find Rides
+              </Link>
+              <Link to="/offer-ride" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Car size={16} style={{ marginRight: '6px' }} /> Offer a Ride
+              </Link>
+              <Link to="/my-rides" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Calendar size={16} style={{ marginRight: '6px' }} /> My Rides
+              </Link>
+              <Link to="/bookings" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Ticket size={16} style={{ marginRight: '6px' }} /> Bookings
+              </Link>
+              <Link to="/messages" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <MessageSquare size={16} style={{ marginRight: '6px' }} /> Messages
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      backgroundColor: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '1px 7px',
+                      borderRadius: '9999px',
                     }}
                   >
-                    Submit Verification Request
-                  </Button>
+                    {unreadCount}
+                  </span>
                 )}
-                {user.verificationStatus === 'VERIFIED' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="md"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        onOpenVehicles?.();
-                      }}
-                      leftIcon={<Car size={16} />}
-                    >
-                      My Vehicles
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="md"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        onOpenMyRides ? onOpenMyRides() : onOpenOffer();
-                      }}
-                      leftIcon={<Calendar size={16} />}
-                    >
-                      My Rides
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="md"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        onOpenBookings?.();
-                      }}
-                      leftIcon={<Ticket size={16} />}
-                      id="mobile-nav-bookings-btn"
-                    >
-                      Bookings & Requests
-                    </Button>
-                  </>
-                )}
+              </Link>
+              <Link to="/vehicles" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Car size={16} style={{ marginRight: '6px' }} /> Vehicles
+              </Link>
+              <Link to="/profile" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <User size={16} style={{ marginRight: '6px' }} /> Profile
+              </Link>
+              <div style={{ paddingTop: '8px' }}>
                 <Button
                   variant="outline"
                   size="md"
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    logout();
+                    handleSignOut();
                   }}
                   leftIcon={<LogOut size={16} />}
+                  style={{ width: '100%' }}
                 >
                   Sign Out
                 </Button>
-
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onOpenOffer();
-                  }}
-                >
-                  Offer a Ride
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onOpenAuth();
-                  }}
-                  rightIcon={<ArrowRight size={16} />}
-                >
-                  Sign In
-                </Button>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                Home
+              </Link>
+              <Link to="/rides" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                Find Rides
+              </Link>
+              <Link to="/how-it-works" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                How It Works
+              </Link>
+              <Link to="/safety" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                Separation & Safety
+              </Link>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
+                <Link to="/offer-ride" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" size="md" style={{ width: '100%' }}>
+                    Offer a Ride
+                  </Button>
+                </Link>
+                <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="primary" size="md" rightIcon={<ArrowRight size={16} />} style={{ width: '100%' }}>
+                    Sign In / Sign Up
+                  </Button>
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       )}
     </header>

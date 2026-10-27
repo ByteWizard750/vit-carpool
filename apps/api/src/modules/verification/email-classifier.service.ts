@@ -11,12 +11,10 @@ export interface ClassificationResult {
 @Injectable()
 export class EmailClassifierService {
   private readonly logger = new Logger(EmailClassifierService.name);
-  private readonly enabled: boolean;
   private readonly studentRegex: RegExp | null = null;
   private readonly facultyRegex: RegExp | null = null;
 
   constructor(private readonly config: ConfigService) {
-    this.enabled = this.config.get<boolean>('ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION', false);
     const studentPattern = this.config.get<string>('STUDENT_EMAIL_REGEX');
     const facultyPattern = this.config.get<string>('FACULTY_EMAIL_REGEX');
 
@@ -28,8 +26,15 @@ export class EmailClassifierService {
     }
 
     this.logger.log(
-      `[EmailClassifier] Automatic classification enabled=${this.enabled}`,
+      `[EmailClassifier] Initialized: automatic classification enabled=${this.isClassificationEnabled}`,
     );
+  }
+
+  get isClassificationEnabled(): boolean {
+    const envVal = process.env.ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION;
+    if (envVal === 'false') return false;
+    if (envVal === 'true') return true;
+    return this.config.get<boolean>('ENABLE_AUTOMATIC_EMAIL_CLASSIFICATION', false);
   }
 
   /**
@@ -39,7 +44,7 @@ export class EmailClassifierService {
   classify(email: string): ClassificationResult {
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!this.enabled) {
+    if (!this.isClassificationEnabled) {
       return {
         isClassified: false,
         audience: null,

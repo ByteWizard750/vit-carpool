@@ -119,9 +119,19 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     // Resolve or provision local application user record from database
+    const rawMetadata = (decoded as Record<string, unknown>).user_metadata as
+      | Record<string, unknown>
+      | undefined;
+    const fullNameClaim =
+      (rawMetadata?.full_name as string) ||
+      (rawMetadata?.name as string) ||
+      ((decoded as Record<string, unknown>).name as string) ||
+      undefined;
+
     const user = await this.usersService.findOrCreateUser({
       authUserId,
       email,
+      fullName: fullNameClaim,
     });
 
     // Authoritative user state is derived strictly from local database record

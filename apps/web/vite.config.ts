@@ -1,6 +1,16 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+
+const apiProxy: ProxyOptions = {
+  target: 'http://localhost:3000',
+  changeOrigin: true,
+  bypass(req) {
+    if (req.headers.accept?.includes('text/html')) {
+      return '/index.html';
+    }
+  },
+};
 
 export default defineConfig({
   plugins: [react()],
@@ -13,26 +23,15 @@ export default defineConfig({
     port: 5173,
     host: '127.0.0.1',
     proxy: {
-      '/health': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      '/rides': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      '/vehicles': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      '/locations': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      '/bookings': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
+      '/health': apiProxy,
+      '/rides': apiProxy,
+      '/vehicles': apiProxy,
+      '/locations': apiProxy,
+      '/bookings': apiProxy,
+      '/chat': apiProxy,
+      '/ratings': apiProxy,
+      '/auth': apiProxy,
+      '/users': apiProxy,
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

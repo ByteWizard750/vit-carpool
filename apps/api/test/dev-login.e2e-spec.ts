@@ -85,6 +85,7 @@ describe('Development Login Security (/auth/dev-login) (e2e)', () => {
     it('devLogin controller method rejects unset, unknown, or production environments with 404 NotFoundException', async () => {
       const mockPrisma = {} as any;
       const mockVerification = {} as any;
+      const mockAuthService = {} as any;
 
       const testScenarios = [
         { NODE_ENV: 'production', JWT_TEST_MODE: true },
@@ -100,7 +101,7 @@ describe('Development Login Security (/auth/dev-login) (e2e)', () => {
           get: (key: string) => scenario[key as keyof typeof scenario],
         } as unknown as ConfigService;
 
-        const controller = new AuthController(mockConfig, mockVerification, mockPrisma);
+        const controller = new AuthController(mockConfig, mockVerification, mockPrisma, mockAuthService);
         await expect(
           controller.devLogin({ email: 'test@vitstudent.ac.in' }),
         ).rejects.toThrow(NotFoundException);

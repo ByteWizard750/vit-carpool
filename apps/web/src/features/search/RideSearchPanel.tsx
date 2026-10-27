@@ -23,10 +23,10 @@ interface RideSearchPanelProps {
 
 export const RideSearchPanel: React.FC<RideSearchPanelProps> = ({ onSearch, onOfferRide }) => {
   const todayStr = getLocalTodayDate();
-  const [origin, setOrigin] = useState('Tambaram Station / GST Rd');
+  const [origin, setOrigin] = useState('');
   const [originLocation, setOriginLocation] = useState<LocationSuggestionDto | null>(null);
 
-  const [destination, setDestination] = useState('VIT Chennai Campus (Vandalur-Kelambakkam)');
+  const [destination, setDestination] = useState('');
   const [destLocation, setDestLocation] = useState<LocationSuggestionDto | null>(null);
 
   const [date, setDate] = useState(todayStr);

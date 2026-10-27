@@ -89,6 +89,11 @@ model User {
   rides                       Ride[]                @relation("DriverRides")
   passengerBookings           Booking[]             @relation("PassengerBookings")
   driverBookings              Booking[]             @relation("DriverBookings")
+  passengerConversations      Conversation[]        @relation("PassengerConversations")
+  driverConversations         Conversation[]        @relation("DriverConversations")
+  sentMessages                Message[]             @relation("SentMessages")
+  passengerRatings            DriverRating[]        @relation("PassengerRatings")
+  driverRatings               DriverRating[]        @relation("DriverRatings")
 
   @@unique([id, audience])
   @@map("users")
@@ -167,6 +172,7 @@ model Vehicle {
 enum RideStatus {
   SCHEDULED
   CANCELLED
+  COMPLETED
 
   @@map("ride_status_type")
 }
@@ -196,9 +202,11 @@ model Ride {
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  driver             User       @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
-  vehicle            Vehicle    @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
-  bookings           Booking[]  @relation("RideBookings")
+  driver             User           @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
+  vehicle            Vehicle        @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+  bookings           Booking[]      @relation("RideBookings")
+  conversations      Conversation[]
+  ratings            DriverRating[]
 
   @@unique([id, audience])
   @@unique([id, driverId])
@@ -237,9 +245,11 @@ model Booking {
   createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  ride      Ride @relation("RideBookings", fields: [rideId, audience], references: [id, audience], onDelete: Restrict)
-  passenger User @relation("PassengerBookings", fields: [passengerId, audience], references: [id, audience], onDelete: Restrict)
-  driver    User @relation("DriverBookings", fields: [driverId], references: [id], onDelete: Restrict)
+  ride         Ride          @relation("RideBookings", fields: [rideId, audience], references: [id, audience], onDelete: Restrict)
+  passenger    User          @relation("PassengerBookings", fields: [passengerId, audience], references: [id, audience], onDelete: Restrict)
+  driver       User          @relation("DriverBookings", fields: [driverId], references: [id], onDelete: Restrict)
+  conversation Conversation?
+  rating       DriverRating?
 
   @@index([rideId])
   @@index([passengerId])
@@ -249,4 +259,69 @@ model Booking {
   @@map("bookings")
 }
 
+// -----------------------------------------------------------------------------
+// Milestone 7.1 Private Ride Chat Models
+// -----------------------------------------------------------------------------
 
+model Conversation {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  bookingId   String    @unique @map("booking_id") @db.Uuid
+  rideId      String    @map("ride_id") @db.Uuid
+  passengerId String    @map("passenger_id") @db.Uuid
+  driverId    String    @map("driver_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ride        Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  passenger   User      @relation("PassengerConversations", fields: [passengerId], references: [id], onDelete: Restrict)
+  driver      User      @relation("DriverConversations", fields: [driverId], references: [id], onDelete: Restrict)
+  messages    Message[]
+
+  @@index([passengerId])
+  @@index([driverId])
+  @@index([rideId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  senderId       String       @map("sender_id") @db.Uuid
+  content        String       @db.VarChar(1000)
+  readAt         DateTime?    @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 7.2 Driver Ratings & Reviews Models
+// -----------------------------------------------------------------------------
+
+model DriverRating {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  bookingId   String   @unique @map("booking_id") @db.Uuid
+  rideId      String   @map("ride_id") @db.Uuid
+  passengerId String   @map("passenger_id") @db.Uuid
+  driverId    String   @map("driver_id") @db.Uuid
+  rating      Int      @db.SmallInt
+  review      String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ride        Ride     @relation(fields: [rideId], references: [id], onDelete: Restrict)
+  passenger   User     @relation("PassengerRatings", fields: [passengerId], references: [id], onDelete: Restrict)
+  driver      User     @relation("DriverRatings", fields: [driverId], references: [id], onDelete: Restrict)
+
+  @@index([driverId])
+  @@index([passengerId])
+  @@index([rideId])
+  @@map("driver_ratings")
+}

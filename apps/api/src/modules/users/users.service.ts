@@ -38,13 +38,28 @@ export class UsersService {
   async findOrCreateUser(input: CreateUserInput): Promise<User> {
     const normalizedEmail = input.email.trim().toLowerCase();
 
-    // Check if user already exists
+    // Check if user already exists by authUserId
     const existing = await this.prisma.user.findUnique({
       where: { authUserId: input.authUserId },
     });
 
     if (existing) {
       return existing;
+    }
+
+    // Check if user already exists by email (preserve existing identity & verification status)
+    const existingByEmail = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (existingByEmail) {
+      if (existingByEmail.authUserId !== input.authUserId) {
+        return this.prisma.user.update({
+          where: { id: existingByEmail.id },
+          data: { authUserId: input.authUserId },
+        });
+      }
+      return existingByEmail;
     }
 
     // Evaluate automatic classification (disabled by default until rules confirmed)

@@ -57,6 +57,10 @@ export {
   type SearchRidesPaginationDto,
   SearchRidesResponseSchema,
   type SearchRidesResponseDto,
+  ReusableRideTemplateSchema,
+  type ReusableRideTemplateDto,
+  QuickRideTemplatesResponseSchema,
+  type QuickRideTemplatesResponseDto,
 } from './ride.contract';
 
 export {
@@ -83,3 +87,41 @@ export {
   type LocationAutocompleteResponseDto,
 } from './location.contract';
 
+export {
+  AuthIntentSchema,
+  type AuthIntent,
+  RequestOtpSchema,
+  type RequestOtpDto,
+  VerifyOtpSchema,
+  type VerifyOtpDto,
+  ResendOtpSchema,
+  type ResendOtpDto,
+  AuthResponseSchema,
+  type AuthResponseDto,
+} from './auth.contract';
+
+export {
+  SendMessageSchema,
+  type SendMessageDto,
+  MessageResponseSchema,
+  type MessageResponseDto,
+  ConversationParticipantSchema,
+  type ConversationParticipantDto,
+  ConversationDetailSchema,
+  type ConversationDetailDto,
+  ConversationSummarySchema,
+  type ConversationSummaryDto,
+  UnreadCountResponseSchema,
+  type UnreadCountResponseDto,
+} from './chat.contract';
+
+export {
+  CreateRatingSchema,
+  type CreateRatingDto,
+  DriverRatingResponseSchema,
+  type DriverRatingResponseDto,
+  DriverRatingSummarySchema,
+  type DriverRatingSummaryDto,
+  RatingEligibilityResponseSchema,
+  type RatingEligibilityResponseDto,
+} from './rating.contract';

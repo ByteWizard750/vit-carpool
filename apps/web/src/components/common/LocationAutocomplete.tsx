@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MapPin, Loader2, X, CheckCircle2, AlertCircle, Building } from 'lucide-react';
 import { LocationSuggestionDto, LocationAutocompleteResponseDto } from '@vit-carpool/contracts';
+import { searchFallbackLandmarks } from './chennai-landmarks.data';
 
 export interface LocationAutocompleteProps {
   id?: string;
@@ -120,8 +121,18 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       );
 
       if (!response.ok) {
+        // Fallback to client landmark catalog for unauthenticated or rate-limited sessions
+        const fallbackResults = searchFallbackLandmarks(query.trim(), 6);
+        if (fallbackResults.length > 0) {
+          setSuggestions(fallbackResults);
+          setIsOpen(true);
+          setHighlightedIndex(-1);
+          setError(null);
+          return;
+        }
+
         if (response.status === 401 || response.status === 403) {
-          throw new Error('Institutional verification required for location search.');
+          throw new Error('Institutional sign-in required for live location search.');
         }
         if (response.status === 429) {
           throw new Error('Search rate limit reached. Please wait a moment.');
@@ -138,10 +149,18 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
         // Request cancelled due to newer keystroke
         return;
       }
-      console.warn('Location autocomplete fetch failed:', err);
-      setError('Unable to fetch live suggestions.');
-      setSuggestions([]);
-      setIsOpen(true);
+      const fallbackResults = searchFallbackLandmarks(query.trim(), 6);
+      if (fallbackResults.length > 0) {
+        setSuggestions(fallbackResults);
+        setIsOpen(true);
+        setHighlightedIndex(-1);
+        setError(null);
+      } else {
+        console.warn('Location autocomplete fetch failed:', err);
+        setError('Unable to fetch live suggestions.');
+        setSuggestions([]);
+        setIsOpen(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -286,7 +305,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
           disabled={disabled}
           autoComplete={autoComplete}
           autoFocus={autoFocus}
-          className={inputClassName}
+          className={inputClassName || 'filter-autocomplete-input'}
           role="combobox"
           aria-expanded={isOpen}
           aria-autocomplete="list"
@@ -295,9 +314,19 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
             highlightedIndex >= 0 && id ? `${id}-opt-${highlightedIndex}` : undefined
           }
           style={{
-            paddingLeft: icon ? '32px' : undefined,
-            paddingRight: inputValue || loading ? '32px' : undefined,
             width: '100%',
+            height: '42px',
+            paddingLeft: icon ? '34px' : '12px',
+            paddingRight: inputValue || loading ? '34px' : '12px',
+            paddingTop: '9px',
+            paddingBottom: '9px',
+            fontSize: '0.875rem',
+            borderRadius: '8px',
+            border: '1px solid var(--border-medium, #cbd5e1)',
+            backgroundColor: disabled ? 'var(--bg-subtle, #f8fafc)' : '#ffffff',
+            color: 'var(--text-primary, #0f172a)',
+            outline: 'none',
+            boxSizing: 'border-box',
           }}
         />
 

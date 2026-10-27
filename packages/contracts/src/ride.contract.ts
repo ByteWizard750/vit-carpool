@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AudienceTypeSchema } from './audience.contract';
 import { VehicleResponseSchema, PublicVehicleSummarySchema } from './vehicle.contract';
 
-export const RideStatusSchema = z.enum(['SCHEDULED', 'CANCELLED']);
+export const RideStatusSchema = z.enum(['SCHEDULED', 'CANCELLED', 'COMPLETED']);
 export type RideStatus = z.infer<typeof RideStatusSchema>;
 
 /**
@@ -187,9 +187,19 @@ export const DriverRideResponseSchema = z.object({
   totalSeats: z.number().int().optional(),
   costPerSeat: z.number().int().nullable(),
   status: RideStatusSchema,
+  confirmedBookingsCount: z.number().int().optional(),
+  confirmedSeatsCount: z.number().int().optional(),
+  pendingBookingsCount: z.number().int().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   vehicle: VehicleResponseSchema.optional(),
+  driverRating: z
+    .object({
+      average: z.number().nullable(),
+      count: z.number().int(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type DriverRideResponseDto = z.infer<typeof DriverRideResponseSchema>;
@@ -219,6 +229,13 @@ export const PublicRideSummarySchema = z.object({
   status: RideStatusSchema,
   createdAt: z.string().datetime(),
   vehicle: PublicVehicleSummarySchema.optional(),
+  driverRating: z
+    .object({
+      average: z.number().nullable(),
+      count: z.number().int(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type PublicRideSummaryDto = z.infer<typeof PublicRideSummarySchema>;
@@ -244,10 +261,15 @@ export const SearchRidesQuerySchema = z
       .transform((val) => (val === '' ? undefined : val)),
     originLat: z.coerce.number().min(-90).max(90).optional(),
     originLon: z.coerce.number().min(-180).max(180).optional(),
-    originRadiusKm: z.coerce.number().min(0.5).max(50).default(3.0),
+    originRadiusKm: z.coerce.number().min(0.5).max(50).optional(),
     destLat: z.coerce.number().min(-90).max(90).optional(),
     destLon: z.coerce.number().min(-180).max(180).optional(),
-    destRadiusKm: z.coerce.number().min(0.5).max(50).default(3.0),
+    destRadiusKm: z.coerce.number().min(0.5).max(50).optional(),
+    radiusKm: z.coerce
+      .number({ invalid_type_error: 'radiusKm must be a number' })
+      .min(0.5, 'radiusKm must be at least 0.5 km')
+      .max(50, 'radiusKm cannot exceed 50 km')
+      .optional(),
     departureDate: z
       .string()
       .trim()
@@ -272,6 +294,12 @@ export const SearchRidesQuerySchema = z
       .min(1, 'minSeats must be at least 1')
       .max(6, 'minSeats cannot exceed 6')
       .default(1),
+    maxCost: z.coerce
+      .number({ invalid_type_error: 'maxCost must be a number' })
+      .int('maxCost must be an integer')
+      .min(0, 'maxCost cannot be negative')
+      .max(5000, 'maxCost cannot exceed 5000')
+      .optional(),
     page: z.coerce
       .number({ invalid_type_error: 'page must be a number' })
       .int('page must be an integer')
@@ -283,6 +311,7 @@ export const SearchRidesQuerySchema = z
       .min(1, 'limit must be at least 1')
       .max(50, 'limit cannot exceed 50')
       .default(20),
+    sortBy: z.enum(['departureTime', 'cost', 'seats']).default('departureTime'),
     sortOrder: z.enum(['asc', 'desc']).default('asc'),
   })
   .strict()
@@ -330,3 +359,47 @@ export const SearchRidesResponseSchema = z.object({
 });
 
 export type SearchRidesResponseDto = z.infer<typeof SearchRidesResponseSchema>;
+
+/**
+ * Reusable ride template representation for Quick Ride posting.
+ * Excludes private pickup/dropoff instructions and passenger details.
+ */
+export const ReusableRideTemplateSchema = z.object({
+  id: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  vehicle: z
+    .object({
+      id: z.string().uuid(),
+      make: z.string(),
+      model: z.string(),
+      color: z.string(),
+      capacity: z.number().int(),
+      isDeleted: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+  origin: z.string(),
+  originAddress: z.string().nullable().optional(),
+  originLatitude: z.number().nullable().optional(),
+  originLongitude: z.number().nullable().optional(),
+  originPlaceId: z.string().nullable().optional(),
+  destination: z.string(),
+  destinationAddress: z.string().nullable().optional(),
+  destinationLatitude: z.number().nullable().optional(),
+  destinationLongitude: z.number().nullable().optional(),
+  destinationPlaceId: z.string().nullable().optional(),
+  availableSeats: z.number().int(),
+  costPerSeat: z.number().int().nullable(),
+  departureTime: z.string().datetime(),
+  createdAt: z.string().datetime(),
+});
+
+export type ReusableRideTemplateDto = z.infer<typeof ReusableRideTemplateSchema>;
+
+export const QuickRideTemplatesResponseSchema = z.object({
+  recentRide: ReusableRideTemplateSchema.nullable(),
+  routes: z.array(ReusableRideTemplateSchema),
+  hasActiveVehicle: z.boolean(),
+});
+
+export type QuickRideTemplatesResponseDto = z.infer<typeof QuickRideTemplatesResponseSchema>;

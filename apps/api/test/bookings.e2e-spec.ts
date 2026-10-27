@@ -1002,4 +1002,204 @@ describe('Milestone 4.2: Booking Requests & Seat Allocation (e2e)', () => {
       expect(res.body[0].passengerName).toBeDefined();
     });
   });
+
+  // ===========================================================================
+  // 9. Milestone 6: Driver Booking Request Lifecycle & Atomicity
+  // ===========================================================================
+  describe('9. Milestone 6: Driver Booking Request Lifecycle & Atomicity', () => {
+    it('authorized driver can approve pending booking and atomically decrement available seats', async () => {
+      const ride = await createTestRide({ availableSeats: 3, totalSeats: 3 });
+
+      const booking = await testPrisma.booking.create({
+        data: {
+          rideId: ride.id,
+          passengerId: studentPassenger1Id,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 2,
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/bookings/${booking.id}/approve`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(201);
+
+      expect(res.body.status).toBe('CONFIRMED');
+      expect(res.body.requestedSeats).toBe(2);
+
+      // Verify ride available seats decremented from 3 to 1
+      const updatedRide = await testPrisma.ride.findUniqueOrThrow({ where: { id: ride.id } });
+      expect(updatedRide.availableSeats).toBe(1);
+    });
+
+    it('insufficient seats during approval fails safely with 409 Conflict without altering seats', async () => {
+      const ride = await createTestRide({ availableSeats: 1, totalSeats: 3 });
+
+      const booking = await testPrisma.booking.create({
+        data: {
+          rideId: ride.id,
+          passengerId: studentPassenger1Id,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 2, // Requesting 2 seats when only 1 is available
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/bookings/${booking.id}/approve`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(409);
+
+      expect(res.body.message).toMatch(/insufficient seats available/i);
+
+      // Verify ride seats remain 1
+      const unchangedRide = await testPrisma.ride.findUniqueOrThrow({ where: { id: ride.id } });
+      expect(unchangedRide.availableSeats).toBe(1);
+
+      // Verify booking remains PENDING
+      const unchangedBooking = await testPrisma.booking.findUniqueOrThrow({ where: { id: booking.id } });
+      expect(unchangedBooking.status).toBe(BookingStatus.PENDING);
+    });
+
+    it('rejection transitions booking to REJECTED with optional reason and does not alter available seats', async () => {
+      const ride = await createTestRide({ availableSeats: 2, totalSeats: 3 });
+
+      const booking = await testPrisma.booking.create({
+        data: {
+          rideId: ride.id,
+          passengerId: studentPassenger1Id,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 1,
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/bookings/${booking.id}/reject`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .send({ reason: 'Car is full for luggage' })
+        .expect(201);
+
+      expect(res.body.status).toBe('REJECTED');
+      expect(res.body.cancellationReason).toBe('Car is full for luggage');
+
+      // Verify available seats remain unchanged at 2
+      const unchangedRide = await testPrisma.ride.findUniqueOrThrow({ where: { id: ride.id } });
+      expect(unchangedRide.availableSeats).toBe(2);
+    });
+
+    it('unauthorized driver cannot approve or reject another driver booking requests (404)', async () => {
+      // Create faculty ride and booking
+      const fRide = await testPrisma.ride.create({
+        data: {
+          driverId: facultyDriverId,
+          vehicleId: facultyVehicleId,
+          audience: Audience.FACULTY,
+          origin: 'Faculty Gate',
+          destination: 'VIT Campus',
+          departureTime: new Date(Date.now() + 2 * 3600 * 1000),
+          availableSeats: 3,
+          totalSeats: 3,
+          status: RideStatus.SCHEDULED,
+        },
+      });
+
+      const fBooking = await testPrisma.booking.create({
+        data: {
+          rideId: fRide.id,
+          passengerId: facultyPassengerId,
+          driverId: facultyDriverId,
+          audience: Audience.FACULTY,
+          requestedSeats: 1,
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      // Student driver attempts to approve faculty driver request
+      await request(app.getHttpServer())
+        .post(`/bookings/${fBooking.id}/approve`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(404);
+
+      // Student driver attempts to reject faculty driver request
+      await request(app.getHttpServer())
+        .post(`/bookings/${fBooking.id}/reject`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(404);
+    });
+
+    it('stale or duplicate actions fail with 400 Bad Request', async () => {
+      const ride = await createTestRide({ availableSeats: 2, totalSeats: 2 });
+
+      const booking = await testPrisma.booking.create({
+        data: {
+          rideId: ride.id,
+          passengerId: studentPassenger1Id,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 1,
+          status: BookingStatus.CONFIRMED, // Already confirmed
+        },
+      });
+
+      // Cannot re-approve already confirmed booking
+      await request(app.getHttpServer())
+        .post(`/bookings/${booking.id}/approve`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(400);
+
+      // Cannot reject already confirmed booking
+      await request(app.getHttpServer())
+        .post(`/bookings/${booking.id}/reject`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(400);
+    });
+
+    it('privacy: driver booking response reveals passengerPhone ONLY when CONFIRMED', async () => {
+      const ride = await createTestRide({ availableSeats: 3, totalSeats: 3 });
+
+      // Create a passenger with phone number
+      await testPrisma.user.update({
+        where: { id: studentPassenger1Id },
+        data: { phoneNumber: '+91 91234 56789' },
+      });
+
+      const pendingBooking = await testPrisma.booking.create({
+        data: {
+          rideId: ride.id,
+          passengerId: studentPassenger1Id,
+          driverId: studentDriverId,
+          audience: Audience.STUDENT,
+          requestedSeats: 1,
+          status: BookingStatus.PENDING,
+        },
+      });
+
+      // When querying pending requests, passengerPhone is concealed
+      const resPending = await request(app.getHttpServer())
+        .get(`/bookings/${pendingBooking.id}`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      expect(resPending.body.passengerPhone).toBeUndefined();
+
+      // Approve booking
+      await request(app.getHttpServer())
+        .post(`/bookings/${pendingBooking.id}/approve`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(201);
+
+      // When querying confirmed booking, passengerPhone is disclosed
+      const resConfirmed = await request(app.getHttpServer())
+        .get(`/bookings/${pendingBooking.id}`)
+        .set('Authorization', `Bearer ${studentDriverToken}`)
+        .expect(200);
+
+      expect(resConfirmed.body.passengerPhone).toBe('+91 91234 56789');
+    });
+  });
 });

@@ -34,8 +34,8 @@ export const CreateVehicleSchema = z
     capacity: z
       .number({ invalid_type_error: 'Seat capacity must be a number' })
       .int('Seat capacity must be an integer')
-      .min(1, 'Seat capacity must be at least 1 passenger seat')
-      .max(7, 'Seat capacity cannot exceed 7 passenger seats (cars only)'),
+      .min(2, 'Total vehicle seating capacity must be at least 2 seats (1 driver + at least 1 passenger)')
+      .max(7, 'Total vehicle seating capacity cannot exceed 7 seats (cars only)'),
   })
   .strict();
 
@@ -77,8 +77,8 @@ export const UpdateVehicleSchema = z
     capacity: z
       .number({ invalid_type_error: 'Seat capacity must be a number' })
       .int('Seat capacity must be an integer')
-      .min(1, 'Seat capacity must be at least 1 passenger seat')
-      .max(7, 'Seat capacity cannot exceed 7 passenger seats (cars only)')
+      .min(2, 'Total vehicle seating capacity must be at least 2 seats (1 driver + at least 1 passenger)')
+      .max(7, 'Total vehicle seating capacity cannot exceed 7 seats (cars only)')
       .optional(),
   })
   .strict()

@@ -10,11 +10,14 @@ import { VerificationModule } from '../verification/verification.module';
 
 import { JwksService } from './jwks.service';
 
+import { AuthService } from './auth.service';
+
 @Global()
 @Module({
   imports: [UsersModule, VerificationModule],
   controllers: [AuthController],
   providers: [
+    AuthService,
     JwksService,
     SupabaseAuthGuard,
     VerifiedUserGuard,
@@ -25,7 +28,7 @@ import { JwksService } from './jwks.service';
       useClass: SupabaseAuthGuard,
     },
   ],
-  exports: [JwksService, SupabaseAuthGuard, VerifiedUserGuard, AdminGuard, AudienceGuard],
+  exports: [AuthService, JwksService, SupabaseAuthGuard, VerifiedUserGuard, AdminGuard, AudienceGuard],
 })
 export class AuthModule {}
 
