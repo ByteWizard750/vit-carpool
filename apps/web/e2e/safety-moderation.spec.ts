@@ -83,17 +83,39 @@ test.describe('Milestone 16: Safety, Reporting, User Blocking & Admin Moderation
     await adminContext.close();
   });
 
-  test('4. User blocking locks chat and marks conversation as read-only', async ({ page }) => {
-    await loginAsStudentDriver(page);
+  test('4. User blocking locks chat and marks conversation as read-only', async ({ browser }) => {
+    // 1. Setup driver and passenger contexts
+    const driverContext = await browser.newContext();
+    const driverPage = await driverContext.newPage();
+    const driverAuth = await loginAsStudentDriver(driverPage);
 
-    // Navigate to messages
-    await page.goto('/messages');
-    await expect(page.getByRole('heading', { name: /Ride Messages/i })).toBeVisible();
+    const passContext = await browser.newContext();
+    const passPage = await passContext.newPage();
+    const passAuth = await loginAsStudentPassenger(passPage);
 
-    // If conversation exists, verify block button is present
-    const blockBtn = page.locator('button:has-text("Block"), button[title*="Block"]').first();
-    if (await blockBtn.isVisible()) {
-      await expect(blockBtn).toBeEnabled();
+    try {
+      // 2. Passenger blocks driver via authenticated moderation endpoint
+      const blockRes = await passPage.request.post(`http://localhost:3000/moderation/blocks/${driverAuth.user.id}`, {
+        headers: { Authorization: `Bearer ${passAuth.token}` },
+        data: { reason: 'Test block enforcement' },
+      });
+      expect([201, 200, 409]).toContain(blockRes.status());
+
+      // 3. Verify block status enforces communication lock
+      const statusRes = await passPage.request.get(`http://localhost:3000/moderation/blocks/status/${driverAuth.user.id}`, {
+        headers: { Authorization: `Bearer ${passAuth.token}` },
+      });
+      expect(statusRes.status()).toBe(200);
+      const statusData = await statusRes.json();
+      expect(statusData.isBlockedByMe).toBe(true);
+    } finally {
+      // 4. Guaranteed clean up: unblock driver to leave database in predictable state
+      await passPage.request.delete(`http://localhost:3000/moderation/blocks/${driverAuth.user.id}`, {
+        headers: { Authorization: `Bearer ${passAuth.token}` },
+      }).catch(() => {});
+
+      await driverContext.close();
+      await passContext.close();
     }
   });
 

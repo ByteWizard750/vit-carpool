@@ -21,6 +21,13 @@ test.describe('Milestone 16: Negative Booking Scenarios & Seat Management', () =
 
     await expect(minusBtn).toBeDisabled(); // Initially 1, so minus is disabled
     await expect(plusBtn).toBeVisible();
+
+    // Repeatedly click plus until maximum available seats are reached
+    while (await plusBtn.isEnabled()) {
+      await plusBtn.click();
+    }
+    // Plus button must be disabled, preventing requesting more seats than available
+    await expect(plusBtn).toBeDisabled();
   });
 
   test('2. Submitting duplicate booking request displays clear error message', async ({ page }) => {
@@ -31,27 +38,37 @@ test.describe('Milestone 16: Negative Booking Scenarios & Seat Management', () =
     const searchBtn = page.getByRole('button', { name: /Search Rides/i });
     await searchBtn.click();
 
-    const rideCard = page.locator('.ride-card, div[style*="cursor: pointer"]').filter({ hasText: /₹/ }).first();
+    const rideCard = page.locator('.ride-result-card, .ride-card').filter({ hasText: /₹/ }).first();
     await expect(rideCard).toBeVisible();
-    await rideCard.click();
+    const viewBtn = rideCard.getByRole('button', { name: /View Details & Book/i });
+    if (await viewBtn.isVisible()) {
+      await viewBtn.click();
+    } else {
+      await rideCard.click();
+    }
 
-    // First request
+    // Submit initial request
     const requestBtn = page.locator('#btn-confirm-seat-request');
     if (await requestBtn.isVisible()) {
       await requestBtn.click();
     }
 
-    // Try booking again if modal remains or on reopen
+    // Attempt second booking on the exact same ride
     await page.goto('/rides');
     await searchBtn.click();
-    const sameRideCard = page.locator('.ride-card, div[style*="cursor: pointer"]').filter({ hasText: /₹/ }).first();
-    await sameRideCard.click();
+    const sameRideCard = page.locator('.ride-result-card, .ride-card').filter({ hasText: /₹/ }).first();
+    const secondViewBtn = sameRideCard.getByRole('button', { name: /View Details & Book/i });
+    if (await secondViewBtn.isVisible()) {
+      await secondViewBtn.click();
+    } else {
+      await sameRideCard.click();
+    }
 
     const secondRequestBtn = page.locator('#btn-confirm-seat-request');
     if (await secondRequestBtn.isVisible()) {
       await secondRequestBtn.click();
-      // Error message should clearly indicate active booking exists
-      await expect(page.locator('div').filter({ hasText: /already have an active booking|Request Submitted/i }).first()).toBeVisible({ timeout: 5000 });
+      // Error message must specifically reject duplicate active booking
+      await expect(page.locator('div').filter({ hasText: /already have an active booking/i }).first()).toBeVisible({ timeout: 5000 });
     }
   });
 
@@ -59,8 +76,21 @@ test.describe('Milestone 16: Negative Booking Scenarios & Seat Management', () =
     await loginAsStudentPassenger(page);
     await page.goto('/bookings');
 
-    // Find a pending or confirmed booking with cancel button
-    const cancelBtn = page.locator('button:has-text("Cancel Booking")').first();
+    let cancelBtn = page.locator('button:has-text("Cancel Booking")').first();
+    if (!await cancelBtn.isVisible()) {
+      // Create a booking first to guarantee cancellation flow is exercised
+      await page.goto('/rides');
+      const searchBtn = page.getByRole('button', { name: /Search Rides/i });
+      await searchBtn.click();
+      const rideCard = page.locator('.ride-result-card, .ride-card').filter({ hasText: /₹/ }).first();
+      const viewBtn = rideCard.getByRole('button', { name: /View Details & Book/i });
+      if (await viewBtn.isVisible()) await viewBtn.click(); else await rideCard.click();
+      const reqBtn = page.locator('#btn-confirm-seat-request');
+      if (await reqBtn.isVisible()) await reqBtn.click();
+      await page.goto('/bookings');
+      cancelBtn = page.locator('button:has-text("Cancel Booking")').first();
+    }
+
     if (await cancelBtn.isVisible()) {
       await cancelBtn.click();
 
