@@ -616,6 +616,41 @@ export const AuthPage: React.FC = () => {
                     >
                       Fill Faculty (Staff)
                     </button>
+                    <button
+                      type="button"
+                      id="btn-dev-login-arjun"
+                      onClick={async () => {
+                        try {
+                          setIsLoading(true);
+                          const res = await fetch('/auth/dev-login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: 'arjun.driver@vitstudent.ac.in' }),
+                          });
+                          const data = await res.json();
+                          if (res.ok && data.token && data.user) {
+                            login(data.token, data.user);
+                            navigate('/recurring-commutes');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.7rem',
+                        backgroundColor: '#0284c7',
+                        color: '#ffffff',
+                        border: '1px solid #0369a1',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      ⚡ 1-Click Login (Arjun Driver)
+                    </button>
                   </div>
                   <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
                     In dev mode with unconfigured Supabase credentials, use code <code>123456</code>.
