@@ -31,6 +31,8 @@ export default defineConfig({
       '/chat': apiProxy,
       '/ratings': apiProxy,
       '/recurring-commutes': apiProxy,
+      '/ride-alerts': apiProxy,
+      '/notifications': apiProxy,
       '/auth': apiProxy,
       '/users': apiProxy,
       '/api': {

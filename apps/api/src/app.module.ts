@@ -15,6 +15,8 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { RatingsModule } from './modules/ratings/ratings.module';
 import { RecurringCommutesModule } from './modules/recurring-commutes/recurring-commutes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { RecurringCommutesModule } from './modules/recurring-commutes/recurring-
     ChatModule,
     RatingsModule,
     RecurringCommutesModule,
+    NotificationsModule,
+    RideAlertsModule,
     HealthModule,
   ],
 })

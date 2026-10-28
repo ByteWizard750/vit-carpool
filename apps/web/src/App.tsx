@@ -15,6 +15,8 @@ import { VehiclesPage } from './pages/VehiclesPage';
 import { RecurringCommutesPage } from './pages/RecurringCommutesPage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { NotificationsPage } from './pages/NotificationsPage';
+import { RideAlertsPage } from './pages/RideAlertsPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { SafetyPage } from './pages/SafetyPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -103,6 +105,22 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute requireVerified>
                 <MessagesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ride-alerts"
+            element={
+              <ProtectedRoute requireVerified>
+                <RideAlertsPage />
               </ProtectedRoute>
             }
           />

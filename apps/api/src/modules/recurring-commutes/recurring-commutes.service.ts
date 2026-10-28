@@ -21,6 +21,8 @@ import {
   getKolkataTodayString,
 } from '@vit-carpool/contracts';
 
+import { RideAlertsMatcherService } from '../ride-alerts/ride-alerts-matcher.service';
+
 @Injectable()
 export class RecurringCommutesService {
   private readonly logger = new Logger(RecurringCommutesService.name);
@@ -28,6 +30,7 @@ export class RecurringCommutesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly alertsMatcher: RideAlertsMatcherService,
   ) {}
 
   /**
@@ -659,6 +662,15 @@ export class RecurringCommutesService {
         });
 
         created++;
+
+        // Trigger ride alert matching for recurring-commute-generated ride
+        try {
+          await this.alertsMatcher.matchRideAgainstAlerts(ride);
+        } catch (err) {
+          this.logger.error(
+            `[RecurringCommute] Alert matching failed for ride ${ride.id}: ${err}`,
+          );
+        }
       } catch (err: unknown) {
         // Concurrency safety: handle unique constraint collision (P2002) from another concurrent worker
         if (

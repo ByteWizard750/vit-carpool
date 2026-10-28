@@ -8,6 +8,8 @@ import {
   Search,
   PlusCircle,
   RefreshCw,
+  Bell,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
@@ -23,6 +25,8 @@ export const DashboardPage: React.FC = () => {
   const [bookings, setBookings] = useState<PassengerBookingResponseDto[]>([]);
   const [rides, setRides] = useState<DriverRideResponseDto[]>([]);
   const [vehicles, setVehicles] = useState<VehicleResponseDto[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [alertsCount, setAlertsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,7 +35,7 @@ export const DashboardPage: React.FC = () => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        const [bookingsRes, ridesRes, vehiclesRes] = await Promise.all([
+        const [bookingsRes, ridesRes, vehiclesRes, notifsRes, alertsRes] = await Promise.all([
           fetch('/bookings/mine', {
             headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
           }).then((r) => (r.ok ? r.json() : [])),
@@ -41,11 +45,19 @@ export const DashboardPage: React.FC = () => {
           fetch('/vehicles', {
             headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
           }).then((r) => (r.ok ? r.json() : [])),
+          fetch('/notifications/unread-count', {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          }).then((r) => (r.ok ? r.json() : { unreadCount: 0 })),
+          fetch('/ride-alerts', {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          }).then((r) => (r.ok ? r.json() : [])),
         ]);
 
         setBookings(Array.isArray(bookingsRes) ? bookingsRes : (bookingsRes?.bookings || []));
         setRides(Array.isArray(ridesRes) ? ridesRes : []);
         setVehicles(Array.isArray(vehiclesRes) ? vehiclesRes : []);
+        setUnreadNotifCount(typeof notifsRes?.unreadCount === 'number' ? notifsRes.unreadCount : 0);
+        setAlertsCount(Array.isArray(alertsRes) ? alertsRes.length : 0);
       } catch (err) {
         console.warn('Dashboard data fetch error:', err);
       } finally {
@@ -128,7 +140,7 @@ export const DashboardPage: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
             gap: '12px',
             paddingTop: '16px',
             borderTop: '1px solid rgba(191, 219, 254, 0.6)',
@@ -146,12 +158,30 @@ export const DashboardPage: React.FC = () => {
               {activeRides.length}
             </div>
           </div>
-          <div style={{ backgroundColor: '#ffffff', padding: '14px 18px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Registered Vehicles</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed', marginTop: '2px' }}>
-              {vehicles.length}
+          <Link to="/notifications" style={{ textDecoration: 'none' }}>
+            <div style={{ backgroundColor: '#ffffff', padding: '14px 18px', borderRadius: '10px', border: unreadNotifCount > 0 ? '1.5px solid #f87171' : '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Unread Alerts</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: unreadNotifCount > 0 ? '#ef4444' : '#64748b', marginTop: '2px' }}>
+                {unreadNotifCount}
+              </div>
             </div>
-          </div>
+          </Link>
+          <Link to="/ride-alerts" style={{ textDecoration: 'none' }}>
+            <div style={{ backgroundColor: '#ffffff', padding: '14px 18px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Saved Alerts</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed', marginTop: '2px' }}>
+                {alertsCount}
+              </div>
+            </div>
+          </Link>
+          <Link to="/vehicles" style={{ textDecoration: 'none' }}>
+            <div style={{ backgroundColor: '#ffffff', padding: '14px 18px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>My Vehicles</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed', marginTop: '2px' }}>
+                {vehicles.length}
+              </div>
+            </div>
+          </Link>
           <div style={{ backgroundColor: '#ffffff', padding: '14px 18px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Campus Audience</div>
             <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
@@ -381,6 +411,38 @@ export const DashboardPage: React.FC = () => {
               <Car size={24} style={{ color: '#7c3aed', marginBottom: '8px' }} />
               <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>My Vehicles</div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Register cars and maintain driver vehicle fleet</div>
+            </div>
+          </Link>
+
+          <Link to="/ride-alerts" style={{ textDecoration: 'none' }}>
+            <div
+              style={{
+                padding: '20px',
+                borderRadius: '12px',
+                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-light)',
+              }}
+              className="dashboard-nav-card"
+            >
+              <Sparkles size={24} style={{ color: '#7c3aed', marginBottom: '8px' }} />
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>Ride Alerts</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Save corridor preferences and get notified of new rides</div>
+            </div>
+          </Link>
+
+          <Link to="/notifications" style={{ textDecoration: 'none' }}>
+            <div
+              style={{
+                padding: '20px',
+                borderRadius: '12px',
+                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-light)',
+              }}
+              className="dashboard-nav-card"
+            >
+              <Bell size={24} style={{ color: '#2563eb', marginBottom: '8px' }} />
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>Notifications</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Check matching ride alerts and booking updates</div>
             </div>
           </Link>
         </div>

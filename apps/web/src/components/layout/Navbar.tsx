@@ -17,6 +17,8 @@ import {
   Search,
   MessageSquare,
   RefreshCw,
+  Bell,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '../common/Button';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -28,6 +30,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -40,6 +43,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         .then((r) => r.json())
         .then((d) => {
           if (typeof d?.unreadCount === 'number') setUnreadCount(d.unreadCount);
+        })
+        .catch(() => {});
+
+      fetch('/notifications/unread-count', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (typeof d?.unreadCount === 'number') setUnreadNotifCount(d.unreadCount);
         })
         .catch(() => {});
     };
@@ -94,6 +106,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               </NavLink>
               <NavLink to="/recurring-commutes" className={getNavLinkClass} id="nav-link-recurring">
                 Recurring
+              </NavLink>
+              <NavLink to="/ride-alerts" className={getNavLinkClass} id="nav-link-alerts">
+                Ride Alerts
               </NavLink>
               <NavLink to="/vehicles" className={getNavLinkClass} id="nav-link-vehicles">
                 Vehicles
@@ -166,6 +181,55 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                     id="nav-unread-badge"
                   >
                     {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </NavLink>
+
+              {/* Notifications Quick-Action Icon Button on Top */}
+              <NavLink
+                to="/notifications"
+                title="Notifications"
+                id="nav-notifications-icon-btn"
+                style={({ isActive }) => ({
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: isActive ? '#eff6ff' : '#ffffff',
+                  border: isActive ? '1.5px solid #3b82f6' : '1px solid var(--border-medium)',
+                  color: isActive ? '#2563eb' : 'var(--text-secondary)',
+                  textDecoration: 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                })}
+              >
+                <Bell size={18} />
+                {unreadNotifCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      backgroundColor: '#ef4444',
+                      color: '#ffffff',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      minWidth: '18px',
+                      height: '18px',
+                      padding: '0 4px',
+                      borderRadius: '9999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid #ffffff',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                    id="nav-notifications-unread-badge"
+                  >
+                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
                   </span>
                 )}
               </NavLink>
@@ -317,6 +381,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                     {unreadCount}
                   </span>
                 )}
+              </Link>
+              <Link to="/notifications" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Bell size={16} style={{ marginRight: '6px' }} /> Notifications
+                {unreadNotifCount > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      backgroundColor: '#ef4444',
+                      color: '#ffffff',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '1px 7px',
+                      borderRadius: '9999px',
+                    }}
+                  >
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </Link>
+              <Link to="/ride-alerts" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <Sparkles size={16} style={{ marginRight: '6px' }} /> Ride Alerts
               </Link>
               <Link to="/vehicles" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <Car size={16} style={{ marginRight: '6px' }} /> Vehicles

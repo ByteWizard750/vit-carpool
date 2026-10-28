@@ -8,7 +8,7 @@ import {
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
-import { User, Vehicle, Ride, RideStatus, BookingStatus, Prisma } from '@vit-carpool/db';
+import { User, Vehicle, Ride, RideStatus, BookingStatus, NotificationType, Prisma } from '@vit-carpool/db';
 import {
   CreateRideDto,
   UpdateRideDto,
@@ -20,6 +20,8 @@ import {
   QuickRideTemplatesResponseDto,
 } from '@vit-carpool/contracts';
 import { RatingsService } from '../ratings/ratings.service';
+import { RideAlertsMatcherService } from '../ride-alerts/ride-alerts-matcher.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RidesService {
@@ -29,6 +31,8 @@ export class RidesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly ratingsService: RatingsService,
+    private readonly alertsMatcher: RideAlertsMatcherService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -228,8 +232,10 @@ export class RidesService {
     }
 
     // 5. Create ride, audit log, and idempotency key atomically in the same database transaction
+    let newlyCreatedRide: Ride | null = null;
+
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         // If idempotency key provided, re-verify within transaction
         if (trimmedKey && requestHash) {
           const existingInTx = await tx.idempotencyKey.findUnique({
@@ -278,6 +284,8 @@ export class RidesService {
           },
         });
 
+        newlyCreatedRide = ride;
+
         await this.audit.log(
           {
             actorId: user.id,
@@ -314,6 +322,19 @@ export class RidesService {
 
         return dtoResponse;
       });
+
+      // Post-commit: Match newly published ride against active ride alerts
+      if (newlyCreatedRide) {
+        try {
+          await this.alertsMatcher.matchRideAgainstAlerts(newlyCreatedRide);
+        } catch (err) {
+          this.logger.error(
+            `[RidesService] Background alert matching failed for ride ${(newlyCreatedRide as any)?.id}: ${err}`,
+          );
+        }
+      }
+
+      return result;
     } catch (err: any) {
       // Concurrency safety: handle unique constraint race condition on [userId, key] (Prisma P2002)
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && trimmedKey) {
@@ -840,7 +861,8 @@ export class RidesService {
    * Cancel a scheduled ride owned by the caller.
    */
   async cancelMyRide(user: User, rideId: string): Promise<DriverRideResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const { result, activeBookings, rideDepartureTime, rideOrigin, rideDestination, rideAudience } =
+      await this.prisma.$transaction(async (tx) => {
       // Row-level lock ensures serialized execution and prevents duplicate concurrent cancellations
       const lockedRides = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM rides
@@ -886,6 +908,14 @@ export class RidesService {
       }
 
       // When a ride is cancelled by driver, transition any active passenger bookings to CANCELLED
+      const activeBookings = await tx.booking.findMany({
+        where: {
+          rideId,
+          status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        },
+        select: { passengerId: true },
+      });
+
       await tx.booking.updateMany({
         where: {
           rideId,
@@ -930,8 +960,47 @@ export class RidesService {
         tx,
       );
 
-      return this.toDriverRideDto(cancelled);
+      return {
+        result: this.toDriverRideDto(cancelled),
+        activeBookings,
+        rideDepartureTime: ride.departureTime,
+        rideOrigin: ride.origin,
+        rideDestination: ride.destination,
+        rideAudience: ride.audience,
+        rideId: ride.id,
+      };
     });
+
+    // Post-commit: Notify all affected passengers of the cancellation
+    if (activeBookings.length > 0) {
+      const kolkataTime = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }).format(rideDepartureTime);
+
+      for (const b of activeBookings) {
+        try {
+          await this.notificationsService.createNotification({
+            recipientId: b.passengerId,
+            audience: rideAudience,
+            type: NotificationType.RIDE_CANCELLED,
+            title: '❌ Ride Cancelled by Driver',
+            message: `The ride from ${rideOrigin} to ${rideDestination} scheduled for ${kolkataTime} was cancelled by the driver.`,
+            rideId,
+            dedupKey: `ride_cancelled:${rideId}:${b.passengerId}`,
+          });
+        } catch (err) {
+          this.logger.error(`[RidesService] Failed to notify passenger of ride cancellation: ${err}`);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

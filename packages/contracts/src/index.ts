@@ -152,3 +152,23 @@ export {
   type RecurringCommuteResponseDto,
 } from './recurring-commute.contract';
 
+export {
+  RideAlertStatusSchema,
+  type RideAlertStatus,
+  CreateRideAlertSchema,
+  type CreateRideAlertDto,
+  UpdateRideAlertSchema,
+  type UpdateRideAlertDto,
+  RideAlertResponseSchema,
+  type RideAlertResponseDto,
+} from './ride-alert.contract';
+
+export {
+  NotificationTypeSchema,
+  type NotificationType,
+  NotificationResponseSchema,
+  type NotificationResponseDto,
+  NotificationsListResponseSchema,
+  type NotificationsListResponseDto,
+} from './notifications.contract';
+

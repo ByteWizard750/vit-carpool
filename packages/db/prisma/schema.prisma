@@ -95,6 +95,8 @@ model User {
   passengerRatings            DriverRating[]        @relation("PassengerRatings")
   driverRatings               DriverRating[]        @relation("DriverRatings")
   recurringCommutes           RecurringCommute[]    @relation("DriverRecurringCommutes")
+  rideAlerts                  RideAlert[]           @relation("UserRideAlerts")
+  notifications               Notification[]        @relation("UserNotifications")
   idempotencyKeys             IdempotencyKey[]
 
   @@unique([id, audience])
@@ -213,6 +215,7 @@ model Ride {
   bookings           Booking[]         @relation("RideBookings")
   conversations      Conversation[]
   ratings            DriverRating[]
+  notifications      Notification[]
   idempotencyKeys    IdempotencyKey[]
 
   @@unique([id, audience])
@@ -259,6 +262,7 @@ model Booking {
   driver       User          @relation("DriverBookings", fields: [driverId], references: [id], onDelete: Restrict)
   conversation Conversation?
   rating       DriverRating?
+  notifications Notification[]
 
   @@index([rideId])
   @@index([passengerId])
@@ -423,11 +427,94 @@ model RecurringCommute {
   driver               User                   @relation("DriverRecurringCommutes", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
   vehicle              Vehicle                @relation("VehicleRecurringCommutes", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
   rides                Ride[]                 @relation("RecurringCommuteRides")
+  notifications        Notification[]
 
   @@index([driverId])
   @@index([vehicleId])
   @@index([status])
   @@map("recurring_commutes")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 12: Ride Alerts & In-App Notifications
+// -----------------------------------------------------------------------------
+
+enum RideAlertStatus {
+  ACTIVE
+  PAUSED
+
+  @@map("ride_alert_status_type")
+}
+
+model RideAlert {
+  id                    String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                String          @map("user_id") @db.Uuid
+  audience              Audience
+  origin                String          @db.VarChar(128)
+  originAddress         String?         @map("origin_address") @db.VarChar(255)
+  originLatitude        Float?          @map("origin_latitude")
+  originLongitude       Float?          @map("origin_longitude")
+  originPlaceId         String?         @map("origin_place_id") @db.VarChar(128)
+  destination           String          @db.VarChar(128)
+  destinationAddress    String?         @map("destination_address") @db.VarChar(255)
+  destinationLatitude   Float?          @map("destination_latitude")
+  destinationLongitude  Float?          @map("destination_longitude")
+  destinationPlaceId    String?         @map("destination_place_id") @db.VarChar(128)
+  radiusKm              Float           @default(3.0) @map("radius_km")
+  earliestDepartureTime String?         @map("earliest_departure_time") @db.VarChar(5)
+  latestDepartureTime   String?         @map("latest_departure_time") @db.VarChar(5)
+  minSeats              Int             @default(1) @map("min_seats") @db.Integer
+  status                RideAlertStatus @default(ACTIVE)
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user                  User            @relation("UserRideAlerts", fields: [userId, audience], references: [id, audience], onDelete: Cascade)
+  notifications         Notification[]  @relation("RideAlertNotifications")
+
+  @@index([userId])
+  @@index([audience, status])
+  @@map("ride_alerts")
+}
+
+enum NotificationType {
+  RIDE_MATCH
+  BOOKING_REQUESTED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  BOOKING_CANCELLED
+  RIDE_CANCELLED
+
+  @@map("notification_type")
+}
+
+model Notification {
+  id                 String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  recipientId        String           @map("recipient_id") @db.Uuid
+  audience           Audience
+  type               NotificationType
+  title              String           @db.VarChar(128)
+  message            String           @db.VarChar(255)
+  rideId             String?          @map("ride_id") @db.Uuid
+  bookingId          String?          @map("booking_id") @db.Uuid
+  recurringCommuteId String?          @map("recurring_commute_id") @db.Uuid
+  rideAlertId        String?          @map("ride_alert_id") @db.Uuid
+  isRead             Boolean          @default(false) @map("is_read")
+  readAt             DateTime?        @map("read_at") @db.Timestamptz(6)
+  dedupKey           String?          @map("dedup_key") @db.VarChar(128)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  recipient          User             @relation("UserNotifications", fields: [recipientId, audience], references: [id, audience], onDelete: Cascade)
+  ride               Ride?            @relation(fields: [rideId], references: [id], onDelete: SetNull)
+  booking            Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  recurringCommute   RecurringCommute? @relation(fields: [recurringCommuteId], references: [id], onDelete: SetNull)
+  rideAlert          RideAlert?       @relation("RideAlertNotifications", fields: [rideAlertId], references: [id], onDelete: SetNull)
+
+  @@unique([recipientId, dedupKey])
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
 
 

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
-import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, Prisma } from '@vit-carpool/db';
+import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, NotificationType, Prisma } from '@vit-carpool/db';
 import {
   CreateBookingRequestDto,
   CancelBookingDto,
@@ -15,6 +15,7 @@ import {
   PassengerBookingResponseDto,
   DriverBookingResponseDto,
 } from '@vit-carpool/contracts';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BookingsService {
@@ -23,6 +24,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -187,12 +189,12 @@ export class BookingsService {
 
     // 6. Create booking and audit record atomically
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const booking = await tx.booking.create({
           data: {
-            rideId: ride.id,
+            rideId: ride!.id,
             passengerId: user.id,
-            driverId: ride.driverId,
+            driverId: ride!.driverId,
             audience: user.audience!,
             requestedSeats: dto.requestedSeats,
             status: BookingStatus.PENDING,
@@ -225,6 +227,24 @@ export class BookingsService {
 
         return this.toPassengerBookingDto(booking);
       });
+
+      // Post-commit: Notify driver of new booking request
+      try {
+        await this.notificationsService.createNotification({
+          recipientId: ride!.driverId,
+          audience: user.audience!,
+          type: NotificationType.BOOKING_REQUESTED,
+          title: '🙋 New Booking Request',
+          message: `${user.fullName} requested ${dto.requestedSeats} seat(s) for your ride to ${ride!.destination}.`,
+          rideId: ride!.id,
+          bookingId: result.id,
+          dedupKey: `booking_requested:${result.id}`,
+        });
+      } catch (err) {
+        this.logger.error(`[BookingsService] Failed to notify driver of booking request: ${err}`);
+      }
+
+      return result;
     } catch (err: unknown) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2002') {
@@ -332,7 +352,7 @@ export class BookingsService {
    * Atomically locks ride row, verifies seat availability, decrements seats, and updates booking.
    */
   async approveBooking(user: User, bookingId: string): Promise<DriverBookingResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const { result, notificationData } = await this.prisma.$transaction(async (tx) => {
       // 1. Fetch booking
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
@@ -432,8 +452,29 @@ export class BookingsService {
         tx,
       );
 
-      return this.toDriverBookingDto(updatedBooking);
+      return {
+        result: this.toDriverBookingDto(updatedBooking),
+        notificationData: {
+          recipientId: booking.passengerId,
+          audience: user.audience!,
+          type: NotificationType.BOOKING_APPROVED,
+          title: '✅ Booking Approved!',
+          message: `Your booking for ${ride.origin} → ${ride.destination} was approved by the driver.`,
+          rideId: ride.id,
+          bookingId: booking.id,
+          dedupKey: `booking_approved:${booking.id}`,
+        },
+      };
     });
+
+    // Post-commit: Notify passenger that booking was approved
+    try {
+      await this.notificationsService.createNotification(notificationData);
+    } catch (err) {
+      this.logger.error(`[BookingsService] Failed to notify passenger of booking approval: ${err}`);
+    }
+
+    return result;
   }
 
   /**
@@ -444,7 +485,7 @@ export class BookingsService {
     bookingId: string,
     dto?: RejectBookingDto,
   ): Promise<DriverBookingResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const { result, notificationData } = await this.prisma.$transaction(async (tx) => {
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
         include: {
@@ -494,8 +535,29 @@ export class BookingsService {
         tx,
       );
 
-      return this.toDriverBookingDto(updated);
+      return {
+        result: this.toDriverBookingDto(updated),
+        notificationData: {
+          recipientId: booking.passengerId,
+          audience: user.audience!,
+          type: NotificationType.BOOKING_REJECTED,
+          title: '⚠️ Booking Declined',
+          message: `Your booking request for ${booking.ride.origin} → ${booking.ride.destination} was declined by the driver.`,
+          rideId: booking.rideId,
+          bookingId: booking.id,
+          dedupKey: `booking_rejected:${booking.id}`,
+        },
+      };
     });
+
+    // Post-commit: Notify passenger that booking was rejected
+    try {
+      await this.notificationsService.createNotification(notificationData);
+    } catch (err) {
+      this.logger.error(`[BookingsService] Failed to notify passenger of booking rejection: ${err}`);
+    }
+
+    return result;
   }
 
   /**
@@ -507,7 +569,7 @@ export class BookingsService {
     bookingId: string,
     dto?: CancelBookingDto,
   ): Promise<PassengerBookingResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const { result, notificationData } = await this.prisma.$transaction(async (tx) => {
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
         include: {
@@ -605,7 +667,28 @@ export class BookingsService {
         tx,
       );
 
-      return this.toPassengerBookingDto(updated);
+      return {
+        result: this.toPassengerBookingDto(updated),
+        notificationData: {
+          recipientId: booking.ride.driverId,
+          audience: user.audience!,
+          type: NotificationType.BOOKING_CANCELLED,
+          title: 'ℹ️ Booking Cancelled by Passenger',
+          message: `${user.fullName} cancelled their booking for your ride to ${booking.ride.destination}.`,
+          rideId: booking.ride.id,
+          bookingId: booking.id,
+          dedupKey: `booking_cancelled_by_passenger:${booking.id}`,
+        },
+      };
     });
+
+    // Post-commit: Notify driver that passenger cancelled booking
+    try {
+      await this.notificationsService.createNotification(notificationData);
+    } catch (err) {
+      this.logger.error(`[BookingsService] Failed to notify driver of booking cancellation: ${err}`);
+    }
+
+    return result;
   }
 }
