@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
+import { RouteSpine } from '../components/common/RouteSpine';
 import { RateDriverModal } from '../components/ratings/RateDriverModal';
 import { useAuth } from '../features/auth/AuthContext';
 import {
@@ -436,8 +437,13 @@ export const BookingsPage: React.FC = () => {
                             Requested {b.requestedSeats} {b.requestedSeats === 1 ? 'seat' : 'seats'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {b.ride.origin} &rarr; {b.ride.destination}
+                        <div style={{ marginTop: '8px' }}>
+                          <RouteSpine
+                            origin={b.ride.origin}
+                            destination={b.ride.destination}
+                            departureTime={formatDeparture(b.ride.departureTime)}
+                            variant="compact"
+                          />
                         </div>
                       </div>
 

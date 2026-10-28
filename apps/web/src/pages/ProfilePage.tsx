@@ -96,7 +96,7 @@ export const ProfilePage: React.FC = () => {
           Account & Institutional Profile
         </h1>
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Manage your verified campus credentials, review cohort isolation status, and manage session access.
+          Manage your verified campus credentials, campus affiliation, and account security.
         </p>
       </div>
 
@@ -168,11 +168,11 @@ export const ProfilePage: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                INSTITUTIONAL COHORT
+                CAMPUS AFFILIATION
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                 {isFaculty ? <Briefcase size={16} style={{ color: '#6b21a8' }} /> : <GraduationCap size={16} style={{ color: '#15803d' }} />}
-                <span>{user?.audience || 'COMMUNITY'}</span>
+                <span>{isFaculty ? 'Faculty & Staff' : 'Student Commuter'}</span>
               </div>
             </div>
 

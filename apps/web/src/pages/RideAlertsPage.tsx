@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import {
   Bell,
   Sparkles,
-  MapPin,
   Clock,
   Compass,
   Plus,
@@ -11,13 +10,13 @@ import {
   Pause,
   Trash2,
   Edit2,
-  ArrowRight,
   AlertCircle,
   CheckCircle2,
   Loader2,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
+import { RouteSpine } from '../components/common/RouteSpine';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
 import { useAuth } from '../features/auth/AuthContext';
 import {
@@ -833,21 +832,13 @@ export const RideAlertsPage: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Origin -> Destination */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <MapPin size={16} color="#2563eb" />
-                            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {alert.origin}
-                            </span>
-                          </div>
-                          <ArrowRight size={16} color="#94a3b8" />
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <MapPin size={16} color="#16a34a" />
-                            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {alert.destination}
-                            </span>
-                          </div>
+                        {/* Route Spine */}
+                        <div style={{ marginTop: '8px' }}>
+                          <RouteSpine
+                            origin={alert.origin}
+                            destination={alert.destination}
+                            variant="compact"
+                          />
                         </div>
                       </div>
 
@@ -918,7 +909,7 @@ export const RideAlertsPage: React.FC = () => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <Compass size={13} color="#64748b" />
-                        <span>Directional matching enforced</span>
+                        <span>Matches your travel direction</span>
                       </div>
                     </div>
                   </div>

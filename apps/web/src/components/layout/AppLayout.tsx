@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchHealthStatus } from '../../services/api';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { BottomNav } from './BottomNav';
 import { DevDiagnosticsDrawer } from '../dev/DevDiagnosticsDrawer';
 import { VerificationRequestModal } from '../../features/modals/VerificationRequestModal';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -116,6 +117,8 @@ export const AppLayout: React.FC = () => {
         isOpen={verificationModalOpen}
         onClose={() => setVerificationModalOpen(false)}
       />
+
+      <BottomNav />
     </div>
   );
 };

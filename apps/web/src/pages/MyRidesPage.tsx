@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
+import { RouteSpine } from '../components/common/RouteSpine';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   DriverRideResponseDto,
@@ -822,47 +823,13 @@ export const MyRidesPage: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Corridor Route Display */}
+                  {/* Route Spine Display */}
                   <div style={{ marginBottom: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                      <div
-                        style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          backgroundColor: 'var(--color-brand-600)',
-                          marginTop: '6px',
-                          flexShrink: 0,
-                        }}
-                      />
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {ride.origin}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        margin: '2px 0 2px 3px',
-                        borderLeft: '2px dashed var(--border-medium)',
-                        height: '14px',
-                      }}
+                    <RouteSpine
+                      origin={ride.origin}
+                      destination={ride.destination}
+                      variant="compact"
                     />
-
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                      <div
-                        style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          backgroundColor: '#10b981',
-                          marginTop: '6px',
-                          flexShrink: 0,
-                        }}
-                      />
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {ride.destination}
-                      </div>
-                    </div>
                   </div>
 
                   {/* Date, Vehicle, and Seats Specs */}

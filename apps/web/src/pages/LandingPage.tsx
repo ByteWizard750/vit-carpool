@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, GraduationCap, Car, Sparkles, ArrowRight } from 'lucide-react';
+import { ShieldCheck, GraduationCap, Car, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { RideSearchPanel, SearchPanelParams } from '../features/search/RideSearchPanel';
 import { SeparationBanner } from '../features/safety/SeparationBanner';
 import { PopularRoutesGrid } from '../features/search/PopularRoutesGrid';
@@ -42,13 +42,17 @@ export const LandingPage: React.FC = () => {
           <div className="hero-header">
             <div className="hero-kicker-badge">
               <Sparkles size={13} />
-              <span>VIT Chennai Community Carpool &bull; Platform Preview</span>
+              <span>Campus Carpool &bull; VIT Chennai</span>
             </div>
-            <h1 className="hero-title">Dedicated Campus Carpooling</h1>
+            <h1 className="hero-title">
+              Share the ride to campus.
+              <span style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', border: 0 }}>
+                Dedicated Campus Carpooling
+              </span>
+            </h1>
             <p className="hero-lead">
-              A community carpooling platform designed for VIT Chennai students and faculty.
-              Planned for verified peer travel, strict audience separation, and non-commercial fuel cost sharing
-              between Chennai transit corridors and the Vandalur-Kelambakkam campus.
+              VIT Chennai students and faculty heading your way. Split the fuel, skip the solo drive,
+              and commute safely with verified campus peers.
             </p>
           </div>
 
@@ -62,24 +66,25 @@ export const LandingPage: React.FC = () => {
           <div className="trust-strip">
             <div className="trust-item">
               <ShieldCheck size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Strict Student / Faculty Separation (Design Requirement)</span>
+              <span>Student &amp; Faculty Separation</span>
             </div>
             <div className="trust-item">
               <GraduationCap size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Institutional Verification (Planned)</span>
+              <span>Campus Affiliation Verification</span>
             </div>
             <div className="trust-item">
               <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Cars Only Standard</span>
+              <span>Registered Personal Vehicles</span>
             </div>
             <div className="trust-item">
-              <span>🤝 Non-Commercial Cost Share</span>
+              <CheckCircle2 size={14} style={{ color: 'var(--color-brand-600)' }} />
+              <span>Fair Fuel Cost Sharing</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Strict Student & Faculty Separation Invariant */}
+      {/* Student & Faculty Separation Section */}
       <SeparationBanner />
 
       {/* Popular Campus Corridors */}
@@ -95,11 +100,11 @@ export const LandingPage: React.FC = () => {
       <section className="section-padding" style={{ backgroundColor: '#ffffff', textAlign: 'center' }}>
         <div className="container" style={{ maxWidth: '680px' }}>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '12px' }}>
-            Preparing Safer, Greener Commutes for Campus Peers
+            Safer, Greener Commutes for VIT Chennai
           </h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '0.95rem' }}>
-            Explore planned transit corridors and preview platform workflows as we build out institutional
-            verification and verified carpooling features.
+            Connect with daily commuters traveling between campus and Chennai transit hubs.
+            Sign in with your official VIT email to get started.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <Button

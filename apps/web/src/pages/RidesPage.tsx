@@ -27,6 +27,8 @@ import {
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
+import { RouteSpine } from '../components/common/RouteSpine';
+import { SeatDots } from '../components/common/SeatDots';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PublicRideSummaryDto,
@@ -705,31 +707,22 @@ export const RidesPage: React.FC = () => {
                     className="ride-result-card"
                   >
                     <div>
-                      {/* Corridor Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <div>
-                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {ride.origin}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            &darr; to
-                          </div>
-                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-                            {ride.destination}
-                          </div>
+                      {/* Route Spine Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                          <RouteSpine
+                            origin={ride.origin}
+                            destination={ride.destination}
+                            departureTime={formatDeparture(ride.departureTime)}
+                            variant="compact"
+                          />
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
                             ₹{ride.costPerSeat ?? 0}
                           </span>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>/seat</span>
                         </div>
-                      </div>
-
-                      {/* Departure Date & Time */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                        <Clock size={13} style={{ color: 'var(--color-brand-600)' }} />
-                        <span>{formatDeparture(ride.departureTime)}</span>
                       </div>
 
                       {/* Safe Vehicle Information (Milestone 5.2 requirement) */}
@@ -798,18 +791,7 @@ export const RidesPage: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            backgroundColor: ride.availableSeats > 0 ? '#dcfce7' : '#fee2e2',
-                            color: ride.availableSeats > 0 ? '#15803d' : '#991b1b',
-                          }}
-                        >
-                          {ride.availableSeats} {ride.availableSeats === 1 ? 'seat left' : 'seats left'}
-                        </span>
+                        <SeatDots available={ride.availableSeats} />
                       </div>
                     </div>
 

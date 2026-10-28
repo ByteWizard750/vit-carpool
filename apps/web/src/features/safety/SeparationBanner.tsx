@@ -7,11 +7,11 @@ export const SeparationBanner: React.FC = () => {
     <section className="section-padding" id="separation" style={{ backgroundColor: '#ffffff' }}>
       <div className="container">
         <div className="section-header">
-          <span className="section-tag">Architectural Requirement & Security Design</span>
-          <h2 className="section-title">Strict Student & Faculty Community Separation</h2>
+          <span className="section-tag">Campus Safety</span>
+          <h2 className="section-title">Independent Student and Faculty Circles</h2>
           <p className="section-subtitle">
-            To ensure mutual comfort, appropriate peer communication, and institutional safety,
-            the platform architecture requires complete segregation between student and faculty carpools.
+            To ensure mutual comfort, appropriate peer communication, and campus trust,
+            VIT Carpool maintains complete separation between student and faculty rides.
           </p>
         </div>
 
@@ -40,7 +40,7 @@ export const SeparationBanner: React.FC = () => {
             </div>
 
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Planned for undergraduate and postgraduate students commuting between Chennai residential hubs
+              Designed for undergraduate and postgraduate students commuting between Chennai residential hubs
               (Tambaram, Velachery, Sholinganallur, OMR) and the campus.
             </p>
 
@@ -48,22 +48,22 @@ export const SeparationBanner: React.FC = () => {
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Student-only rides (Requirement):</strong> When live, students will only be
-                  permitted to view, request, and join rides published by verified student peers.
+                  <strong>Student-only rides:</strong> Students only view, request, and join rides
+                  published by verified student peers.
                 </span>
               </li>
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Institutional verification (Planned):</strong> Access will require confirmed institutional
-                  affiliation, with audience determined strictly by server-side verification.
+                  <strong>Campus email verification:</strong> Access requires an active VIT student
+                  email address with automated OTP confirmation.
                 </span>
               </li>
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Database isolation (Design):</strong> Cross-circle queries will be blocked at the database
-                  layer so faculty rides remain invisible to students.
+                  <strong>Independent listings:</strong> Faculty listings and schedules remain separate,
+                  giving students an authentic peer carpool experience.
                 </span>
               </li>
             </ul>
@@ -87,7 +87,7 @@ export const SeparationBanner: React.FC = () => {
                 >
                   <Briefcase size={20} />
                 </div>
-                <h3 style={{ fontSize: '1.25rem' }}>Faculty & Staff Network</h3>
+                <h3 style={{ fontSize: '1.25rem' }}>Faculty &amp; Staff Network</h3>
               </div>
               <Badge variant="faculty">Faculty Circle</Badge>
             </div>
@@ -101,29 +101,29 @@ export const SeparationBanner: React.FC = () => {
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Faculty-only rides (Requirement):</strong> Faculty members will share rides
-                  exclusively with other verified faculty colleagues.
+                  <strong>Colleague-only rides:</strong> Faculty members share rides exclusively with
+                  other verified academic and administrative staff.
                 </span>
               </li>
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Staff verification (Planned):</strong> Access will be verified through confirmed
-                  university staff credentials before carpooling access is granted.
+                  <strong>Official credentials:</strong> Verified using official employee email addresses
+                  and campus department records.
                 </span>
               </li>
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Segregated data (Design):</strong> Student listings and personal details will be
-                  completely segregated in independent database partitions.
+                  <strong>Protected privacy:</strong> Direct messages, ride rosters, and contact info
+                  remain strictly within the faculty community.
                 </span>
               </li>
             </ul>
           </div>
         </div>
 
-        {/* Database Invariant Callout */}
+        {/* Audience Policy Callout */}
         <div
           style={{
             marginTop: '2rem',
@@ -137,10 +137,9 @@ export const SeparationBanner: React.FC = () => {
           }}
         >
           <Lock size={18} style={{ color: 'var(--color-brand-700)', flexShrink: 0 }} />
-          <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: 0 }}>
-            <strong>Server-Side Enforcement Standard:</strong> Audience assignment must be derived strictly from trusted
-            server-side verification rules. Users will never be permitted to select or alter their own audience.
-            PostgreSQL constraints and query filters will enforce this segregation before any ride is published or booked.
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            <strong>Automatic Audience Assignment:</strong> Your circle is automatically assigned based on your verified
+            institutional email domain (e.g. <code>@vitstudent.ac.in</code> vs <code>@vit.ac.in</code>) and cannot be modified manually.
           </p>
         </div>
       </div>

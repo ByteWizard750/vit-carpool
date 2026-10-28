@@ -13,12 +13,12 @@ import {
   Pause,
   XCircle,
   Edit2,
-  ArrowRight,
   RefreshCw,
   Info,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
+import { RouteSpine } from '../components/common/RouteSpine';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
 import { useAuth } from '../features/auth/AuthContext';
 import {
@@ -529,13 +529,13 @@ export const RecurringCommutesPage: React.FC = () => {
                   >
                     {/* Card Header: Route & Status */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontWeight: 700, fontSize: 'var(--text-lg)' }}>
-                          <span>{schedule.origin}</span>
-                          <ArrowRight size={16} style={{ color: 'var(--text-muted)' }} />
-                          <span>{schedule.destination}</span>
-                        </div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      <div style={{ flex: 1, minWidth: 0, paddingRight: 'var(--space-3)' }}>
+                        <RouteSpine
+                          origin={schedule.origin}
+                          destination={schedule.destination}
+                          variant="compact"
+                        />
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
                           {schedule.startDate} to {schedule.endDate}
                         </div>
                       </div>

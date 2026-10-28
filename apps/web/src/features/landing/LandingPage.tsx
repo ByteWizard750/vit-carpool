@@ -28,13 +28,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="hero-header">
             <div className="hero-kicker-badge">
               <Sparkles size={13} />
-              <span>VIT Chennai Community Carpool &bull; Platform Preview</span>
+              <span>Campus Carpool &bull; VIT Chennai</span>
             </div>
-            <h1 className="hero-title">Dedicated Campus Carpooling</h1>
+            <h1 className="hero-title">
+              Share the ride to campus.
+              <span style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', border: 0 }}>
+                Dedicated Campus Carpooling
+              </span>
+            </h1>
             <p className="hero-lead">
-              A community carpooling platform designed for VIT Chennai students and faculty.
-              Planned for verified peer travel, strict audience separation, and non-commercial fuel cost sharing
-              between Chennai transit corridors and the Vandalur-Kelambakkam campus.
+              VIT Chennai students and faculty heading your way. Split the fuel, skip the solo drive,
+              and commute safely with verified campus peers.
             </p>
           </div>
 
@@ -45,18 +49,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="trust-strip">
             <div className="trust-item">
               <ShieldCheck size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Strict Student / Faculty Separation (Design Requirement)</span>
+              <span>Student &amp; Faculty Separation</span>
             </div>
             <div className="trust-item">
               <GraduationCap size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Institutional Verification (Planned)</span>
+              <span>Campus Affiliation Verification</span>
             </div>
             <div className="trust-item">
               <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Cars Only Standard</span>
+              <span>Registered Personal Vehicles</span>
             </div>
             <div className="trust-item">
-              <span>🤝 Non-Commercial Cost Share</span>
+              <span>Fair Fuel Cost Sharing</span>
             </div>
           </div>
         </div>

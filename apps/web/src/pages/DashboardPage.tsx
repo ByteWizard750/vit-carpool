@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
+import { RouteSpine } from '../components/common/RouteSpine';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PassengerBookingResponseDto,
@@ -113,7 +114,7 @@ export const DashboardPage: React.FC = () => {
               Welcome back, {user?.fullName}!
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Connected as <strong>{user?.email}</strong>. Strict {user?.audience} cohort isolation active.
+              Signed in as <strong>{user?.email}</strong> &bull; {user?.audience === 'FACULTY' ? 'Faculty Circle' : 'Student Circle'}
             </p>
           </div>
 
@@ -257,11 +258,13 @@ export const DashboardPage: React.FC = () => {
                       {b.requestedSeats} Seat{b.requestedSeats > 1 ? 's' : ''}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {b.ride.origin} &rarr; {b.ride.destination}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Departure: {new Date(b.ride.departureTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  <div style={{ marginTop: '6px' }}>
+                    <RouteSpine
+                      origin={b.ride.origin}
+                      destination={b.ride.destination}
+                      departureTime={new Date(b.ride.departureTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      variant="compact"
+                    />
                   </div>
                 </div>
               ))}
@@ -330,14 +333,16 @@ export const DashboardPage: React.FC = () => {
                       {r.status}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {r.availableSeats} of {r.totalSeats} seats open
+                      {r.availableSeats} of {r.totalSeats} seats open &bull; ₹{r.costPerSeat}/seat
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {r.origin} &rarr; {r.destination}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    {new Date(r.departureTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} &bull; ₹{r.costPerSeat}/seat
+                  <div style={{ marginTop: '6px' }}>
+                    <RouteSpine
+                      origin={r.origin}
+                      destination={r.destination}
+                      departureTime={new Date(r.departureTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      variant="compact"
+                    />
                   </div>
                 </div>
               ))}
