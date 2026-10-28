@@ -471,6 +471,7 @@ export const RideAlertsPage: React.FC = () => {
                 {QUICK_CAMPUS_LOCATIONS.map((loc) => (
                   <button
                     key={`orig-${loc.id}`}
+                    id={`btn-quick-orig-${loc.id}`}
                     type="button"
                     onClick={() => {
                       setOrigin(loc.name);
@@ -515,6 +516,7 @@ export const RideAlertsPage: React.FC = () => {
                 {QUICK_CAMPUS_LOCATIONS.map((loc) => (
                   <button
                     key={`dest-${loc.id}`}
+                    id={`btn-quick-dest-${loc.id}`}
                     type="button"
                     onClick={() => {
                       setDestination(loc.name);

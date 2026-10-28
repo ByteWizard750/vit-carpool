@@ -394,6 +394,8 @@ export const BookingsPage: React.FC = () => {
                 return (
                   <div
                     key={b.id}
+                    className="passenger-booking-card"
+                    id={`booking-card-${b.id}`}
                     style={{
                       padding: '20px',
                       backgroundColor: '#ffffff',
@@ -626,6 +628,8 @@ export const BookingsPage: React.FC = () => {
                 return (
                   <div
                     key={req.id}
+                    className="driver-booking-card"
+                    id={`driver-booking-card-${req.id}`}
                     style={{
                       padding: '20px',
                       backgroundColor: '#ffffff',
