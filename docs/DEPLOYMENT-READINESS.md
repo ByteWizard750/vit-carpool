@@ -198,3 +198,21 @@ The VIT Carpool platform utilizes custom RS256 asymmetric cryptographic tokens f
 | `STUDENT_EMAIL_REGEX` | Regex for student verification | Default verified | `^[a-zA-Z0-9._%+-]+@vitstudent\.ac\.in$` |
 | `FACULTY_EMAIL_REGEX` | Regex for faculty verification | Default verified | `^[a-zA-Z0-9._%+-]+@vit\.ac\.in$` |
 | `TRUST_PROXY` | Reverse proxy hop count / CIDR | Required behind proxy | `1` or `true` |
+
+---
+
+## 10. Remaining Infrastructure Prerequisites for Staging & Production
+
+Before promoting the application to staging demonstration or production:
+
+1. **Remote Cloud Object Storage**:
+   * S3 / Cloudflare R2 bucket with automated encryption for verification document storage and presigned download URLs.
+2. **Dedicated Institutional Transactional SMTP**:
+   * Verified sender domain with SPF, DKIM, and DMARC records on `@vitstudent.ac.in` and `@vit.ac.in` email routes.
+3. **Managed PostgreSQL 16 with PostGIS 3.4+**:
+   * Production-grade database cluster with connection pooling (PgBouncer) and daily automated WAL archiving for Point-in-Time Recovery.
+4. **Distributed Redis Rate Limiter**:
+   * Shared Redis store to replace single-process memory throttlers across multi-replica API deployments.
+5. **TLS Termination & CDN Routing**:
+   * Domain DNS configuration, SSL/TLS certificates, and reverse proxy routing matching the specification in [docs/STAGING-SETUP.md](file:///Users/rohan/Vit-Carpool/docs/STAGING-SETUP.md).
+
