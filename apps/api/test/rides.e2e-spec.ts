@@ -55,6 +55,7 @@ describe('Milestone 3.2: Ride Publishing & Management (e2e)', () => {
 
     // Clean tables before starting
     await testPrisma.booking.deleteMany();
+    await testPrisma.recurringCommute.deleteMany();
     await testPrisma.ride.deleteMany();
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();

@@ -53,6 +53,9 @@ The platform documentation is organized in the `docs/` directory:
 * 🏛️ [Architecture Specification](docs/ARCHITECTURE.md) - System architecture, components, API boundaries, and network topology.
 * 🛡️ [Security Invariants & Rules](docs/SECURITY-INVARIANTS.md) - Non-negotiable security, isolation, and concurrency rules.
 * 🗄️ [Database Design & Schema](docs/DATABASE-DESIGN.md) - Entity models, constraints, state machines, and PostGIS strategies.
+* 🔄 [Recurring Commutes](docs/RECURRING-COMMUTES.md) - Driver recurring commutes, IST scheduling, and rolling horizon materialization.
+* 🔔 [Ride Alerts & Notifications](docs/RIDE-ALERTS-AND-NOTIFICATIONS.md) - Geospatial ride corridor alert matching and in-app notifications.
+* 🚀 [Production Deployment Readiness](docs/DEPLOYMENT-READINESS.md) - Infrastructure prerequisites, least-privilege credentials, RS256 key management, and operational checklist.
 * 🗺️ [Development & Milestone Plan](docs/DEVELOPMENT-PLAN.md) - Structured roadmap from Milestone 0 through Milestone 7.
 * 📋 [Decisions & Open Questions (ADRs)](docs/DECISIONS.md) - Architectural decisions and tracking of unresolved requirements.
 

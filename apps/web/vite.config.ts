@@ -35,6 +35,9 @@ export default defineConfig({
       '/notifications': apiProxy,
       '/auth': apiProxy,
       '/users': apiProxy,
+      '/moderation': apiProxy,
+      '/admin': apiProxy,
+      '/verification': apiProxy,
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

@@ -73,8 +73,11 @@ describe('Milestone 13: Trust, Safety, User Blocking, Reporting & Admin Moderati
     await testPrisma.message.deleteMany();
     await testPrisma.conversation.deleteMany();
     await testPrisma.driverRating.deleteMany();
+    await testPrisma.notification.deleteMany();
+    await testPrisma.rideAlert.deleteMany();
     await testPrisma.booking.deleteMany();
     await testPrisma.ride.deleteMany();
+    await testPrisma.recurringCommute.deleteMany();
     await testPrisma.vehicle.deleteMany();
     await testPrisma.verificationRequest.deleteMany();
     await testPrisma.user.deleteMany();
