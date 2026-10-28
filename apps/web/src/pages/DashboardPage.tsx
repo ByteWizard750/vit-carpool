@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Search,
   PlusCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
@@ -104,7 +105,7 @@ export const DashboardPage: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <Link to="/rides">
               <Button variant="primary" size="md" leftIcon={<Search size={16} />}>
                 Find Rides
@@ -113,6 +114,11 @@ export const DashboardPage: React.FC = () => {
             <Link to="/offer-ride">
               <Button variant="outline" size="md" leftIcon={<PlusCircle size={16} />}>
                 Offer a Ride
+              </Button>
+            </Link>
+            <Link to="/recurring-commutes">
+              <Button variant="outline" size="md" leftIcon={<RefreshCw size={16} />}>
+                Recurring Commutes
               </Button>
             </Link>
           </div>

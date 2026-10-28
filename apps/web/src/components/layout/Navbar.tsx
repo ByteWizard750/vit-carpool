@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   Search,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../common/Button';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -90,6 +91,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               </NavLink>
               <NavLink to="/bookings" className={getNavLinkClass} id="nav-link-bookings">
                 Bookings
+              </NavLink>
+              <NavLink to="/recurring-commutes" className={getNavLinkClass} id="nav-link-recurring">
+                Recurring
               </NavLink>
               <NavLink to="/vehicles" className={getNavLinkClass} id="nav-link-vehicles">
                 Vehicles
@@ -292,6 +296,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               </Link>
               <Link to="/bookings" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <Ticket size={16} style={{ marginRight: '6px' }} /> Bookings
+              </Link>
+              <Link to="/recurring-commutes" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <RefreshCw size={16} style={{ marginRight: '6px' }} /> Recurring Commutes
               </Link>
               <Link to="/messages" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <MessageSquare size={16} style={{ marginRight: '6px' }} /> Messages

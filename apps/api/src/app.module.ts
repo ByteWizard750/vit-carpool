@@ -14,6 +14,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { RatingsModule } from './modules/ratings/ratings.module';
+import { RecurringCommutesModule } from './modules/recurring-commutes/recurring-commutes.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { RatingsModule } from './modules/ratings/ratings.module';
     LocationsModule,
     ChatModule,
     RatingsModule,
+    RecurringCommutesModule,
     HealthModule,
   ],
 })

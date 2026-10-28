@@ -134,4 +134,21 @@ export {
   parseKolkataDateTimeInput,
   formatKolkataDisplay,
   generateIdempotencyKey,
+  getKolkataTodayString,
+  getIsoWeekday,
+  getApplicableOccurrenceDates,
+  formatWeekdays,
+  formatTime12Hour,
 } from './date.util';
+
+export {
+  RecurringCommuteStatusSchema,
+  type RecurringCommuteStatus,
+  CreateRecurringCommuteSchema,
+  type CreateRecurringCommuteDto,
+  UpdateRecurringCommuteSchema,
+  type UpdateRecurringCommuteDto,
+  RecurringCommuteResponseSchema,
+  type RecurringCommuteResponseDto,
+} from './recurring-commute.contract';
+

@@ -12,6 +12,7 @@ import { OfferRidePage } from './pages/OfferRidePage';
 import { MyRidesPage } from './pages/MyRidesPage';
 import { BookingsPage } from './pages/BookingsPage';
 import { VehiclesPage } from './pages/VehiclesPage';
+import { RecurringCommutesPage } from './pages/RecurringCommutesPage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
@@ -78,6 +79,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute requireVerified>
                 <VehiclesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recurring-commutes"
+            element={
+              <ProtectedRoute requireVerified>
+                <RecurringCommutesPage />
               </ProtectedRoute>
             }
           />

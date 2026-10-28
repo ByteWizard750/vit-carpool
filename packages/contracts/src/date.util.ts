@@ -130,3 +130,111 @@ export function generateIdempotencyKey(): string {
   }
   return 'idemp-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 12);
 }
+
+/**
+ * Returns today's calendar date string (YYYY-MM-DD) in Asia/Kolkata timezone.
+ */
+export function getKolkataTodayString(now: Date = new Date()): string {
+  const kp = getKolkataDateParts(now);
+  const m = String(kp.month).padStart(2, '0');
+  const d = String(kp.day).padStart(2, '0');
+  return `${kp.year}-${m}-${d}`;
+}
+
+/**
+ * Returns the ISO weekday (1 = Monday, ..., 7 = Sunday) for a YYYY-MM-DD date string.
+ * Uses midday +05:30 to avoid any UTC date edge-cases.
+ */
+export function getIsoWeekday(dateStr: string): number {
+  const d = new Date(`${dateStr}T12:00:00+05:30`);
+  const day = d.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  return day === 0 ? 7 : day;
+}
+
+/**
+ * Computes all applicable calendar dates (YYYY-MM-DD) between startDate and endDate
+ * that match the specified ISO weekdays (1..7), bounded by a future horizon from today.
+ */
+export function getApplicableOccurrenceDates(
+  startDateStr: string,
+  endDateStr: string,
+  weekdays: number[],
+  horizonDays = 14,
+  now: Date = new Date(),
+): string[] {
+  const todayStr = getKolkataTodayString(now);
+  const rangeStartStr = startDateStr > todayStr ? startDateStr : todayStr;
+
+  // Compute horizon end date in Asia/Kolkata
+  const kp = getKolkataDateParts(now);
+  const horizonEndDate = new Date(Date.UTC(kp.year, kp.month - 1, kp.day + horizonDays));
+  const horizonYear = horizonEndDate.getUTCFullYear();
+  const horizonMonth = String(horizonEndDate.getUTCMonth() + 1).padStart(2, '0');
+  const horizonDay = String(horizonEndDate.getUTCDate()).padStart(2, '0');
+  const horizonEndStr = `${horizonYear}-${horizonMonth}-${horizonDay}`;
+
+  const rangeEndStr = endDateStr < horizonEndStr ? endDateStr : horizonEndStr;
+  if (rangeStartStr > rangeEndStr) {
+    return [];
+  }
+
+  const weekdaySet = new Set(weekdays);
+  const matchingDates: string[] = [];
+
+  // Parse start into year, month, day
+  const [startYear, startMonth, startDay] = rangeStartStr.split('-').map(Number);
+  let currentUtc = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+
+  while (true) {
+    const y = currentUtc.getUTCFullYear();
+    const m = String(currentUtc.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(currentUtc.getUTCDate()).padStart(2, '0');
+    const currentStr = `${y}-${m}-${d}`;
+
+    if (currentStr > rangeEndStr) {
+      break;
+    }
+
+    const isoDay = getIsoWeekday(currentStr);
+    if (weekdaySet.has(isoDay)) {
+      matchingDates.push(currentStr);
+    }
+
+    // Step forward 1 calendar day in UTC
+    currentUtc = new Date(Date.UTC(y, currentUtc.getUTCMonth(), currentUtc.getUTCDate() + 1));
+  }
+
+  return matchingDates;
+}
+
+const WEEKDAY_NAMES = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/**
+ * Formats an array of ISO weekdays (1=Mon..7=Sun) for display.
+ * E.g. [1, 2, 3, 4, 5] -> "Weekdays (Mon - Fri)"
+ * [1, 2, 3, 4, 5, 6, 7] -> "Every day"
+ */
+export function formatWeekdays(weekdays: number[]): string {
+  if (!weekdays || weekdays.length === 0) return 'None';
+  const sorted = [...weekdays].sort((a, b) => a - b);
+  if (sorted.length === 7) return 'Every day';
+  if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return 'Weekdays (Mon - Fri)';
+  if (sorted.length === 2 && sorted[0] === 6 && sorted[1] === 7) return 'Weekends (Sat - Sun)';
+  return sorted.map((d) => WEEKDAY_NAMES[d] || String(d)).join(', ');
+}
+
+/**
+ * Formats a 24-hour "HH:mm" time string into 12-hour format with AM/PM.
+ * E.g. "08:30" -> "8:30 AM", "17:00" -> "5:00 PM"
+ */
+export function formatTime12Hour(time24: string): string {
+  if (!time24 || !time24.includes(':')) return time24;
+  const [hStr, mStr] = time24.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return time24;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+}
+

@@ -21,6 +21,7 @@ import {
   Info,
   Star,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -408,6 +409,12 @@ export const MyRidesPage: React.FC = () => {
             <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>
           </button>
+
+          <Link to="/recurring-commutes" style={{ textDecoration: 'none' }}>
+            <Button variant="outline" size="md" leftIcon={<RefreshCw size={16} />} id="btn-recurring-commutes-header">
+              Recurring Schedules
+            </Button>
+          </Link>
 
           <Link to="/offer-ride" style={{ textDecoration: 'none' }}>
             <Button variant="primary" size="md" leftIcon={<PlusCircle size={16} />} id="btn-publish-ride-header">

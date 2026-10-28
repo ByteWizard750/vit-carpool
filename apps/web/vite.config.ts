@@ -30,6 +30,7 @@ export default defineConfig({
       '/bookings': apiProxy,
       '/chat': apiProxy,
       '/ratings': apiProxy,
+      '/recurring-commutes': apiProxy,
       '/auth': apiProxy,
       '/users': apiProxy,
       '/api': {

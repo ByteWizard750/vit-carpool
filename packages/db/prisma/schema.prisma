@@ -94,6 +94,7 @@ model User {
   sentMessages                Message[]             @relation("SentMessages")
   passengerRatings            DriverRating[]        @relation("PassengerRatings")
   driverRatings               DriverRating[]        @relation("DriverRatings")
+  recurringCommutes           RecurringCommute[]    @relation("DriverRecurringCommutes")
   idempotencyKeys             IdempotencyKey[]
 
   @@unique([id, audience])
@@ -158,8 +159,9 @@ model Vehicle {
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  user               User      @relation("UserVehicles", fields: [userId], references: [id], onDelete: Restrict)
-  rides              Ride[]    @relation("VehicleRides")
+  user               User               @relation("UserVehicles", fields: [userId], references: [id], onDelete: Restrict)
+  rides              Ride[]             @relation("VehicleRides")
+  recurringCommutes  RecurringCommute[] @relation("VehicleRecurringCommutes")
 
   @@unique([id, userId])
   @@index([userId])
@@ -197,23 +199,28 @@ model Ride {
   dropoffDescription String?    @map("dropoff_description") @db.VarChar(255)
   departureTime      DateTime   @map("departure_time") @db.Timestamptz(6)
   availableSeats     Int        @map("available_seats") @db.Integer
-  totalSeats         Int        @default(6) @map("total_seats") @db.Integer
-  costPerSeat        Int?       @map("cost_per_seat") @db.Integer
-  status             RideStatus @default(SCHEDULED)
-  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  totalSeats          Int               @default(6) @map("total_seats") @db.Integer
+  costPerSeat         Int?              @map("cost_per_seat") @db.Integer
+  status              RideStatus        @default(SCHEDULED)
+  recurringCommuteId  String?           @map("recurring_commute_id") @db.Uuid
+  scheduledOccurrence DateTime?         @map("scheduled_occurrence") @db.Date
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  driver             User           @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
-  vehicle            Vehicle        @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
-  bookings           Booking[]      @relation("RideBookings")
+  driver             User              @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
+  vehicle            Vehicle           @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+  recurringCommute   RecurringCommute? @relation("RecurringCommuteRides", fields: [recurringCommuteId], references: [id], onDelete: SetNull)
+  bookings           Booking[]         @relation("RideBookings")
   conversations      Conversation[]
   ratings            DriverRating[]
   idempotencyKeys    IdempotencyKey[]
 
   @@unique([id, audience])
   @@unique([id, driverId])
+  @@unique([recurringCommuteId, scheduledOccurrence])
   @@index([driverId])
   @@index([vehicleId])
+  @@index([recurringCommuteId])
   @@index([audience, status, departureTime])
   @@index([departureTime])
   @@map("rides")
@@ -373,4 +380,54 @@ model OtpVerification {
   @@index([expiresAt])
   @@map("otp_verifications")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 11: Recurring Commutes & Materialization Models
+// -----------------------------------------------------------------------------
+
+enum RecurringCommuteStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+
+  @@map("recurring_commute_status_type")
+}
+
+model RecurringCommute {
+  id                   String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  driverId             String                 @map("driver_id") @db.Uuid
+  audience             Audience
+  vehicleId            String                 @map("vehicle_id") @db.Uuid
+  origin               String                 @db.VarChar(128)
+  originAddress        String?                @map("origin_address") @db.VarChar(255)
+  originLatitude       Float?                 @map("origin_latitude")
+  originLongitude      Float?                 @map("origin_longitude")
+  originPlaceId        String?                @map("origin_place_id") @db.VarChar(128)
+  destination          String                 @db.VarChar(128)
+  destinationAddress   String?                @map("destination_address") @db.VarChar(255)
+  destinationLatitude  Float?                 @map("destination_latitude")
+  destinationLongitude Float?                 @map("destination_longitude")
+  destinationPlaceId   String?                @map("destination_place_id") @db.VarChar(128)
+  pickupDescription    String?                @map("pickup_description") @db.VarChar(255)
+  dropoffDescription   String?                @map("dropoff_description") @db.VarChar(255)
+  weekdays             Int[]                  @map("weekdays")
+  departureTime        String                 @map("departure_time") @db.VarChar(5)
+  startDate            DateTime               @map("start_date") @db.Date
+  endDate              DateTime               @map("end_date") @db.Date
+  availableSeats       Int                    @map("available_seats") @db.Integer
+  costPerSeat          Int?                   @map("cost_per_seat") @db.Integer
+  status               RecurringCommuteStatus @default(ACTIVE)
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driver               User                   @relation("DriverRecurringCommutes", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
+  vehicle              Vehicle                @relation("VehicleRecurringCommutes", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+  rides                Ride[]                 @relation("RecurringCommuteRides")
+
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([status])
+  @@map("recurring_commutes")
+}
+
 

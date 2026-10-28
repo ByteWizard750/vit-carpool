@@ -72,6 +72,10 @@ export const EnvSchema = z.object({
   TRUST_PROXY: z.string().optional().default(''),
   OTP_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).default(30 * 60 * 1000),
 
+  // Recurring Commutes Scheduler Configuration
+  RECURRING_COMMUTE_INTERVAL_MS: z.coerce.number().int().min(1000).default(60 * 60 * 1000),
+  RECURRING_COMMUTE_HORIZON_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+
   // Supabase Auth Integration
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),
   SUPABASE_ANON_KEY: z.string().optional().or(z.literal('')),
