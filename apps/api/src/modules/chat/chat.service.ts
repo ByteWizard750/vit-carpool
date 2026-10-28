@@ -183,18 +183,40 @@ export class ChatService {
       throw new ForbiddenException('You do not have access to this conversation.');
     }
 
-    // Upsert conversation to prevent race conditions
-    const conversation = await this.prisma.conversation.upsert({
-      where: { bookingId: booking.id },
-      create: {
-        bookingId: booking.id,
-        rideId: booking.rideId,
-        passengerId: booking.passengerId,
-        driverId: booking.driverId,
-      },
-      update: {},
-      select: { id: true },
-    });
+    // Upsert conversation to prevent race conditions.
+    // Under concurrent initialization for the same booking, Prisma's upsert can race
+    // at the database level and raise P2002 on the unique constraint on booking_id.
+    let conversation: { id: string };
+    try {
+      conversation = await this.prisma.conversation.upsert({
+        where: { bookingId: booking.id },
+        create: {
+          bookingId: booking.id,
+          rideId: booking.rideId,
+          passengerId: booking.passengerId,
+          driverId: booking.driverId,
+        },
+        update: {},
+        select: { id: true },
+      });
+    } catch (err: unknown) {
+      if (
+        (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') ||
+        (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002')
+      ) {
+        const existing = await this.prisma.conversation.findUnique({
+          where: { bookingId: booking.id },
+          select: { id: true },
+        });
+        if (existing) {
+          conversation = existing;
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     return this.getConversationById(user, conversation.id);
   }
