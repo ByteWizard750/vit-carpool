@@ -19,6 +19,13 @@ export class AdminGuard implements CanActivate {
       });
     }
 
+    if (user.isSuspended || user.verificationStatus === 'SUSPENDED') {
+      throw new ForbiddenException({
+        error: 'ACCOUNT_SUSPENDED',
+        message: 'Your administrative account has been suspended.',
+      });
+    }
+
     return true;
   }
 }

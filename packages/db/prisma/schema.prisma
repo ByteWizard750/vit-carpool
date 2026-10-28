@@ -80,9 +80,15 @@ model User {
   role               UserRole            @default(USER)
   fullName           String              @map("full_name") @db.VarChar(255)
   phoneNumber        String?             @map("phone_number") @db.VarChar(32)
+  isSuspended        Boolean             @default(false) @map("is_suspended")
+  suspensionReason   String?             @map("suspension_reason") @db.VarChar(500)
+  suspendedAt        DateTime?           @map("suspended_at") @db.Timestamptz(6)
+  suspendedBy        String?             @map("suspended_by") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  suspendingAdmin             User?                 @relation("AdminSuspendedUsers", fields: [suspendedBy], references: [id], onDelete: SetNull)
+  suspendedUsers              User[]                @relation("AdminSuspendedUsers")
   verificationRequests        VerificationRequest[] @relation("UserVerificationRequests")
   reviewedVerificationRequests VerificationRequest[] @relation("AdminReviewedRequests")
   vehicles                    Vehicle[]             @relation("UserVehicles")
@@ -98,6 +104,11 @@ model User {
   rideAlerts                  RideAlert[]           @relation("UserRideAlerts")
   notifications               Notification[]        @relation("UserNotifications")
   idempotencyKeys             IdempotencyKey[]
+  initiatedBlocks             Block[]               @relation("UserBlocksInitiated")
+  receivedBlocks              Block[]               @relation("UserBlocksReceived")
+  filedReports                Report[]              @relation("UserReportsFiled")
+  receivedReports             Report[]              @relation("UserReportsReceived")
+  reviewedReports             Report[]              @relation("AdminReviewedReports")
 
   @@unique([id, audience])
   @@map("users")
@@ -217,6 +228,7 @@ model Ride {
   ratings            DriverRating[]
   notifications      Notification[]
   idempotencyKeys    IdempotencyKey[]
+  reports            Report[]          @relation("ReportedRides")
 
   @@unique([id, audience])
   @@unique([id, driverId])
@@ -263,6 +275,7 @@ model Booking {
   conversation Conversation?
   rating       DriverRating?
   notifications Notification[]
+  reports      Report[]       @relation("ReportedBookings")
 
   @@index([rideId])
   @@index([passengerId])
@@ -307,6 +320,7 @@ model Message {
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Restrict)
+  reports        Report[]     @relation("ReportedMessages")
 
   @@index([conversationId, createdAt])
   @@index([senderId])
@@ -514,6 +528,79 @@ model Notification {
   @@index([recipientId, isRead])
   @@index([recipientId, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 13: Trust, Safety, User Blocking & Incident Reporting
+// -----------------------------------------------------------------------------
+
+model Block {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  reason    String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  blocker   User     @relation("UserBlocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("UserBlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+enum ReportCategory {
+  SAFETY_CONCERN
+  HARASSMENT
+  NO_SHOW
+  FRAUD
+  FARE_DISPUTE
+  SPAM
+  INAPPROPRIATE_BEHAVIOR
+  OTHER
+
+  @@map("report_category_type")
+}
+
+enum ReportStatus {
+  PENDING
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+
+  @@map("report_status_type")
+}
+
+model Report {
+  id              String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  reporterId      String         @map("reporter_id") @db.Uuid
+  reportedUserId  String?        @map("reported_user_id") @db.Uuid
+  rideId          String?        @map("ride_id") @db.Uuid
+  bookingId       String?        @map("booking_id") @db.Uuid
+  messageId       String?        @map("message_id") @db.Uuid
+  category        ReportCategory
+  description     String         @db.VarChar(1000)
+  status          ReportStatus   @default(PENDING)
+  resolutionNotes String?        @map("resolution_notes") @db.VarChar(1000)
+  reviewedBy      String?        @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime?      @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reporter        User           @relation("UserReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser    User?          @relation("UserReportsReceived", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reviewer        User?          @relation("AdminReviewedReports", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  ride            Ride?          @relation("ReportedRides", fields: [rideId], references: [id], onDelete: SetNull)
+  booking         Booking?       @relation("ReportedBookings", fields: [bookingId], references: [id], onDelete: SetNull)
+  message         Message?       @relation("ReportedMessages", fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+  @@map("reports")
 }
 
 

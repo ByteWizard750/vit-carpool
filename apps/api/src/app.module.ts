@@ -17,6 +17,7 @@ import { RatingsModule } from './modules/ratings/ratings.module';
 import { RecurringCommutesModule } from './modules/recurring-commutes/recurring-commutes.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
     VerificationModule,
     AuthModule,
     AdminModule,
+    ModerationModule,
     VehiclesModule,
     RidesModule,
     BookingsModule,

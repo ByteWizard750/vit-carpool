@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -16,6 +17,7 @@ import {
   DriverBookingResponseDto,
 } from '@vit-carpool/contracts';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ModerationService } from '../moderation/moderation.service';
 
 @Injectable()
 export class BookingsService {
@@ -25,6 +27,7 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly notificationsService: NotificationsService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   /**
@@ -151,6 +154,15 @@ export class BookingsService {
     // 3. Driver cannot book their own ride
     if (ride.driverId === user.id) {
       throw new BadRequestException('Drivers cannot book seats on their own rides.');
+    }
+
+    // 3.1 Mutual blocking check
+    const isBlocked = await this.moderationService.isMutuallyBlocked(user.id, ride.driverId);
+    if (isBlocked) {
+      throw new ForbiddenException({
+        error: 'BOOKING_NOT_PERMITTED',
+        message: 'You cannot book seats on a ride involving a blocked user.',
+      });
     }
 
     // 4. Validate ride eligibility

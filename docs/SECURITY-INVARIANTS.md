@@ -114,6 +114,31 @@ Unit mocks do not validate database triggers, foreign keys, or transaction isola
 * [ ] **Concurrent Seat Race Condition**: 10 concurrent requests to book the last remaining seat result in exactly 1 success and 9 safe rejections without overbooking.
 * [ ] **Self-Booking Prohibition**: Driver attempting to book a seat on their own ride is rejected by DB constraint and API guard.
 * [ ] **Suspended User Lockout**: Suspended or rejected users cannot authenticate, search, post, or book rides.
-* [ ] **Invalid State Machine Transitions**: Attempts to transition `REJECTED` -> `ACCEPTED` fail with `400 Bad Request`.
-* [ ] **Notification Isolation**: Notifications generated for a ride event are delivered only to verified participants belonging to the same audience.
-* [ ] **Response Field Sanitization**: Serializers strip sensitive attributes (e.g. `auth_user_id`, raw residential notes) from public endpoints.
+* [x] **Invalid State Machine Transitions**: Attempts to transition `REJECTED` -> `ACCEPTED` fail with `400 Bad Request`.
+* [x] **Notification Isolation**: Notifications generated for a ride event are delivered only to verified participants belonging to the same audience.
+* [x] **Response Field Sanitization**: Serializers strip sensitive attributes (e.g. `auth_user_id`, raw residential notes) from public endpoints.
+
+---
+
+## 6. Trust, Safety, Blocking & Moderation Invariants
+
+1. **Mutual Invisibility Policy**:
+   * If User A blocks User B, the restriction applies bidirectionally across the platform. Neither user can discover or view rides published by the other.
+   * Search endpoints silently omit blocked users' rides prior to computing pagination and result counts.
+   * Direct ride lookup (`/rides/:id`) returns `404 Not Found` if the ride is driven by a mutually blocked party, preventing resource existence leakage.
+2. **Interaction Prevention & Historical Preservation**:
+   * Blocked users are prohibited from creating new bookings, sending new chat messages, submitting ratings, or receiving matched ride alerts involving each other.
+   * Pre-existing confirmed bookings and conversations remain readable for dispute and audit resolution, but active messaging is rendered strictly `isReadOnly: true`.
+   * Unblocking restores future eligibility without mutating historical records.
+3. **Instant Server-Side Account Revocation**:
+   * Suspended accounts are immediately denied all protected API operations (`403 Forbidden`).
+   * Because `SupabaseAuthGuard` / `VerifiedUserGuard` checks PostgreSQL account state, already-minted unexpired RS256 JWTs cannot be used to bypass suspension.
+   * Key rotation is not required to revoke individual abusive user sessions.
+4. **Confidential Allegation Lifecycle**:
+   * Report submission is an allegation requiring administrator adjudication, never triggering automatic user suspension.
+   * Reporter identities and internal administrative notes are confidential and never returned to ordinary users or reported parties.
+   * Self-reporting and duplicate flood spamming are rejected server-side.
+5. **Administrative Safeguards**:
+   * Administrators cannot suspend their own account (`CANNOT_SUSPEND_SELF`).
+   * Every administrative moderation action (investigation, resolution, dismissal, suspension, reinstatement, verification approval/rejection) produces an immutable record in `audit_logs`.
+

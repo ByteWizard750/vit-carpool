@@ -626,3 +626,89 @@ stateDiagram-v2
    * Open the generated `migration.sql` and append the hand-written SQL blocks (triggers, check constraints, GIST indexes, partial indexes).
    * Apply and test migrations against local Docker PostgreSQL databases (`vit_carpool_dev`, `vit_carpool_test`, `vit_carpool_shadow`).
 3. **Down-Migration Scripts**: For every versioned migration `migrations/<timestamp>_<name>/migration.sql`, maintain a companion `down.sql` providing safe rollback steps.
+
+---
+
+## 8. Trust, Safety & Moderation Schema Additions (Milestone 13)
+
+### 8.1 `blocks` Table
+```sql
+CREATE TABLE "blocks" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "blocker_id" UUID NOT NULL,
+    "blocked_id" UUID NOT NULL,
+    "reason" VARCHAR(255),
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "blocks_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "fk_blocks_blocker" FOREIGN KEY ("blocker_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "fk_blocks_blocked" FOREIGN KEY ("blocked_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE UNIQUE INDEX "idx_blocks_blocker_blocked_unique" ON "blocks"("blocker_id", "blocked_id");
+CREATE INDEX "idx_blocks_blocker" ON "blocks"("blocker_id");
+CREATE INDEX "idx_blocks_blocked" ON "blocks"("blocked_id");
+```
+
+### 8.2 `reports` Table & Enums
+```sql
+CREATE TYPE "ReportCategory" AS ENUM (
+    'SAFETY_CONCERN',
+    'HARASSMENT',
+    'NO_SHOW',
+    'FRAUD',
+    'FARE_DISPUTE',
+    'SPAM',
+    'INAPPROPRIATE_BEHAVIOR',
+    'OTHER'
+);
+
+CREATE TYPE "ReportStatus" AS ENUM (
+    'PENDING',
+    'INVESTIGATING',
+    'RESOLVED',
+    'DISMISSED'
+);
+
+CREATE TABLE "reports" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "reporter_id" UUID NOT NULL,
+    "reported_user_id" UUID,
+    "ride_id" UUID,
+    "booking_id" UUID,
+    "message_id" UUID,
+    "category" "ReportCategory" NOT NULL,
+    "description" TEXT NOT NULL,
+    "status" "ReportStatus" NOT NULL DEFAULT 'PENDING',
+    "resolution_notes" TEXT,
+    "reviewed_by" UUID,
+    "reviewed_at" TIMESTAMPTZ(6),
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "reports_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "fk_reports_reporter" FOREIGN KEY ("reporter_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "fk_reports_reported_user" FOREIGN KEY ("reported_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "fk_reports_ride" FOREIGN KEY ("ride_id") REFERENCES "rides"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "fk_reports_booking" FOREIGN KEY ("booking_id") REFERENCES "bookings"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "fk_reports_message" FOREIGN KEY ("message_id") REFERENCES "messages"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+CREATE INDEX "idx_reports_reporter" ON "reports"("reporter_id");
+CREATE INDEX "idx_reports_reported_user" ON "reports"("reported_user_id");
+CREATE INDEX "idx_reports_status" ON "reports"("status");
+CREATE INDEX "idx_reports_category" ON "reports"("category");
+CREATE INDEX "idx_reports_created_at" ON "reports"("created_at");
+```
+
+### 8.3 `users` Suspension Fields
+```sql
+ALTER TABLE "users"
+    ADD COLUMN "is_suspended" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "suspension_reason" TEXT,
+    ADD COLUMN "suspended_at" TIMESTAMPTZ(6),
+    ADD COLUMN "suspended_by" UUID;
+
+CREATE INDEX "idx_users_is_suspended" ON "users"("is_suspended");
+```
+

@@ -9,17 +9,62 @@ import {
   CheckCircle2,
   Lock,
   Star,
+  UserX,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { VerificationRequestModal } from '../features/modals/VerificationRequestModal';
 import { useAuth } from '../features/auth/AuthContext';
-import { DriverRatingSummaryDto } from '@vit-carpool/contracts';
+import { DriverRatingSummaryDto, BlockResponseDto } from '@vit-carpool/contracts';
 
 export const ProfilePage: React.FC = () => {
   const { user, token, logout, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [driverSummary, setDriverSummary] = useState<DriverRatingSummaryDto | null>(null);
+  const [blockedUsers, setBlockedUsers] = useState<BlockResponseDto[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [unblockingId, setUnblockingId] = useState<string | null>(null);
+
+  const fetchBlockedUsers = React.useCallback(async () => {
+    if (!token) return;
+    setLoadingBlocks(true);
+    try {
+      const res = await fetch('/moderation/blocks', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBlockedUsers(data);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoadingBlocks(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => {
+    fetchBlockedUsers();
+  }, [fetchBlockedUsers]);
+
+  const handleUnblock = async (targetUserId: string) => {
+    if (!token) return;
+    setUnblockingId(targetUserId);
+    try {
+      const res = await fetch(`/moderation/blocks/${targetUserId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchBlockedUsers();
+      }
+    } catch {
+      // silent
+    } finally {
+      setUnblockingId(null);
+    }
+  };
 
   React.useEffect(() => {
     if (!token || !user?.id) return;
@@ -256,6 +301,85 @@ export const ProfilePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Blocked Members Card */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid var(--border-light)',
+          padding: '24px 28px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <UserX size={18} style={{ color: '#dc2626' }} />
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+            Blocked Members ({blockedUsers.length})
+          </h3>
+        </div>
+        <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+          Blocked members are mutually invisible to you. Neither party will see each other's rides, and messaging between you is locked.
+        </p>
+
+        {loadingBlocks ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <Loader2 size={16} className="animate-spin" /> Loading blocked members...
+          </div>
+        ) : blockedUsers.length === 0 ? (
+          <div
+            style={{
+              padding: '16px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+            }}
+          >
+            You have not blocked any members.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {blockedUsers.map((b) => (
+              <div
+                key={b.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-light)',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                    {b.blockedUser?.fullName || 'Member'}
+                  </div>
+                  <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                    Blocked on {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(b.createdAt))}
+                    {b.reason && ` • Reason: ${b.reason}`}
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleUnblock(b.blockedId)}
+                  disabled={unblockingId === b.blockedId}
+                >
+                  {unblockingId === b.blockedId ? <Loader2 size={14} className="animate-spin" /> : 'Unblock'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Safety & Trust Invariants Card */}
       <div

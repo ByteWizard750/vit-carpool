@@ -15,6 +15,7 @@ import {
   DriverRatingSummaryDto,
   RatingEligibilityResponseDto,
 } from '@vit-carpool/contracts';
+import { ModerationService } from '../moderation/moderation.service';
 
 @Injectable()
 export class RatingsService {
@@ -23,6 +24,7 @@ export class RatingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   /**
@@ -86,6 +88,15 @@ export class RatingsService {
         // Invariant 2: Driver cannot rate themselves
         if (booking.driverId === user.id || booking.ride.driverId === user.id) {
           throw new BadRequestException('Drivers cannot rate their own rides.');
+        }
+
+        // Invariant 2.1: Mutual blocking check
+        const isBlocked = await this.moderationService.isMutuallyBlocked(user.id, booking.ride.driverId);
+        if (isBlocked) {
+          throw new ForbiddenException({
+            error: 'RATING_BLOCKED',
+            message: 'Cannot submit a rating for a user with an active block.',
+          });
         }
 
         // Invariant 3: Reviewed driver must be the actual driver of that ride

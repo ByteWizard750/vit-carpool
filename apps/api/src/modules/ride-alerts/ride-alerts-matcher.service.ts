@@ -66,6 +66,11 @@ export class RideAlertsMatcherService {
           WHERE a.status = 'ACTIVE'
             AND a.audience = ${ride.audience}::audience_type
             AND a.user_id != ${ride.driverId}::uuid
+            AND a.user_id NOT IN (
+              SELECT blocked_id FROM blocks WHERE blocker_id = ${ride.driverId}::uuid
+              UNION
+              SELECT blocker_id FROM blocks WHERE blocked_id = ${ride.driverId}::uuid
+            )
             AND a.min_seats <= ${ride.availableSeats}
             AND (
               -- Spatial origin match
@@ -119,6 +124,11 @@ export class RideAlertsMatcherService {
           WHERE a.status = 'ACTIVE'
             AND a.audience = ${ride.audience}::audience_type
             AND a.user_id != ${ride.driverId}::uuid
+            AND a.user_id NOT IN (
+              SELECT blocked_id FROM blocks WHERE blocker_id = ${ride.driverId}::uuid
+              UNION
+              SELECT blocker_id FROM blocks WHERE blocked_id = ${ride.driverId}::uuid
+            )
             AND a.min_seats <= ${ride.availableSeats}
             AND (
               LOWER(a.origin) LIKE '%' || LOWER(${ride.origin}) || '%'

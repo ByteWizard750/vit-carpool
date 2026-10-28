@@ -21,6 +21,9 @@ export class UsersController {
       verificationMethod: user.verificationMethod,
       verifiedAt: user.verifiedAt ? user.verifiedAt.toISOString() : null,
       role: user.role,
+      isSuspended: user.isSuspended,
+      suspensionReason: user.suspensionReason,
+      suspendedAt: user.suspendedAt ? user.suspendedAt.toISOString() : null,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     };

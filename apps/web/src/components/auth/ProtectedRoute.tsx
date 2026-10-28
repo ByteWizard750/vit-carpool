@@ -7,11 +7,13 @@ import { Button } from '../common/Button';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireVerified?: boolean;
+  requireAdmin?: boolean;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requireVerified = false,
+  requireAdmin = false,
 }) => {
   const { user, token, isLoading } = useAuth();
   const location = useLocation();
@@ -50,8 +52,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
+  // Requires admin role
+  if (requireAdmin && user?.role !== 'ADMIN') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   // Account suspended by administration
-  if (user?.verificationStatus === 'SUSPENDED') {
+  if (user?.verificationStatus === 'SUSPENDED' || (user as any)?.isSuspended) {
     return (
       <div className="container" style={{ padding: '60px 16px', maxWidth: '640px' }}>
         <div

@@ -7,6 +7,7 @@ import {
   X,
   ArrowRight,
   ShieldCheck,
+  ShieldAlert,
   LogOut,
   AlertCircle,
   Clock,
@@ -113,6 +114,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               <NavLink to="/vehicles" className={getNavLinkClass} id="nav-link-vehicles">
                 Vehicles
               </NavLink>
+              {user.role === 'ADMIN' && (
+                <NavLink to="/admin" className={getNavLinkClass} id="nav-link-admin">
+                  <ShieldAlert size={15} style={{ marginRight: '4px', verticalAlign: 'text-bottom', color: '#dc2626' }} /> Admin
+                </NavLink>
+              )}
             </>
           ) : (
             <>
@@ -409,6 +415,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               <Link to="/profile" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <User size={16} style={{ marginRight: '6px' }} /> Profile
               </Link>
+              {user.role === 'ADMIN' && (
+                <Link to="/admin" className="nav-link" onClick={() => setMobileMenuOpen(false)} style={{ color: '#dc2626', fontWeight: 700 }}>
+                  <ShieldAlert size={16} style={{ marginRight: '6px' }} /> Admin Console
+                </Link>
+              )}
               <div style={{ paddingTop: '8px' }}>
                 <Button
                   variant="outline"

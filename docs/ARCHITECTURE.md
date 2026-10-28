@@ -299,4 +299,32 @@ sequenceDiagram
     end
 ```
 
+---
+
+## 7. Trust, Safety, Blocking & Moderation Architecture
+
+### 7.1 User-Blocking & Mutual Invisibility
+* **Storage**: The `blocks` table enforces unique pairs `(blocker_id, blocked_id)` and maintains btree indexes for high-throughput mutual checks.
+* **Mutual Policy**: `isMutuallyBlocked(userA, userB)` evaluates whether either party has blocked the other.
+* **Enforcement Points**:
+  * **Ride Discovery**: `RidesService.searchRides` extracts all mutually blocked user IDs and injects `where: { driverId: { notIn: blockedIds } }` into Prisma queries.
+  * **Direct Ride Details**: `RidesService.getRideById` returns `404 Not Found` if the driver is mutually blocked with the caller.
+  * **Booking Requests**: `BookingsService.requestBooking` checks mutual blocks and rejects with `403 Forbidden` (`BOOKING_NOT_PERMITTED`).
+  * **Private Messaging**: `ChatService.getOrCreateBookingConversation` rejects blocked creation with `403 Forbidden`. Existing conversations become `isReadOnly: true`, and `sendMessage` rejects subsequent messages.
+  * **Ride Alerts**: `RideAlertsMatcherService` excludes mutually blocked drivers and passengers in the spatial/text matching queries.
+  * **Ratings & Reviews**: `RatingsService.createRating` rejects ratings between mutually blocked parties (`403 Forbidden`).
+
+### 7.2 Incident Reporting & Moderation Lifecycle
+* **Model**: The `reports` table stores allegations categorized by `ReportCategory` (`SAFETY_CONCERN`, `HARASSMENT`, `NO_SHOW`, `FRAUD`, `FARE_DISPUTE`, `SPAM`, `INAPPROPRIATE_BEHAVIOR`, `OTHER`).
+* **Lifecycle**: `PENDING` -> `INVESTIGATING` -> `RESOLVED` / `DISMISSED`.
+* **Confidentiality**: Descriptions and reporter identities are accessible exclusively to authorized administrators. Ordinary users and reported parties never receive internal investigation notes or reporter metadata.
+* **Abuse Prevention**: Self-reporting is rejected server-side, and duplicate pending complaints against the same target within a 5-minute window are rejected with `409 Conflict`.
+
+### 7.3 Real-Time Server-Side Account Suspension
+* **Persistent Status**: `users.is_suspended` boolean and `users.verification_status = 'SUSPENDED'`.
+* **Guards**: `VerifiedUserGuard` and `AdminGuard` inspect database state on authenticated requests.
+* **Instant Invalidation**: Suspending an account immediately blocks subsequent requests even when bearing an active, unexpired RS256 JWT, eliminating the need for key rotation.
+* **Audit Trail**: Every suspension and reinstatement writes an immutable entry to `audit_logs` capturing reason, timestamp, and administrator identity.
+
+
 This ensures that concurrent requests from multiple drivers or rapid clicking cannot exceed the car's available seats.

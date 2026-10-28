@@ -172,3 +172,28 @@ export {
   type NotificationsListResponseDto,
 } from './notifications.contract';
 
+export {
+  CreateBlockSchema,
+  type CreateBlockDto,
+  BlockResponseSchema,
+  type BlockResponseDto,
+  BlockStatusResponseSchema,
+  type BlockStatusResponseDto,
+  BlockedUserSummarySchema,
+  type BlockedUserSummaryDto,
+  ReportCategorySchema,
+  type ReportCategory,
+  ReportStatusSchema,
+  type ReportStatus,
+  CreateReportSchema,
+  type CreateReportDto,
+  ResolveReportSchema,
+  type ResolveReportDto,
+  ReportResponseSchema,
+  type ReportResponseDto,
+  SuspendUserSchema,
+  type SuspendUserDto,
+  AdminUserSummarySchema,
+  type AdminUserSummaryDto,
+} from './moderation.contract';
+

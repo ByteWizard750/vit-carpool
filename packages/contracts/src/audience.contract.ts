@@ -78,6 +78,9 @@ export const UserProfileResponseSchema = z.object({
   verificationMethod: VerificationMethodSchema.nullable(),
   verifiedAt: z.string().datetime().nullable(),
   role: UserRoleSchema,
+  isSuspended: z.boolean().optional(),
+  suspensionReason: z.string().nullable().optional(),
+  suspendedAt: z.string().datetime().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

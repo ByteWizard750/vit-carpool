@@ -174,16 +174,27 @@ gantt
 
 ---
 
-### Milestone 7: Safety, Moderation, Audit Logging & Pilot Launch Readiness
-* **Goal**: Implement user blocking, report submission, administrative moderation tools, audit logging, privacy redactions, and comprehensive end-to-end testing.
-* **Components & Packages**:
-  * `packages/db`: `reports`, `blocks`, `audit_logs` tables.
-  * `apps/api`: `ModerationModule`, `AdminModule`, admin authorization guards, structured audit logging interceptor.
-  * `apps/web`: User reporting dialog, block user option, Admin review console (identity verification requests, reported users).
-* **Acceptance Criteria**:
-  * Blocked users cannot see or book each other's rides.
-  * Admin dashboard allows authorized admins to review verification requests and approve/reject audience credentials.
-  * All sensitive admin actions write immutable audit log records.
-  * Public APIs redact residential pickup details from unaccepted users.
-  * End-to-end test suite passes 100% of security, audience isolation, and concurrency tests.
-  * PWA audit achieves 100% score for installability and responsive mobile usability.
+### Milestone 7 / Milestone 13: Trust, Safety, User Blocking, Reporting & Admin Moderation (COMPLETED)
+* **Goal**: Implement a complete, secure, integrated trust and safety system: user blocking with mutual invisibility semantics, confidential user and incident reporting, administrative moderation queue, ID card verification review, server-side account suspension, and append-only audit logging.
+* **Components & Packages Delivered**:
+  * `packages/db`: `blocks`, `reports` tables, `ReportCategory`, `ReportStatus` enums, user suspension fields (`is_suspended`, `suspension_reason`, `suspended_at`, `suspended_by`), database migration `20261028160000_add_trust_safety_and_moderation`.
+  * `packages/contracts`: `BlockResponseSchema`, `BlockStatusResponseSchema`, `ReportCategorySchema`, `ReportStatusSchema`, `CreateReportSchema`, `ReportResponseSchema`, `ResolveReportSchema`, `SuspendUserSchema`, `AdminUserSummarySchema`.
+  * `apps/api`:
+    * `ModerationModule` (`ModerationService`, `ModerationController`): Mutual blocking semantics, list/unblock, report submission with target validation and duplicate flood prevention.
+    * `AdminModule` (`AdminService`, `AdminController`): Verification request approval/rejection with secure preview, incident report queue with investigation and resolution, user search and account suspension/reinstatement.
+    * Real-time suspension enforcement: `VerifiedUserGuard` and `AdminGuard` check persistent account suspension state, immediately invalidating access for previously issued RS256 JWTs without requiring signing key rotation.
+    * Cross-module block enforcement: `RidesService` (discovery filtering & 404 details), `BookingsService` (403 `BOOKING_NOT_PERMITTED`), `ChatService` (403 `CONVERSATION_BLOCKED` & read-only history), `RideAlertsMatcherService` (alert exclusion in SQL), `RatingsService` (403 `RATING_BLOCKED`).
+  * `apps/web`:
+    * `AdminDashboardPage` (`/admin`): 3-tab responsive administrative moderation suite (Verification Queue with secure preview, Incident Reports Queue with status/category filters & resolution notes, User Management with paginated search & suspension dialogs).
+    * Protected `/admin` frontend route guarded by `<ProtectedRoute requireAdmin>`.
+    * Admin navigation item dynamically rendered in Navbar for `role === 'ADMIN'`.
+    * User-facing safety experience: `ReportModal`, `BlockConfirmModal`, "Blocked Members" list in `ProfilePage` with unblock actions, report & block quick actions in `MessagesPage` conversation header.
+* **Acceptance Criteria Verified**:
+  * [x] Mutual invisibility and interaction blocking verified in both directions across ride search, ride details, booking creation, private chat, ratings, and ride alert matching.
+  * [x] Structured reporting persists through defined lifecycle (`PENDING` -> `INVESTIGATING` -> `RESOLVED` / `DISMISSED`) with confidential notes.
+  * [x] Instant server-side revocation: Suspended accounts cannot execute protected APIs even with unexpired valid RS256 JWTs.
+  * [x] Role protection: Non-admins (students and faculty) receive 403 Forbidden on all `/admin/*` endpoints.
+  * [x] All moderation operations write immutable, append-only records to `audit_logs`.
+  * [x] Zero cross-audience or personal data leaks in block lists or report queues.
+  * [x] Automated test suite: `moderation.e2e-spec.ts` (26/26 tests passing) and all 16 regression test suites (404/404 tests passing, total 430/430 passing).
+

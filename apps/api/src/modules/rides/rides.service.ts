@@ -22,6 +22,7 @@ import {
 import { RatingsService } from '../ratings/ratings.service';
 import { RideAlertsMatcherService } from '../ride-alerts/ride-alerts-matcher.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ModerationService } from '../moderation/moderation.service';
 
 @Injectable()
 export class RidesService {
@@ -33,6 +34,7 @@ export class RidesService {
     private readonly ratingsService: RatingsService,
     private readonly alertsMatcher: RideAlertsMatcherService,
     private readonly notificationsService: NotificationsService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   /**
@@ -467,6 +469,8 @@ export class RidesService {
       spatialRideIds = rows.map((r) => r.id);
     }
 
+    const blockedUserIds = await this.moderationService.getMutualBlockedUserIds(user.id);
+
     const where: Prisma.RideWhereInput = {
       audience: user.audience, // Strict database-level cohort isolation
       status: RideStatus.SCHEDULED, // Never return cancelled rides
@@ -481,6 +485,7 @@ export class RidesService {
         deletedAt: null, // Exclude rides whose vehicle has been deactivated
       },
       ...(spatialRideIds !== null ? { id: { in: spatialRideIds } } : {}),
+      ...(blockedUserIds.length > 0 ? { driverId: { notIn: blockedUserIds } } : {}),
     };
 
     if (dto.maxCost !== undefined) {
@@ -713,6 +718,13 @@ export class RidesService {
     // Strict Audience Isolation: do not expose student rides to faculty or vice versa
     if (ride.audience !== user.audience) {
       throw new NotFoundException('Ride not found or not accessible.');
+    }
+
+    if (ride.driverId !== user.id) {
+      const isBlocked = await this.moderationService.isMutuallyBlocked(user.id, ride.driverId);
+      if (isBlocked) {
+        throw new NotFoundException('Ride not found or not accessible.');
+      }
     }
 
     const ratingMap = await this.ratingsService.getDriverRatingAggregates([ride.driverId]);

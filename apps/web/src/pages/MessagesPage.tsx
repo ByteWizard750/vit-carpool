@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   ChevronRight,
   RefreshCw,
+  UserX,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
@@ -20,6 +21,8 @@ import {
   ConversationDetailDto,
   MessageResponseDto,
 } from '@vit-carpool/contracts';
+import { ReportModal } from '../components/moderation/ReportModal';
+import { BlockConfirmModal } from '../components/moderation/BlockConfirmModal';
 
 export const MessagesPage: React.FC = () => {
   const { user, token } = useAuth();
@@ -43,6 +46,10 @@ export const MessagesPage: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // Moderation action modals
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -611,8 +618,50 @@ export const MessagesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Return to Booking / Ride link */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Moderation & Navigation Controls */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setReportModalOpen(true)}
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#b91c1c',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      padding: '5px 9px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Report safety or conduct violation"
+                  >
+                    <ShieldAlert size={13} />
+                    <span>Report</span>
+                  </button>
+
+                  <button
+                    onClick={() => setBlockModalOpen(true)}
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#4b5563',
+                      background: '#f3f4f6',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: '6px',
+                      padding: '5px 9px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Block this member"
+                  >
+                    <UserX size={13} />
+                    <span>Block</span>
+                  </button>
+
                   <Link
                     to={
                       activeConv.otherParticipant.role === 'DRIVER'
@@ -908,6 +957,33 @@ export const MessagesPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Safety Moderation Modals */}
+      {activeConv && (
+        <>
+          <ReportModal
+            isOpen={reportModalOpen}
+            onClose={() => setReportModalOpen(false)}
+            targetName={activeConv.otherParticipant.fullName}
+            reportedUserId={activeConv.otherParticipant.id}
+            rideId={activeConv.rideId}
+            bookingId={activeConv.bookingId}
+          />
+
+          <BlockConfirmModal
+            isOpen={blockModalOpen}
+            onClose={() => setBlockModalOpen(false)}
+            targetUserId={activeConv.otherParticipant.id}
+            targetUserName={activeConv.otherParticipant.fullName}
+            onBlocked={() => {
+              fetchConversations();
+              if (selectedConvId) {
+                fetchActiveConversation(selectedConvId);
+              }
+            }}
+          />
+        </>
+      )}
     </div>
   );
 };

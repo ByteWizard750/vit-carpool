@@ -14,6 +14,7 @@ import {
   ConversationDetailDto,
   ConversationSummaryDto,
 } from '@vit-carpool/contracts';
+import { ModerationService } from '../moderation/moderation.service';
 
 @Injectable()
 export class ChatService {
@@ -22,6 +23,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   /**
@@ -183,6 +185,17 @@ export class ChatService {
       throw new ForbiddenException('You do not have access to this conversation.');
     }
 
+    const isBlocked = await this.moderationService.isMutuallyBlocked(
+      booking.passengerId,
+      booking.driverId,
+    );
+    if (isBlocked) {
+      throw new ForbiddenException({
+        error: 'CONVERSATION_BLOCKED',
+        message: 'Messaging is disabled due to an active block between participants.',
+      });
+    }
+
     // Upsert conversation to prevent race conditions.
     // Under concurrent initialization for the same booking, Prisma's upsert can race
     // at the database level and raise P2002 on the unique constraint on booking_id.
@@ -284,11 +297,22 @@ export class ChatService {
     const otherUser = isUserPassenger ? conversation.driver : conversation.passenger;
     const otherRole = isUserPassenger ? ('DRIVER' as const) : ('PASSENGER' as const);
 
-    const readOnlyState = this.determineReadOnlyState(
+    let readOnlyState = this.determineReadOnlyState(
       conversation.booking.status,
       conversation.ride.status,
       conversation.ride.departureTime,
     );
+
+    const isBlocked = await this.moderationService.isMutuallyBlocked(
+      conversation.passengerId,
+      conversation.driverId,
+    );
+    if (isBlocked) {
+      readOnlyState = {
+        isReadOnly: true,
+        readOnlyReason: 'Messaging is disabled because a block is active between participants.',
+      };
+    }
 
     const messages: MessageResponseDto[] = rawMessages.map((m) => ({
       id: m.id,
@@ -369,6 +393,17 @@ export class ChatService {
     // Invariant: caller must be passenger or driver
     if (conversation.passengerId !== user.id && conversation.driverId !== user.id) {
       throw new ForbiddenException('You do not have access to this conversation.');
+    }
+
+    const isBlocked = await this.moderationService.isMutuallyBlocked(
+      conversation.passengerId,
+      conversation.driverId,
+    );
+    if (isBlocked) {
+      throw new ForbiddenException({
+        error: 'CONVERSATION_BLOCKED',
+        message: 'Messaging is disabled because a block is active between participants.',
+      });
     }
 
     // Enforce read-only rules

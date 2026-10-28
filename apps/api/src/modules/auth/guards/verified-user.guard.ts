@@ -19,15 +19,17 @@ export class VerifiedUserGuard implements CanActivate {
       });
     }
 
-    if (user.verificationStatus === VerificationStatus.VERIFIED) {
-      return true;
-    }
-
-    if (user.verificationStatus === VerificationStatus.SUSPENDED) {
+    if (user.isSuspended || user.verificationStatus === VerificationStatus.SUSPENDED) {
       throw new ForbiddenException({
         error: 'ACCOUNT_SUSPENDED',
-        message: 'Your account has been suspended. Carpooling access is locked.',
+        message: user.suspensionReason
+          ? `Your account has been suspended: ${user.suspensionReason}`
+          : 'Your account has been suspended. Carpooling access is locked.',
       });
+    }
+
+    if (user.verificationStatus === VerificationStatus.VERIFIED) {
+      return true;
     }
 
     if (user.verificationStatus === VerificationStatus.REJECTED) {
