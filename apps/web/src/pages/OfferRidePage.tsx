@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   VehicleResponseDto,
@@ -467,16 +469,11 @@ export const OfferRidePage: React.FC = () => {
   const isSelectedVehicleDeleted = selectedTemplate && !vehicles.some((v) => v.id === selectedTemplate.vehicleId);
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '740px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-          {editRideId ? 'Edit Published Ride' : 'Offer a Campus Ride'}
-        </h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Share your daily commute with verified peers in your {user?.audience} cohort. Help reduce campus traffic and split fuel costs.
-        </p>
-      </div>
+    <PageShell width="narrow">
+      <PageHeader
+        title={editRideId ? 'Edit Published Ride' : 'Offer a Campus Ride'}
+        description="Share your daily commute with verified peers in your campus community. Split fuel costs, skip the solo drive."
+      />
 
       {/* Mode Switcher Tabs (Only visible when not editing an existing ride) */}
       {!editRideId && (
@@ -1361,6 +1358,6 @@ export const OfferRidePage: React.FC = () => {
           </div>
         </form>
       )}
-    </div>
+    </PageShell>
   );
 };

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Bell,
   Sparkles,
@@ -17,6 +16,9 @@ import {
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { RouteSpine } from '../components/common/RouteSpine';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
 import { useAuth } from '../features/auth/AuthContext';
 import {
@@ -305,56 +307,12 @@ export const RideAlertsPage: React.FC = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '880px' }}>
-      {/* Top Header Card */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '28px',
-          padding: '24px 28px',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              backgroundColor: '#f5f3ff',
-              border: '1px solid #ddd6fe',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#7c3aed',
-            }}
-          >
-            <Sparkles size={24} />
-          </div>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-              Ride Alerts
-            </h1>
-            <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Save your preferred routes and get notified automatically when a matching ride is posted
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Link to="/notifications" style={{ textDecoration: 'none' }}>
-            <Button variant="ghost" size="sm" leftIcon={<Bell size={15} />}>
-              Notification Inbox
-            </Button>
-          </Link>
-
+    <PageShell width="content">
+      <PageHeader
+        title="Ride Alerts"
+        description="We'll notify you automatically when a matching ride heading your way is published."
+        tabs={<MyTripsTabs counts={{ alerts: alerts.length }} />}
+        action={
           <Button
             variant={activeTab === 'CREATE' ? 'outline' : 'primary'}
             size="sm"
@@ -366,10 +324,10 @@ export const RideAlertsPage: React.FC = () => {
             leftIcon={activeTab === 'CREATE' ? <Bell size={15} /> : <Plus size={15} />}
             id="tab-toggle-btn"
           >
-            {activeTab === 'CREATE' ? 'View My Alerts' : 'Create New Alert'}
+            {activeTab === 'CREATE' ? 'View My Alerts' : 'New Alert'}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Success Notification Banner */}
       {successMsg && (
@@ -1068,6 +1026,6 @@ export const RideAlertsPage: React.FC = () => {
           </div>
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 };

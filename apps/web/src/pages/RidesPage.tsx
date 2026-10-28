@@ -29,6 +29,8 @@ import { Modal } from '../components/common/Modal';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
 import { RouteSpine } from '../components/common/RouteSpine';
 import { SeatDots } from '../components/common/SeatDots';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PublicRideSummaryDto,
@@ -268,16 +270,18 @@ export const RidesPage: React.FC = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '32px 16px 64px' }}>
-      {/* Title & Introduction */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-          Campus Ride Discovery
-        </h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Search daily commute corridors, find verified peers traveling your way, and request seats with non-commercial fuel sharing.
-        </p>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Campus Ride Discovery"
+        description="Search daily commute corridors, find verified peers traveling your way, and split the fuel cost."
+        action={
+          <Link to="/ride-alerts" style={{ textDecoration: 'none' }}>
+            <Button variant="outline" size="sm">
+              Create Alert
+            </Button>
+          </Link>
+        }
+      />
 
       {/* Search & Filter Card */}
       <form
@@ -298,8 +302,8 @@ export const RidesPage: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
           {/* Origin Autocomplete */}
           <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-              <MapPin size={13} style={{ color: '#2563eb' }} /> LEAVING FROM
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <MapPin size={14} style={{ color: '#2563eb' }} /> Leaving from
             </label>
             <LocationAutocomplete
               id="rides-search-origin"
@@ -315,8 +319,8 @@ export const RidesPage: React.FC = () => {
 
           {/* Destination Autocomplete */}
           <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-              <Navigation size={13} style={{ color: '#16a34a' }} /> GOING TO
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <Navigation size={14} style={{ color: '#16a34a' }} /> Going to
             </label>
             <LocationAutocomplete
               id="rides-search-destination"
@@ -332,8 +336,8 @@ export const RidesPage: React.FC = () => {
 
           {/* Date Picker */}
           <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-              <Calendar size={13} style={{ color: 'var(--color-brand-600)' }} /> TRAVEL DATE
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <Calendar size={14} style={{ color: 'var(--color-brand-600)' }} /> Travel date
             </label>
             <input
               type="date"
@@ -357,8 +361,8 @@ export const RidesPage: React.FC = () => {
 
           {/* Min Seats */}
           <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-              <Users size={13} style={{ color: 'var(--color-brand-600)' }} /> SEATS NEEDED
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <Users size={14} style={{ color: 'var(--color-brand-600)' }} /> Seats needed
             </label>
             <select
               value={seats}
@@ -1046,6 +1050,6 @@ export const RidesPage: React.FC = () => {
           </div>
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 };

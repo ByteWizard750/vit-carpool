@@ -18,6 +18,10 @@ import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { RouteSpine } from '../components/common/RouteSpine';
 import { RateDriverModal } from '../components/ratings/RateDriverModal';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PassengerBookingResponseDto,
@@ -258,16 +262,19 @@ export const BookingsPage: React.FC = () => {
     : driverBookings;
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '880px' }}>
-      {/* Page Title */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-          Carpool Bookings & Seat Requests
-        </h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Manage your passenger travel tickets and handle incoming seat requests for your published drives.
-        </p>
-      </div>
+    <PageShell width="content">
+      <PageHeader
+        title="Carpool Bookings & Seat Requests"
+        description="Manage your passenger travel tickets and handle incoming seat requests for your published drives."
+        tabs={
+          <MyTripsTabs
+            counts={{
+              bookings: passengerBookings.length,
+              driving: driverBookings.length,
+            }}
+          />
+        }
+      />
 
       {/* Segmented Tab Bar */}
       <div
@@ -411,28 +418,7 @@ export const BookingsPage: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span
-                            style={{
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              backgroundColor:
-                                b.status === 'CONFIRMED'
-                                  ? '#dcfce7'
-                                  : b.status === 'PENDING'
-                                  ? '#fef3c7'
-                                  : '#f1f5f9',
-                              color:
-                                b.status === 'CONFIRMED'
-                                  ? '#166534'
-                                  : b.status === 'PENDING'
-                                  ? '#92400e'
-                                  : '#64748b',
-                            }}
-                          >
-                            {b.status}
-                          </span>
+                          <StatusBadge status={b.status} domain="booking" />
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             Requested {b.requestedSeats} {b.requestedSeats === 1 ? 'seat' : 'seats'}
                           </span>
@@ -801,6 +787,6 @@ export const BookingsPage: React.FC = () => {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Car,
   Home,
@@ -9,8 +9,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   LogOut,
-  AlertCircle,
-  Clock,
   Calendar,
   Ticket,
   User,
@@ -22,6 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '../common/Button';
+import { AccountMenu } from '../navigation/AccountMenu';
 import { useAuth } from '../../features/auth/AuthContext';
 
 interface NavbarProps {
@@ -34,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   React.useEffect(() => {
     if (!user || !token) return;
@@ -87,38 +87,56 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         <nav className="nav-desktop-links" aria-label="Primary Navigation">
           {user ? (
             <>
-              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home">
-                Home
-              </NavLink>
               <NavLink to="/dashboard" className={getNavLinkClass} id="nav-link-dashboard">
                 Dashboard
               </NavLink>
               <NavLink to="/rides" className={getNavLinkClass} id="nav-link-rides">
                 Find Rides
               </NavLink>
-              <NavLink to="/offer-ride" className={getNavLinkClass} id="nav-link-offer">
-                Offer a Ride
+              <NavLink
+                to="/bookings"
+                className={() =>
+                  ['/bookings', '/my-rides', '/recurring-commutes', '/ride-alerts'].some((p) =>
+                    location.pathname.startsWith(p)
+                  )
+                    ? 'nav-link active'
+                    : 'nav-link'
+                }
+                id="nav-link-trips"
+              >
+                My Trips
               </NavLink>
-              <NavLink to="/my-rides" className={getNavLinkClass} id="nav-link-my-rides">
-                My Rides
+              <NavLink
+                to="/messages"
+                className={() =>
+                  ['/messages', '/notifications'].some((p) => location.pathname.startsWith(p))
+                    ? 'nav-link active'
+                    : 'nav-link'
+                }
+                id="nav-link-inbox"
+              >
+                <span>Inbox</span>
+                {unreadCount + unreadNotifCount > 0 && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '18px',
+                      height: '18px',
+                      padding: '0 4px',
+                      borderRadius: '9999px',
+                      backgroundColor: 'var(--brand-blue, #2340b8)',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      marginLeft: '4px',
+                    }}
+                  >
+                    {unreadCount + unreadNotifCount > 99 ? '99+' : unreadCount + unreadNotifCount}
+                  </span>
+                )}
               </NavLink>
-              <NavLink to="/bookings" className={getNavLinkClass} id="nav-link-bookings">
-                Bookings
-              </NavLink>
-              <NavLink to="/recurring-commutes" className={getNavLinkClass} id="nav-link-recurring">
-                Recurring
-              </NavLink>
-              <NavLink to="/ride-alerts" className={getNavLinkClass} id="nav-link-alerts">
-                Ride Alerts
-              </NavLink>
-              <NavLink to="/vehicles" className={getNavLinkClass} id="nav-link-vehicles">
-                Vehicles
-              </NavLink>
-              {user.role === 'ADMIN' && (
-                <NavLink to="/admin" className={getNavLinkClass} id="nav-link-admin">
-                  <ShieldAlert size={15} style={{ marginRight: '4px', verticalAlign: 'text-bottom', color: '#dc2626' }} /> Admin
-                </NavLink>
-              )}
             </>
           ) : (
             <>
@@ -141,173 +159,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         {/* Desktop Actions */}
         <div className="nav-actions">
           {user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Messages Quick-Action Icon Button on Top */}
-              <NavLink
-                to="/messages"
-                title="Messages & Ride Chats"
-                id="nav-messages-icon-btn"
-                style={({ isActive }) => ({
-                  position: 'relative',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  backgroundColor: isActive ? '#eff6ff' : '#ffffff',
-                  border: isActive ? '1.5px solid #3b82f6' : '1px solid var(--border-medium)',
-                  color: isActive ? '#2563eb' : 'var(--text-secondary)',
-                  textDecoration: 'none',
-                  transition: 'all 0.15s ease',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                })}
-              >
-                <MessageSquare size={18} />
-                {unreadCount > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      backgroundColor: '#ef4444',
-                      color: '#ffffff',
-                      fontSize: '0.65rem',
-                      fontWeight: 800,
-                      minWidth: '18px',
-                      height: '18px',
-                      padding: '0 4px',
-                      borderRadius: '9999px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px solid #ffffff',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                    }}
-                    id="nav-unread-badge"
-                  >
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </NavLink>
-
-              {/* Notifications Quick-Action Icon Button on Top */}
-              <NavLink
-                to="/notifications"
-                title="Notifications"
-                id="nav-notifications-icon-btn"
-                style={({ isActive }) => ({
-                  position: 'relative',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  backgroundColor: isActive ? '#eff6ff' : '#ffffff',
-                  border: isActive ? '1.5px solid #3b82f6' : '1px solid var(--border-medium)',
-                  color: isActive ? '#2563eb' : 'var(--text-secondary)',
-                  textDecoration: 'none',
-                  transition: 'all 0.15s ease',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                })}
-              >
-                <Bell size={18} />
-                {unreadNotifCount > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      backgroundColor: '#ef4444',
-                      color: '#ffffff',
-                      fontSize: '0.65rem',
-                      fontWeight: 800,
-                      minWidth: '18px',
-                      height: '18px',
-                      padding: '0 4px',
-                      borderRadius: '9999px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px solid #ffffff',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                    }}
-                    id="nav-notifications-unread-badge"
-                  >
-                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
-                  </span>
-                )}
-              </NavLink>
-              {user.verificationStatus === 'PENDING' && (
-                <button
-                  type="button"
-                  onClick={onOpenVerification}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 10px',
-                    borderRadius: '9999px',
-                    backgroundColor: '#fef3c7',
-                    color: '#92400e',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    border: '1px solid #fde68a',
-                    cursor: 'pointer',
-                  }}
-                  title="Click to submit verification request"
-                  id="nav-pending-badge"
-                >
-                  <Clock size={13} />
-                  <span>Pending Verification</span>
-                </button>
-              )}
-
-              {user.verificationStatus === 'SUSPENDED' && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 10px',
-                    borderRadius: '9999px',
-                    backgroundColor: '#fee2e2',
-                    color: '#991b1b',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                  }}
-                  id="nav-suspended-badge"
-                >
-                  <AlertCircle size={13} />
-                  <span>Suspended</span>
-                </div>
-              )}
-
-              {/* Profile Link Button */}
-              <Link to="/profile" style={{ textDecoration: 'none' }}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<User size={14} />}
-                  id="nav-profile-btn"
-                  title="View account profile"
-                >
-                  {user.fullName.split(' ')[0]}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Link to="/offer-ride" style={{ textDecoration: 'none' }} id="nav-link-offer">
+                <Button variant="primary" size="sm" id="nav-btn-offer-ride">
+                  Offer a Ride
                 </Button>
               </Link>
-
-              {/* Logout Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSignOut}
-                leftIcon={<LogOut size={13} />}
-                id="nav-signout-btn"
-                title="Sign out of current account"
-              >
-                Sign Out
-              </Button>
+              <AccountMenu onOpenVerification={onOpenVerification} />
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -323,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                   leftIcon={<ShieldCheck size={14} />}
                   id="nav-signin-btn"
                 >
-                  Sign In / Sign Up
+                  Sign In
                 </Button>
               </Link>
             </div>

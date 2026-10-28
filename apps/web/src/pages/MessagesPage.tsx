@@ -15,6 +15,9 @@ import {
   UserX,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { InboxTabs } from '../components/navigation/InboxTabs';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   ConversationSummaryDto,
@@ -290,41 +293,12 @@ export const MessagesPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="container"
-      style={{
-        padding: '16px 16px 20px',
-        maxWidth: '1100px',
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* Page Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '14px',
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              color: 'var(--text-primary)',
-              margin: '0 0 2px',
-            }}
-          >
-            Ride Messages & Driver Chat
-          </h1>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Private, ride-specific communication between passengers and verified hosts.
-          </p>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Ride Messages"
+        description="Private, ride-specific communication between passengers and verified hosts."
+        tabs={<InboxTabs counts={{ messages: conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0) }} />}
+      />
 
       {/* Main Chat Interface Container */}
       <div
@@ -984,6 +958,6 @@ export const MessagesPage: React.FC = () => {
           />
         </>
       )}
-    </div>
+    </PageShell>
   );
 };

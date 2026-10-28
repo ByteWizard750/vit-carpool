@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { RouteSpine } from '../components/common/RouteSpine';
+import { PageShell } from '../components/layout/PageShell';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PassengerBookingResponseDto,
@@ -73,18 +74,18 @@ export const DashboardPage: React.FC = () => {
   const activeRides = rides.filter((r) => r.status === 'SCHEDULED');
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px' }}>
+    <PageShell width="wide">
       {/* Welcome & Profile Header */}
       <div
         style={{
-          padding: '28px 32px',
-          background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-          borderRadius: '16px',
-          border: '1px solid #bfdbfe',
+          padding: '24px 28px',
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          border: '1px solid var(--border-subtle, #e5e7eb)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
-          marginBottom: '32px',
+          marginBottom: '28px',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -452,6 +453,6 @@ export const DashboardPage: React.FC = () => {
           </Link>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 };

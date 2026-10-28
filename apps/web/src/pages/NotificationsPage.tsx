@@ -18,6 +18,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { InboxTabs } from '../components/navigation/InboxTabs';
 import { useAuth } from '../features/auth/AuthContext';
 import { NotificationResponseDto } from '@vit-carpool/contracts';
 
@@ -228,97 +231,38 @@ export const NotificationsPage: React.FC = () => {
     filter === 'UNREAD' ? notifications.filter((n) => !n.isRead) : notifications;
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '880px' }}>
-      {/* Top Header Card */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '28px',
-          padding: '24px 28px',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#2563eb',
-            }}
-          >
-            <Bell size={24} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                Notifications
-              </h1>
-              {unreadCount > 0 && (
-                <span
-                  style={{
-                    backgroundColor: '#ef4444',
-                    color: '#ffffff',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '9999px',
-                  }}
-                  id="notifications-unread-count-badge"
-                >
-                  {unreadCount} new
-                </span>
-              )}
-            </div>
-            <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Real-time updates on your ride alerts, booking requests, and commutes
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchNotifications(true)}
-            disabled={loading || refreshing}
-            title="Refresh notifications"
-          >
-            <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
-          </Button>
-
-          {unreadCount > 0 && (
+    <PageShell width="content">
+      <PageHeader
+        title="Notifications"
+        description="Real-time updates on your ride alerts, booking requests, and commutes."
+        tabs={<InboxTabs counts={{ notifications: unreadCount }} />}
+        action={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              onClick={handleMarkAllAsRead}
-              disabled={actionLoadingId === 'all'}
-              leftIcon={<CheckCheck size={16} />}
-              id="mark-all-read-btn"
+              onClick={() => fetchNotifications(true)}
+              disabled={loading || refreshing}
+              title="Refresh notifications"
             >
-              {actionLoadingId === 'all' ? 'Marking...' : 'Mark All Read'}
+              <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
             </Button>
-          )}
 
-          <Link to="/ride-alerts" style={{ textDecoration: 'none' }}>
-            <Button variant="primary" size="sm" leftIcon={<Sparkles size={15} />}>
-              Manage Alerts
-            </Button>
-          </Link>
-        </div>
-      </div>
+            {unreadCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMarkAllAsRead}
+                disabled={actionLoadingId === 'all'}
+                leftIcon={<CheckCheck size={16} />}
+                id="mark-all-read-btn"
+              >
+                {actionLoadingId === 'all' ? 'Marking...' : 'Mark all as read'}
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {/* Filter Tabs */}
       <div
@@ -690,6 +634,6 @@ export const NotificationsPage: React.FC = () => {
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };

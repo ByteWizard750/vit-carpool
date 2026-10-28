@@ -13,12 +13,15 @@ import {
   Pause,
   XCircle,
   Edit2,
-  RefreshCw,
   Info,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { RouteSpine } from '../components/common/RouteSpine';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
 import { useAuth } from '../features/auth/AuthContext';
 import {
@@ -344,36 +347,20 @@ export const RecurringCommutesPage: React.FC = () => {
   }, [schedules, statusFilter]);
 
   return (
-    <div className="container" style={{ paddingBottom: 'var(--space-12)' }}>
-      {/* Page Header */}
-      <div style={{ marginBottom: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-          <div>
-            <h1 style={{ fontSize: 'var(--text-3xl)', marginBottom: 'var(--space-1)', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <RefreshCw size={28} style={{ color: 'var(--color-brand-600)' }} />
-              Recurring Commutes
-            </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>
-              Configure your daily campus commute once. Rides are generated automatically on a rolling 14-day horizon.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-            <Button
-              variant={activeTab === 'LIST' ? 'primary' : 'outline'}
-              onClick={() => setActiveTab('LIST')}
-            >
-              My Schedules ({schedules.length})
-            </Button>
-            <Button
-              variant={activeTab === 'CREATE' ? 'primary' : 'outline'}
-              onClick={() => setActiveTab('CREATE')}
-            >
-              <Plus size={16} /> New Schedule
-            </Button>
-          </div>
-        </div>
-      </div>
+    <PageShell width="content">
+      <PageHeader
+        title="Recurring Commutes"
+        description="Set your regular commute to VIT Chennai once. Rides are generated automatically on a rolling 14-day horizon."
+        tabs={<MyTripsTabs counts={{ schedules: schedules.length }} />}
+        action={
+          <Button
+            variant={activeTab === 'CREATE' ? 'outline' : 'primary'}
+            onClick={() => setActiveTab(activeTab === 'CREATE' ? 'LIST' : 'CREATE')}
+          >
+            <Plus size={16} /> {activeTab === 'CREATE' ? 'View Schedules' : 'New Schedule'}
+          </Button>
+        }
+      />
 
       {/* Global Alerts */}
       {error && (
@@ -541,32 +528,7 @@ export const RecurringCommutesPage: React.FC = () => {
                       </div>
 
                       {/* Status Badge */}
-                      <span
-                        style={{
-                          fontSize: 'var(--text-xs)',
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: 'var(--radius-full)',
-                          backgroundColor: isActive
-                            ? 'var(--status-success-bg)'
-                            : isPaused
-                            ? 'var(--status-warning-bg)'
-                            : 'var(--bg-muted)',
-                          color: isActive
-                            ? 'var(--status-success-text)'
-                            : isPaused
-                            ? 'var(--status-warning-text)'
-                            : 'var(--text-muted)',
-                          border: '1px solid',
-                          borderColor: isActive
-                            ? 'var(--status-success-border)'
-                            : isPaused
-                            ? 'var(--status-warning-border)'
-                            : 'transparent',
-                        }}
-                      >
-                        {schedule.status}
-                      </span>
+                      <StatusBadge status={schedule.status} domain="schedule" />
                     </div>
 
                     {/* Schedule Timing & Days */}
@@ -1296,6 +1258,6 @@ export const RecurringCommutesPage: React.FC = () => {
           )}
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 };

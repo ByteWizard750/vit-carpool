@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { useAuth } from '../features/auth/AuthContext';
 import { VehicleResponseDto } from '@vit-carpool/contracts';
 
@@ -158,28 +161,22 @@ export const VehiclesPage: React.FC = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '840px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '28px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-            Registered Vehicles
-          </h1>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Register and manage personal cars used for campus carpooling. Only verified cars are eligible.
-          </p>
-        </div>
-
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleStartCreate}
-          leftIcon={<Plus size={16} />}
-          id="btn-add-vehicle"
-        >
-          Add Vehicle
-        </Button>
-      </div>
+    <PageShell width="content">
+      <PageHeader
+        title="Registered Vehicles"
+        description="Register and manage personal cars used for campus carpooling. Only verified cars are eligible."
+        action={
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleStartCreate}
+            leftIcon={<Plus size={16} />}
+            id="btn-add-vehicle"
+          >
+            Add Vehicle
+          </Button>
+        }
+      />
 
       {/* Safety Standard Notice */}
       <div
@@ -303,18 +300,21 @@ export const VehiclesPage: React.FC = () => {
                   >
                     <Car size={22} />
                   </div>
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: '#f1f5f9',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {v.capacity} Seats
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <StatusBadge status="VERIFIED" domain="vehicle" />
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#f1f5f9',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {v.capacity} Seats
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -483,6 +483,6 @@ export const VehiclesPage: React.FC = () => {
           </div>
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 };

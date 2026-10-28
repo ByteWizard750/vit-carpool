@@ -19,13 +19,15 @@ import {
   RotateCcw,
   Sparkles,
   Info,
-  Star,
   MessageSquare,
-  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { RouteSpine } from '../components/common/RouteSpine';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   DriverRideResponseDto,
@@ -342,88 +344,45 @@ export const MyRidesPage: React.FC = () => {
   );
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '1140px' }}>
-      {/* Top Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px',
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h1
+    <PageShell width="content">
+      <PageHeader
+        title="Driver Ride Management"
+        description="Manage your published campus commutes, review passenger seat requests, and monitor upcoming rides."
+        tabs={<MyTripsTabs counts={{ driving: rides.length }} />}
+        action={
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={fetchMyRides}
+              disabled={loading}
               style={{
-                fontSize: '1.75rem',
-                fontWeight: 800,
-                color: 'var(--text-primary)',
-                margin: 0,
-                letterSpacing: '-0.02em',
+                padding: '8px 12px',
+                backgroundColor: '#ffffff',
+                border: '1px solid var(--border-medium)',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
               }}
+              title="Refresh rides list"
+              id="btn-refresh-my-rides"
             >
-              Driver Ride Management
-            </h1>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '6px',
-                backgroundColor: 'var(--color-brand-100, #e0e7ff)',
-                color: 'var(--color-brand-800, #3730a3)',
-                textTransform: 'uppercase',
-              }}
-            >
-              {user?.audience || 'Campus'} Driver
-            </span>
+              <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
+
+            <Link to="/offer-ride" style={{ textDecoration: 'none' }}>
+              <Button variant="primary" size="md" leftIcon={<PlusCircle size={16} />} id="btn-offer-ride-header">
+                Offer a Ride
+              </Button>
+            </Link>
           </div>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', marginBottom: 0 }}>
-            Manage your published campus commutes, review passenger seat requests, and maintain safe vehicle records.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={fetchMyRides}
-            disabled={loading}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#ffffff',
-              border: '1px solid var(--border-medium)',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-            title="Refresh rides list"
-            id="btn-refresh-my-rides"
-          >
-            <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
-            <span>Refresh</span>
-          </button>
-
-          <Link to="/recurring-commutes" style={{ textDecoration: 'none' }}>
-            <Button variant="outline" size="md" leftIcon={<RefreshCw size={16} />} id="btn-recurring-commutes-header">
-              Recurring Schedules
-            </Button>
-          </Link>
-
-          <Link to="/offer-ride" style={{ textDecoration: 'none' }}>
-            <Button variant="primary" size="md" leftIcon={<PlusCircle size={16} />} id="btn-publish-ride-header">
-              Publish New Ride
-            </Button>
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Global Success Notice */}
       {actionSuccess && (
@@ -742,59 +701,18 @@ export const MyRidesPage: React.FC = () => {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span
-                        style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          backgroundColor:
-                            ride.status === 'CANCELLED'
-                              ? '#fee2e2'
-                              : ride.status === 'COMPLETED'
-                              ? '#dcfce7'
-                              : activeTab === 'COMPLETED'
-                              ? '#f1f5f9'
-                              : '#dbeafe',
-                          color:
-                            ride.status === 'CANCELLED'
-                              ? '#991b1b'
-                              : ride.status === 'COMPLETED'
-                              ? '#166534'
-                              : activeTab === 'COMPLETED'
-                              ? '#475569'
-                              : '#1e40af',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {ride.status === 'CANCELLED'
-                          ? 'Cancelled'
-                          : ride.status === 'COMPLETED'
-                          ? 'Completed'
-                          : activeTab === 'COMPLETED'
-                          ? 'Departed'
-                          : 'Upcoming'}
-                      </span>
-
-                      {/* Driver Rating Badge */}
-                      {ride.driverRating && ride.driverRating.count > 0 && (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            fontSize: '0.725rem',
-                            fontWeight: 700,
-                            color: '#b45309',
-                            backgroundColor: '#fef3c7',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          <Star size={11} style={{ fill: '#eab308', color: '#eab308' }} />
-                          <span>{ride.driverRating.average?.toFixed(1)}/5 ({ride.driverRating.count})</span>
-                        </span>
-                      )}
+                      <StatusBadge
+                        status={
+                          ride.status === 'CANCELLED'
+                            ? 'CANCELLED'
+                            : ride.status === 'COMPLETED'
+                            ? 'COMPLETED'
+                            : activeTab === 'COMPLETED'
+                            ? 'COMPLETED'
+                            : 'UPCOMING'
+                        }
+                        domain="ride"
+                      />
 
                       {hasPending && (
                         <span
@@ -1376,6 +1294,6 @@ export const MyRidesPage: React.FC = () => {
           </div>
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 };

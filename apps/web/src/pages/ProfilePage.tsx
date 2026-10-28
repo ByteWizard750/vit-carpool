@@ -13,6 +13,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
+import { PageShell } from '../components/layout/PageShell';
+import { PageHeader } from '../components/common/PageHeader';
 import { VerificationRequestModal } from '../features/modals/VerificationRequestModal';
 import { useAuth } from '../features/auth/AuthContext';
 import { DriverRatingSummaryDto, BlockResponseDto } from '@vit-carpool/contracts';
@@ -89,16 +91,11 @@ export const ProfilePage: React.FC = () => {
   const isSuspended = user?.verificationStatus === 'SUSPENDED';
 
   return (
-    <div className="container" style={{ padding: '36px 16px 64px', maxWidth: '680px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
-          Account & Institutional Profile
-        </h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Manage your verified campus credentials, campus affiliation, and account security.
-        </p>
-      </div>
+    <PageShell width="narrow">
+      <PageHeader
+        title="Profile"
+        description="Manage your campus affiliation, verification credentials, reputation, and privacy settings."
+      />
 
       {/* Main Profile Card */}
       <div
@@ -445,6 +442,6 @@ export const ProfilePage: React.FC = () => {
           refreshProfile();
         }}
       />
-    </div>
+    </PageShell>
   );
 };

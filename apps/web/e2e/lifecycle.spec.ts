@@ -61,8 +61,8 @@ test.describe('Milestone 16: Complete Student Ride Lifecycle', () => {
     const timeValue = `${yyyy}-${mm}-${dd}T09:30`;
     await driverPage.locator('#offer-departure-time').fill(timeValue);
 
-    // Set seats and unique cost (between ₹55 and ₹95) to isolate from prior test runs
-    const uniqueCost = String(55 + (Date.now() % 40));
+    // Set seats and unique cost (between ₹125 and ₹245, within ₹250 non-commercial cap)
+    const uniqueCost = String(125 + (Date.now() % 120));
     await driverPage.locator('#offer-seats-select').selectOption('3');
     await driverPage.locator('#offer-cost-input').fill(uniqueCost);
 
@@ -134,7 +134,10 @@ test.describe('Milestone 16: Complete Student Ride Lifecycle', () => {
     // -------------------------------------------------------------------------
     // 14. Switch to driver context on /my-rides
     await driverPage.goto('/my-rides');
-    const driverRideCard = driverPage.locator('.my-ride-card').filter({ hasText: `₹${uniqueCost}` }).first();
+    const cardsWithCost = driverPage.locator('.my-ride-card').filter({ hasText: `₹${uniqueCost}` });
+    const driverRideCard = (await cardsWithCost.filter({ hasText: /Requests \([1-9]\)/i }).count()) > 0
+      ? cardsWithCost.filter({ hasText: /Requests \([1-9]\)/i }).first()
+      : cardsWithCost.first();
     const requestsBtn = driverRideCard.locator('button:has-text("Requests")');
     await expect(requestsBtn).toBeVisible();
     await requestsBtn.click();
