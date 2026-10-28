@@ -3,12 +3,14 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ALLOW_SUSPENDED_KEY } from '../decorators/allow-suspended.decorator';
 import { UsersService } from '../../users/users.service';
 import { JwksService } from '../jwks.service';
 
@@ -150,6 +152,22 @@ export class SupabaseAuthGuard implements CanActivate {
       email,
       fullName: fullNameClaim,
     });
+
+    // Enforce immediate, server-side account suspension across all authenticated routes,
+    // except those explicitly decorated with @AllowSuspended() (e.g. GET /users/me).
+    const allowSuspended = this.reflector.getAllAndOverride<boolean>(ALLOW_SUSPENDED_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (!allowSuspended && (user.isSuspended || user.verificationStatus === 'SUSPENDED')) {
+      throw new ForbiddenException({
+        error: 'ACCOUNT_SUSPENDED',
+        message: user.suspensionReason
+          ? `Your account has been suspended: ${user.suspensionReason}`
+          : 'Your account has been suspended. Carpooling access is locked.',
+      });
+    }
 
     // Authoritative user state is derived strictly from local database record
     request.user = user;

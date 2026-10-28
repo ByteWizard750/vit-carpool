@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { VerificationService } from '../verification/verification.service';
+import { VerificationPurgeService } from '../verification/verification-purge.service';
 import { UsersService } from '../users/users.service';
 import { AdminService } from './admin.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -31,12 +32,13 @@ import {
 export class AdminController {
   constructor(
     private readonly verificationService: VerificationService,
+    private readonly verificationPurgeService: VerificationPurgeService,
     private readonly usersService: UsersService,
     private readonly adminService: AdminService,
   ) {}
 
   // ---------------------------------------------------------------------------
-  // Verification Queue
+  // Verification Queue & Retention Purge
   // ---------------------------------------------------------------------------
 
   @Get('verification-requests')
@@ -65,6 +67,13 @@ export class AdminController {
       });
     }
     return this.verificationService.reviewRequest(adminUser, id, parsed.data);
+  }
+
+  @Post('verification-requests/purge-expired')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Purge verification documents older than 30 days post-review (Admin only)' })
+  async purgeExpiredDocuments() {
+    return this.verificationPurgeService.purgeExpiredDocuments();
   }
 
   // ---------------------------------------------------------------------------

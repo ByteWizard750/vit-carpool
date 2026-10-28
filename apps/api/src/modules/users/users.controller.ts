@@ -1,6 +1,7 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AllowSuspended } from '../auth/decorators/allow-suspended.decorator';
 import { User } from '@vit-carpool/db';
 import { UserProfileResponseDto } from '@vit-carpool/contracts';
 
@@ -9,6 +10,7 @@ import { UserProfileResponseDto } from '@vit-carpool/contracts';
 @Controller('users')
 export class UsersController {
   @Get('me')
+  @AllowSuspended()
   @ApiOperation({ summary: 'Get current authenticated user profile and verification status' })
   getProfile(@CurrentUser() user: User): UserProfileResponseDto {
     return {

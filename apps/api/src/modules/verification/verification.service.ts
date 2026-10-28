@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -35,6 +36,13 @@ export class VerificationService {
     user: User,
     dto: CreateVerificationRequestDto,
   ): Promise<VerificationRequest> {
+    if (user.isSuspended || user.verificationStatus === VerificationStatus.SUSPENDED) {
+      throw new ForbiddenException({
+        error: 'ACCOUNT_SUSPENDED',
+        message: 'Suspended accounts cannot submit verification requests.',
+      });
+    }
+
     const normalizedEmail = dto.institutionalEmail.trim().toLowerCase();
 
     // Check for existing active pending request

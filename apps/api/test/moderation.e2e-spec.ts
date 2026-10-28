@@ -12,7 +12,10 @@ import {
   BookingStatus,
   ReportCategory,
   ReportStatus,
+  VerificationRequestStatus,
 } from '@vit-carpool/db';
+import * as fs from 'fs';
+import * as path from 'path';
 import { signTestJwt } from '../src/modules/auth/jwt-keys.fixture';
 import { RideAlertsMatcherService } from '../src/modules/ride-alerts/ride-alerts-matcher.service';
 
@@ -650,8 +653,31 @@ describe('Milestone 13: Trust, Safety, User Blocking, Reporting & Admin Moderati
           dropoffLng: 80.17,
         });
 
-      expect(bookRes.status).toBe(403);
-      expect(bookRes.body.message.toLowerCase()).toContain('suspended');
+      // Attempting to access non-VerifiedUserGuard endpoints (e.g. notifications):
+      const notifRes = await request(app.getHttpServer())
+        .get('/notifications')
+        .set('Authorization', `Bearer ${targetToken}`);
+      expect(notifRes.status).toBe(403);
+      expect(notifRes.body.error).toBe('ACCOUNT_SUSPENDED');
+
+      // Attempting to submit verification request:
+      const verifRes = await request(app.getHttpServer())
+        .post('/verification/request')
+        .set('Authorization', `Bearer ${targetToken}`)
+        .send({
+          requestedAudience: 'STUDENT',
+          institutionalEmail: 'target.new@vitstudent.ac.in',
+        });
+      expect(verifRes.status).toBe(403);
+      expect(verifRes.body.error).toBe('ACCOUNT_SUSPENDED');
+
+      // But suspended user CAN read their own profile to see suspension state & reason:
+      const profileRes = await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${targetToken}`);
+      expect(profileRes.status).toBe(200);
+      expect(profileRes.body.isSuspended).toBe(true);
+      expect(profileRes.body.suspensionReason).toBe('Repeated harassment and safety violations');
     });
 
     it('allows administrator to reinstate a suspended user', async () => {
@@ -672,6 +698,173 @@ describe('Milestone 13: Trust, Safety, User Blocking, Reporting & Admin Moderati
       // Check DB isSuspended is false
       const user = await testPrisma.user.findUnique({ where: { id: targetId } });
       expect(user?.isSuspended).toBe(false);
+
+      // Reinstated user can now access notifications again
+      const restoredNotifRes = await request(app.getHttpServer())
+        .get('/notifications')
+        .set('Authorization', `Bearer ${targetToken}`);
+      expect(restoredNotifRes.status).toBe(200);
+    });
+  });
+
+  // ===========================================================================
+  // 5. Automated 30-Day Verification Document Retention Purge
+  // ===========================================================================
+  describe('5. Automated 30-Day Verification Document Retention Purge', () => {
+    const dummyUploadDir = path.join(__dirname, 'temp_test_docs');
+    let oldApprovedReqId: string;
+    let oldRejectedReqId: string;
+    let recentApprovedReqId: string;
+    let pendingReqId: string;
+    let dummyFilePath: string;
+
+    beforeAll(async () => {
+      if (!fs.existsSync(dummyUploadDir)) {
+        fs.mkdirSync(dummyUploadDir, { recursive: true });
+      }
+
+      dummyFilePath = path.join(dummyUploadDir, 'sample_id_card.png');
+      fs.writeFileSync(dummyFilePath, 'dummy image content');
+
+      const now = Date.now();
+      const thirtyFiveDaysAgo = new Date(now - 35 * 24 * 60 * 60 * 1000);
+      const fortyDaysAgo = new Date(now - 40 * 24 * 60 * 60 * 1000);
+      const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000);
+
+      // 1. Eligible old APPROVED request with real physical file
+      const oldApproved = await testPrisma.verificationRequest.create({
+        data: {
+          userId: riderId,
+          requestedAudience: Audience.STUDENT,
+          institutionalEmail: 'old.approved@vitstudent.ac.in',
+          status: VerificationRequestStatus.APPROVED,
+          reviewedAt: thirtyFiveDaysAgo,
+          reviewedBy: adminId,
+          idCardDocumentPath: dummyFilePath,
+        },
+      });
+      oldApprovedReqId = oldApproved.id;
+
+      // 2. Eligible old REJECTED request with missing physical file (ENOENT safety check)
+      const oldRejected = await testPrisma.verificationRequest.create({
+        data: {
+          userId: targetId,
+          requestedAudience: Audience.STUDENT,
+          institutionalEmail: 'old.rejected@vitstudent.ac.in',
+          status: VerificationRequestStatus.REJECTED,
+          reviewedAt: fortyDaysAgo,
+          reviewedBy: adminId,
+          idCardDocumentPath: path.join(dummyUploadDir, 'non_existent_file.png'),
+        },
+      });
+      oldRejectedReqId = oldRejected.id;
+
+      // 3. Ineligible recent APPROVED request (under 30 days)
+      const recentApproved = await testPrisma.verificationRequest.create({
+        data: {
+          userId: driverId,
+          requestedAudience: Audience.STUDENT,
+          institutionalEmail: 'recent.approved@vitstudent.ac.in',
+          status: VerificationRequestStatus.APPROVED,
+          reviewedAt: tenDaysAgo,
+          reviewedBy: adminId,
+          idCardDocumentPath: dummyFilePath,
+        },
+      });
+      recentApprovedReqId = recentApproved.id;
+
+      // 4. Ineligible PENDING request (created 45 days ago, but unreviewed)
+      const pendingReq = await testPrisma.verificationRequest.create({
+        data: {
+          userId: unrelatedId,
+          requestedAudience: Audience.STUDENT,
+          institutionalEmail: 'pending.unreviewed@vitstudent.ac.in',
+          status: VerificationRequestStatus.PENDING,
+          idCardDocumentPath: dummyFilePath,
+        },
+      });
+      pendingReqId = pendingReq.id;
+    });
+
+    afterAll(() => {
+      try {
+        if (fs.existsSync(dummyUploadDir)) {
+          fs.rmSync(dummyUploadDir, { recursive: true, force: true });
+        }
+      } catch {}
+    });
+
+    it('rejects unauthenticated or non-admin call to document purge endpoint', async () => {
+      // Unauthenticated
+      const anonRes = await request(app.getHttpServer())
+        .post('/admin/verification-requests/purge-expired')
+        .expect(401);
+
+      // Ordinary rider user
+      const userRes = await request(app.getHttpServer())
+        .post('/admin/verification-requests/purge-expired')
+        .set('Authorization', `Bearer ${riderToken}`)
+        .expect(403);
+    });
+
+    it('executes 30-day retention purge safely, deleting eligible files and appending audit records', async () => {
+      const purgeRes = await request(app.getHttpServer())
+        .post('/admin/verification-requests/purge-expired')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(purgeRes.body.purgedCount).toBe(2);
+      expect(purgeRes.body.errorsCount).toBe(0);
+
+      // Verify physical file was deleted
+      expect(fs.existsSync(dummyFilePath)).toBe(false);
+
+      // Verify Old Approved record updated
+      const purgedApproved = await testPrisma.verificationRequest.findUnique({
+        where: { id: oldApprovedReqId },
+      });
+      expect(purgedApproved?.idCardDocumentPurgedAt).toBeDefined();
+      expect(purgedApproved?.idCardDocumentPath).toBeNull();
+
+      // Verify Old Rejected record updated (even with ENOENT missing file)
+      const purgedRejected = await testPrisma.verificationRequest.findUnique({
+        where: { id: oldRejectedReqId },
+      });
+      expect(purgedRejected?.idCardDocumentPurgedAt).toBeDefined();
+      expect(purgedRejected?.idCardDocumentPath).toBeNull();
+
+      // Verify Recent Approved is NOT purged
+      const retainedApproved = await testPrisma.verificationRequest.findUnique({
+        where: { id: recentApprovedReqId },
+      });
+      expect(retainedApproved?.idCardDocumentPurgedAt).toBeNull();
+      expect(retainedApproved?.idCardDocumentPath).toBe(dummyFilePath);
+
+      // Verify Pending request is NOT purged
+      const retainedPending = await testPrisma.verificationRequest.findUnique({
+        where: { id: pendingReqId },
+      });
+      expect(retainedPending?.idCardDocumentPurgedAt).toBeNull();
+      expect(retainedPending?.idCardDocumentPath).toBe(dummyFilePath);
+
+      // Verify audit logs generated
+      const auditLogs = await testPrisma.auditLog.findMany({
+        where: { action: 'VERIFICATION_DOCUMENT_PURGED' },
+      });
+      expect(auditLogs.length).toBeGreaterThanOrEqual(2);
+      const targetIds = auditLogs.map((a) => a.targetId);
+      expect(targetIds).toContain(oldApprovedReqId);
+      expect(targetIds).toContain(oldRejectedReqId);
+    });
+
+    it('is idempotent: running purge again purges 0 additional documents without errors', async () => {
+      const secondPurgeRes = await request(app.getHttpServer())
+        .post('/admin/verification-requests/purge-expired')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(secondPurgeRes.body.purgedCount).toBe(0);
+      expect(secondPurgeRes.body.errorsCount).toBe(0);
     });
   });
 });
