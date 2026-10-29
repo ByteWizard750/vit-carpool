@@ -45,10 +45,7 @@ export const LandingPage: React.FC = () => {
               <span>Campus Carpool &bull; VIT Chennai</span>
             </div>
             <h1 className="hero-title">
-              Share the ride to campus.
-              <span style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', border: 0 }}>
-                Dedicated Campus Carpooling
-              </span>
+              Dedicated Campus Carpooling
             </h1>
             <p className="hero-lead">
               VIT Chennai students and faculty heading your way. Split the fuel, skip the solo drive,

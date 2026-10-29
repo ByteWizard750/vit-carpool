@@ -136,13 +136,13 @@ export const RideSearchPanel: React.FC<RideSearchPanelProps> = ({ onSearch, onOf
           </div>
 
           {/* Action Button */}
-          <div>
+          <div style={{ display: 'flex', height: '100%', alignItems: 'center' }}>
             <Button
               type="submit"
               variant="primary"
               size="lg"
               leftIcon={<Search size={18} />}
-              style={{ width: '100%' }}
+              style={{ width: '100%', height: '58px', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 700 }}
               id="btn-search-rides"
             >
               Find Rides

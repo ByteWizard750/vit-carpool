@@ -651,6 +651,38 @@ export const AuthPage: React.FC = () => {
                     >
                       ⚡ 1-Click Login (Arjun Driver)
                     </button>
+                    <button
+                      type="button"
+                      id="btn-dev-login-admin"
+                      onClick={() => {
+                        login('dev-admin-token-preview', {
+                          id: '34aeec7c-33e1-49ad-97d5-d8541bbe315d',
+                          email: 'admin.safety@vitstudent.ac.in',
+                          fullName: 'Campus Admin Safety Officer',
+                          phoneNumber: null,
+                          audience: 'STUDENT',
+                          verificationStatus: 'VERIFIED',
+                          verificationMethod: 'MANUAL_ID_REVIEW',
+                          verifiedAt: new Date().toISOString(),
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                          role: 'ADMIN',
+                        } as any);
+                        navigate('/admin');
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.7rem',
+                        backgroundColor: '#dc2626',
+                        color: '#ffffff',
+                        border: '1px solid #b91c1c',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      🛡️ 1-Click Login (Admin)
+                    </button>
                   </div>
                   <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
                     In dev mode with unconfigured Supabase credentials, use code <code>123456</code>.
