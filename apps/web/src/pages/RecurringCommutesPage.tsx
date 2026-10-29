@@ -488,7 +488,7 @@ export const RecurringCommutesPage: React.FC = () => {
             </div>
           ) : (
             /* Schedules Grid */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 'var(--space-6)' }}>
+            <div className="rides-cards-grid" style={{ gap: 'var(--space-6)' }}>
               {filteredSchedules.map((schedule) => {
                 const isActive = schedule.status === 'ACTIVE';
                 const isPaused = schedule.status === 'PAUSED';
@@ -780,7 +780,7 @@ export const RecurringCommutesPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+                <div className="responsive-two-col" style={{ gap: 'var(--space-4)' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-1)' }}>
                       Pickup Landmark Notes (Optional)
@@ -843,7 +843,7 @@ export const RecurringCommutesPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 'var(--space-2)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
                   {WEEKDAYS_LIST.map((w) => {
                     const isSelected = selectedWeekdays.includes(w.id);
                     return (
@@ -852,7 +852,7 @@ export const RecurringCommutesPage: React.FC = () => {
                         type="button"
                         onClick={() => handleToggleWeekday(w.id)}
                         style={{
-                          padding: 'var(--space-3) 0',
+                          padding: '8px 2px',
                           textAlign: 'center',
                           borderRadius: 'var(--radius-md)',
                           border: '1.5px solid',
@@ -860,9 +860,13 @@ export const RecurringCommutesPage: React.FC = () => {
                           backgroundColor: isSelected ? 'var(--color-brand-600)' : 'var(--bg-subtle)',
                           color: isSelected ? 'var(--text-inverse)' : 'var(--text-secondary)',
                           fontWeight: 700,
-                          fontSize: 'var(--text-sm)',
+                          fontSize: '0.75rem',
                           cursor: 'pointer',
                           transition: 'all var(--transition-fast)',
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         {w.label}
@@ -873,7 +877,7 @@ export const RecurringCommutesPage: React.FC = () => {
               </div>
 
               {/* Time & Dates Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
+              <div className="rides-filter-grid" style={{ gap: 'var(--space-4)' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
                     Departure Time (Asia/Kolkata) *
@@ -945,7 +949,7 @@ export const RecurringCommutesPage: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
+                <div className="rides-filter-grid" style={{ gap: 'var(--space-4)' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
                       Vehicle *
@@ -1204,7 +1208,7 @@ export const RecurringCommutesPage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+              <div className="responsive-two-col" style={{ gap: 'var(--space-3)' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
                     Seats Offered

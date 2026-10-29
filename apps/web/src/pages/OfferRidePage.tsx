@@ -1237,7 +1237,7 @@ export const OfferRidePage: React.FC = () => {
           </div>
 
           {/* Seats and Cost Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="responsive-two-col" style={{ gap: '16px' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <Users size={13} /> Available Seats *
@@ -1293,7 +1293,7 @@ export const OfferRidePage: React.FC = () => {
           </div>
 
           {/* Pickup & Dropoff Notes */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="responsive-two-col" style={{ gap: '16px' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
                 Pickup Instructions (Optional)

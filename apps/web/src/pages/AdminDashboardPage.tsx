@@ -385,6 +385,12 @@ export const AdminDashboardPage: React.FC = () => {
           gap: '8px',
           borderBottom: '1px solid var(--border-light)',
           marginBottom: '28px',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          whiteSpace: 'nowrap',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <button

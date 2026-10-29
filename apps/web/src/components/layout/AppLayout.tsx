@@ -97,7 +97,7 @@ export const AppLayout: React.FC = () => {
 
       <Navbar onOpenVerification={() => setVerificationModalOpen(true)} />
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <main className="app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
         <Outlet />
       </main>
 

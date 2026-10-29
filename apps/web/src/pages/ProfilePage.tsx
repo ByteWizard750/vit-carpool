@@ -161,8 +161,8 @@ export const ProfilePage: React.FC = () => {
         </div>
 
         {/* Profile Fields List */}
-        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="responsive-two-col" style={{ gap: '16px' }}>
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                 CAMPUS AFFILIATION
@@ -197,7 +197,7 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+          <div className="responsive-two-col" style={{ gap: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                 VERIFICATION METHOD

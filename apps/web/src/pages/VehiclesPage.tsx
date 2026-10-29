@@ -267,7 +267,7 @@ export const VehiclesPage: React.FC = () => {
           </Button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
+        <div className="rides-cards-grid">
           {vehicles.map((v) => (
             <div
               key={v.id}
@@ -360,7 +360,7 @@ export const VehiclesPage: React.FC = () => {
           maxWidth="480px"
         >
           <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="responsive-two-col" style={{ gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                   Make *
@@ -390,7 +390,7 @@ export const VehiclesPage: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="responsive-two-col" style={{ gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                   Color *

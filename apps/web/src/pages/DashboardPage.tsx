@@ -140,10 +140,8 @@ export const DashboardPage: React.FC = () => {
 
         {/* Quick Metrics Bar */}
         <div
+          className="responsive-metrics-grid"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: '12px',
             paddingTop: '16px',
             borderTop: '1px solid rgba(191, 219, 254, 0.6)',
           }}
@@ -194,7 +192,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Main Grid: Activity & Navigation Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+      <div className="rides-cards-grid" style={{ gap: '24px' }}>
         {/* Card 1: Upcoming Bookings as Passenger */}
         <div
           style={{
@@ -355,7 +353,7 @@ export const DashboardPage: React.FC = () => {
       {/* Quick Navigation Cards Grid */}
       <div style={{ marginTop: '32px' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '16px' }}>Platform Quick Links</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        <div className="rides-cards-grid" style={{ gap: '16px' }}>
           <Link to="/rides" style={{ textDecoration: 'none' }}>
             <div
               style={{

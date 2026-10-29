@@ -344,8 +344,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   background: var(--bg-surface);
@@ -437,6 +439,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 .bottom-nav-item {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -445,7 +448,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   text-decoration: none;
   color: var(--text-muted);
   transition: color var(--transition-fast);
-  min-height: var(--touch-target-min);
+  min-height: var(--touch-target-min, 44px);
   position: relative;
   font-size: 10px;
   font-weight: 500;
@@ -454,6 +457,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-nav-item span {
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .bottom-nav-item:hover,

@@ -302,29 +302,12 @@ export const MessagesPage: React.FC = () => {
 
       {/* Main Chat Interface Container */}
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: selectedConvId ? 'minmax(280px, 340px) 1fr' : '1fr',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid var(--border-light)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-          flex: 1,
-          minHeight: '480px',
-          height: 'calc(100vh - 165px)',
-        }}
+        className={`chat-layout-container ${selectedConvId ? 'has-selected-conversation' : ''}`}
         id="chat-main-container"
       >
         {/* LEFT COLUMN: CONVERSATION LIST */}
         <div
-          style={{
-            borderRight: '1px solid var(--border-light)',
-            display: selectedConvId && window.innerWidth < 768 ? 'none' : 'flex',
-            flexDirection: 'column',
-            backgroundColor: '#f8fafc',
-            height: '100%',
-          }}
+          className="chat-conversations-list-pane"
           id="chat-conversations-list-pane"
         >
           {/* List Header */}
@@ -500,12 +483,7 @@ export const MessagesPage: React.FC = () => {
 
         {/* RIGHT COLUMN: ACTIVE CONVERSATION CHAT VIEW */}
         <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            backgroundColor: '#ffffff',
-          }}
+          className="chat-active-view-pane"
           id="chat-active-view-pane"
         >
           {selectedConvId && activeConv ? (
@@ -531,18 +509,21 @@ export const MessagesPage: React.FC = () => {
                       setSelectedConvId(null);
                       navigate('/messages');
                     }}
+                    className="chat-mobile-back-btn"
                     style={{
                       background: 'none',
                       border: 'none',
-                      padding: '4px',
+                      padding: '8px',
                       cursor: 'pointer',
-                      display: window.innerWidth < 768 ? 'flex' : 'none',
                       alignItems: 'center',
                       color: 'var(--text-secondary)',
+                      minWidth: '40px',
+                      minHeight: '40px',
                     }}
                     id="btn-chat-mobile-back"
+                    aria-label="Back to conversations list"
                   >
-                    <ArrowLeft size={18} />
+                    <ArrowLeft size={20} />
                   </button>
 
                   <div>

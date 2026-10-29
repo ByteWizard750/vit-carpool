@@ -209,36 +209,10 @@ export const AuthPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: 'calc(100vh - var(--header-height) - 180px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px 16px',
-        backgroundColor: 'var(--bg-page)',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid var(--border-light)',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
-          overflow: 'hidden',
-        }}
-      >
+    <div className="auth-page-container">
+      <div className="auth-page-card">
         {/* Header Banner */}
-        <div
-          style={{
-            padding: '24px 28px 20px',
-            background: 'linear-gradient(135deg, var(--color-brand-50) 0%, #ffffff 100%)',
-            borderBottom: '1px solid var(--border-light)',
-            textAlign: 'center',
-          }}
-        >
+        <div className="auth-card-header">
           <div
             style={{
               width: '48px',
@@ -264,7 +238,7 @@ export const AuthPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ padding: '24px 28px' }}>
+        <div className="auth-card-body">
           {/* Mode Selector Tabs (only on email step) */}
           {step === 'email' && (
             <div
@@ -694,19 +668,7 @@ export const AuthPage: React.FC = () => {
         </div>
 
         {/* Footer Guarantee */}
-        <div
-          style={{
-            padding: '14px 28px',
-            backgroundColor: 'var(--bg-subtle)',
-            borderTop: '1px solid var(--border-light)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-          }}
-        >
+        <div className="auth-card-footer">
           <Lock size={12} />
           <span>Automatic audience separation: Students travel with students; Faculty with faculty.</span>
         </div>

@@ -286,20 +286,10 @@ export const RidesPage: React.FC = () => {
       {/* Search & Filter Card */}
       <form
         onSubmit={handleFilterSubmit}
-        style={{
-          padding: '20px',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid var(--border-light)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          marginBottom: '28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-        }}
+        className="rides-filter-card"
       >
         {/* Main 4 Inputs Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+        <div className="rides-filter-grid">
           {/* Origin Autocomplete */}
           <div>
             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
@@ -391,17 +381,7 @@ export const RidesPage: React.FC = () => {
 
         {/* Expandable Advanced Filters Row (Milestone 5.2) */}
         {showMoreFilters && (
-          <div
-            style={{
-              padding: '14px',
-              backgroundColor: 'var(--bg-subtle, #f8fafc)',
-              borderRadius: '10px',
-              border: '1px solid var(--border-light, #e2e8f0)',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '12px',
-            }}
-          >
+          <div className="rides-advanced-filters-grid">
             {/* Max Fuel Contribution Filter */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
@@ -514,7 +494,7 @@ export const RidesPage: React.FC = () => {
         )}
 
         {/* Buttons Row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+        <div className="rides-filter-actions">
           <button
             type="button"
             onClick={() => setShowMoreFilters((p) => !p)}
@@ -524,16 +504,18 @@ export const RidesPage: React.FC = () => {
               gap: '6px',
               background: showMoreFilters ? 'var(--color-brand-50, #eff6ff)' : 'none',
               border: '1px solid ' + (showMoreFilters ? 'var(--color-brand-300, #93c5fd)' : 'var(--border-light, #e2e8f0)'),
-              padding: '6px 12px',
+              padding: '8px 14px',
               borderRadius: '6px',
               color: showMoreFilters ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary, #475569)',
-              fontSize: '0.8rem',
+              fontSize: '0.85rem',
               cursor: 'pointer',
               fontWeight: 600,
+              minHeight: '40px',
+              justifyContent: 'center',
             }}
             id="rides-toggle-more-filters"
           >
-            <SlidersHorizontal size={13} />
+            <SlidersHorizontal size={14} />
             <span>{showMoreFilters ? 'Hide Extra Filters' : 'More Filters'}</span>
             {activeExtraFiltersCount > 0 && (
               <span
@@ -552,20 +534,24 @@ export const RidesPage: React.FC = () => {
             )}
           </button>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div className="rides-filter-action-group">
             <button
               type="button"
               onClick={handleClearFilters}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '4px',
                 background: 'none',
-                border: 'none',
+                border: '1px solid var(--border-light)',
+                borderRadius: '6px',
+                padding: '8px 12px',
                 color: 'var(--text-muted)',
-                fontSize: '0.8rem',
+                fontSize: '0.85rem',
                 cursor: 'pointer',
                 fontWeight: 600,
+                minHeight: '40px',
               }}
               id="rides-clear-filters-btn"
             >
@@ -574,10 +560,11 @@ export const RidesPage: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              size="sm"
+              size="md"
               disabled={loading}
-              leftIcon={<Search size={14} />}
+              leftIcon={<Search size={15} />}
               id="rides-filter-submit"
+              style={{ minHeight: '40px' }}
             >
               {loading ? 'Searching...' : 'Search Rides'}
             </Button>
@@ -614,12 +601,12 @@ export const RidesPage: React.FC = () => {
 
       {/* Results Header */}
       {user && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="rides-results-header">
           <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
             Showing <strong>{rides.length}</strong> {rides.length === 1 ? 'ride' : 'rides'}
             {totalCount > rides.length && ` of ${totalCount}`} for verified {user.audience} cohort
           </div>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 8px', borderRadius: '12px' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
             Isolated {user.audience} Network
           </span>
         </div>
@@ -686,7 +673,7 @@ export const RidesPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            <div className="rides-cards-grid">
               {rides.map((ride) => {
                 const isSelected = selectedRide?.id === ride.id;
                 const isDriver = user?.id === ride.driverId;
@@ -893,7 +880,7 @@ export const RidesPage: React.FC = () => {
             </div>
 
             {/* Vehicle & Driver Safe Info */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="responsive-two-col" style={{ gap: '12px' }}>
               <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Car size={13} /> Registered Vehicle
