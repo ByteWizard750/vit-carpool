@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   AlertCircle,
   LucideIcon,
+  Car,
 } from 'lucide-react';
 
 export type StatusDomain = 'booking' | 'ride' | 'schedule' | 'vehicle' | 'account';
@@ -87,8 +88,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
       case 'vehicle':
         switch (normStatus) {
+          case 'DOCUMENTS_VERIFIED':
+            return { label: 'Documents Verified', tint: 'success', icon: ShieldCheck };
+          case 'REGISTERED':
+          case 'REGISTERED_VEHICLE':
+          case 'SELF_REPORTED':
           case 'VERIFIED':
-            return { label: 'Verified', tint: 'success', icon: ShieldCheck };
+            return { label: 'Registered Vehicle', tint: 'neutral', icon: Car };
           case 'IN_REVIEW':
           case 'PENDING':
             return { label: 'In review', tint: 'warning', icon: Clock };
@@ -96,7 +102,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
           case 'REJECTED':
             return { label: 'Needs changes', tint: 'danger', icon: AlertCircle };
           default:
-            return { label: normStatus, tint: 'neutral', icon: Clock };
+            return { label: normStatus, tint: 'neutral', icon: Car };
         }
 
       case 'account':

@@ -923,7 +923,7 @@ export const RecurringCommutesPage: React.FC = () => {
                 >
                   <p style={{ fontWeight: 600, marginBottom: 'var(--space-1)' }}>No active vehicles found.</p>
                   <p style={{ fontSize: 'var(--text-sm)' }}>
-                    You need to register at least one verified vehicle to offer carpool commutes.{' '}
+                    You need to register at least one passenger vehicle to offer carpool commutes.{' '}
                     <Link to="/vehicles" style={{ textDecoration: 'underline', fontWeight: 600 }}>
                       Register a vehicle now →
                     </Link>

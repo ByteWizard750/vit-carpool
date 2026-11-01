@@ -164,7 +164,7 @@ export const VehiclesPage: React.FC = () => {
     <PageShell width="content">
       <PageHeader
         title="Registered Vehicles"
-        description="Register and manage personal cars used for campus carpooling. Only verified cars are eligible."
+        description="Register and manage personal cars used for campus carpooling. Registered cars are eligible for publishing rides."
         action={
           <Button
             variant="primary"
@@ -301,7 +301,7 @@ export const VehiclesPage: React.FC = () => {
                     <Car size={22} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <StatusBadge status="VERIFIED" domain="vehicle" />
+                    <StatusBadge status="REGISTERED_VEHICLE" domain="vehicle" />
                     <span
                       style={{
                         fontSize: '0.75rem',

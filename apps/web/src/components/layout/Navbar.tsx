@@ -10,11 +10,6 @@ import {
   ShieldAlert,
   LogOut,
   Calendar,
-  Ticket,
-  User,
-  LayoutDashboard,
-  Search,
-  MessageSquare,
   RefreshCw,
   Bell,
   Sparkles,
@@ -204,50 +199,65 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         <div className="mobile-nav-panel">
           {user ? (
             <>
-              <div style={{ padding: '8px 12px', fontSize: '0.85rem', fontWeight: 600, borderBottom: '1px solid var(--border-light)' }}>
-                Signed in as {user.fullName} ({user.audience || 'Campus Member'})
-              </div>
-              <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Home size={16} style={{ marginRight: '6px' }} /> Home
+              {/* User Identity / Dashboard Link Card */}
+              <Link
+                to="/dashboard"
+                className="nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+                id="mobile-drawer-dashboard"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--bg-subtle)',
+                  marginBottom: '6px',
+                  textDecoration: 'none',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {user.fullName}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {user.email} &bull; {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-brand-600)', fontWeight: 600 }}>
+                  Dashboard &rarr;
+                </span>
               </Link>
-              <Link to="/dashboard" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <LayoutDashboard size={16} style={{ marginRight: '6px' }} /> Dashboard
+
+              {/* Primary Action CTA */}
+              <Link
+                to="/offer-ride"
+                style={{ textDecoration: 'none', marginBottom: '6px', display: 'block' }}
+                onClick={() => setMobileMenuOpen(false)}
+                id="mobile-drawer-offer-ride"
+              >
+                <Button variant="primary" size="md" leftIcon={<Car size={16} />} style={{ width: '100%' }}>
+                  + Offer a Ride
+                </Button>
               </Link>
-              <Link to="/rides" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Search size={16} style={{ marginRight: '6px' }} /> Find Rides
+
+              <div className="mobile-nav-heading">My Trips &amp; Schedules</div>
+              <Link to="/my-rides" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-my-rides">
+                <Calendar size={16} style={{ marginRight: '8px' }} /> My Published Rides
               </Link>
-              <Link to="/offer-ride" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Car size={16} style={{ marginRight: '6px' }} /> Offer a Ride
+              <Link to="/recurring-commutes" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-recurring">
+                <RefreshCw size={16} style={{ marginRight: '8px' }} /> Recurring Commutes
               </Link>
-              <Link to="/my-rides" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Calendar size={16} style={{ marginRight: '6px' }} /> My Rides
+              <Link to="/ride-alerts" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-alerts">
+                <Sparkles size={16} style={{ marginRight: '8px' }} /> Corridor Alerts
               </Link>
-              <Link to="/bookings" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Ticket size={16} style={{ marginRight: '6px' }} /> Bookings
+
+              <div className="mobile-nav-heading">Account &amp; Fleet</div>
+              <Link to="/vehicles" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-vehicles">
+                <Car size={16} style={{ marginRight: '8px' }} /> Registered Vehicles
               </Link>
-              <Link to="/recurring-commutes" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <RefreshCw size={16} style={{ marginRight: '6px' }} /> Recurring Commutes
-              </Link>
-              <Link to="/messages" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <MessageSquare size={16} style={{ marginRight: '6px' }} /> Messages
-                {unreadCount > 0 && (
-                  <span
-                    style={{
-                      marginLeft: 'auto',
-                      backgroundColor: '#2563eb',
-                      color: '#ffffff',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      padding: '1px 7px',
-                      borderRadius: '9999px',
-                    }}
-                  >
-                    {unreadCount}
-                  </span>
-                )}
-              </Link>
-              <Link to="/notifications" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Bell size={16} style={{ marginRight: '6px' }} /> Notifications
+              <Link to="/notifications" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-notifications">
+                <Bell size={16} style={{ marginRight: '8px' }} /> Notifications
                 {unreadNotifCount > 0 && (
                   <span
                     style={{
@@ -264,21 +274,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                   </span>
                 )}
               </Link>
-              <Link to="/ride-alerts" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Sparkles size={16} style={{ marginRight: '6px' }} /> Ride Alerts
+
+              <div className="mobile-nav-heading">Campus Community</div>
+              <Link to="/safety" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-safety">
+                <ShieldCheck size={16} style={{ marginRight: '8px' }} /> Separation &amp; Safety
               </Link>
-              <Link to="/vehicles" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <Car size={16} style={{ marginRight: '6px' }} /> Vehicles
+              <Link to="/how-it-works" className="nav-link" onClick={() => setMobileMenuOpen(false)} id="mobile-drawer-guide">
+                <Home size={16} style={{ marginRight: '8px' }} /> How It Works
               </Link>
-              <Link to="/profile" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <User size={16} style={{ marginRight: '6px' }} /> Profile
-              </Link>
+
               {user.role === 'ADMIN' && (
-                <Link to="/admin" className="nav-link" onClick={() => setMobileMenuOpen(false)} style={{ color: '#dc2626', fontWeight: 700 }}>
-                  <ShieldAlert size={16} style={{ marginRight: '6px' }} /> Admin Console
-                </Link>
+                <>
+                  <div className="mobile-nav-heading" style={{ color: '#dc2626' }}>Administration</div>
+                  <Link
+                    to="/admin"
+                    className="nav-link"
+                    onClick={() => setMobileMenuOpen(false)}
+                    id="mobile-drawer-admin"
+                    style={{ color: '#dc2626', fontWeight: 700 }}
+                  >
+                    <ShieldAlert size={16} style={{ marginRight: '8px' }} /> Admin Console
+                  </Link>
+                </>
               )}
-              <div style={{ paddingTop: '8px' }}>
+
+              <div style={{ paddingTop: '10px', marginTop: '6px', borderTop: '1px solid var(--border-light)' }}>
                 <Button
                   variant="outline"
                   size="md"
@@ -288,6 +308,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                   }}
                   leftIcon={<LogOut size={16} />}
                   style={{ width: '100%' }}
+                  id="mobile-drawer-signout"
                 >
                   Sign Out
                 </Button>

@@ -83,6 +83,56 @@ export const OfferRidePage: React.FC = () => {
   const [departureTime, setDepartureTime] = useState('');
   const [availableSeats, setAvailableSeats] = useState<number>(3);
   const [costPerSeat, setCostPerSeat] = useState<string>('50');
+  const [editingRide, setEditingRide] = useState<DriverRideResponseDto | null>(null);
+
+  // Currently selected vehicle for custom ride
+  const selectedVehicle = useMemo(() => {
+    return vehicles.find((v) => v.id === selectedVehicleId);
+  }, [vehicles, selectedVehicleId]);
+
+  // Max passenger seats allowed for selected vehicle (capacity - 1 driver seat)
+  const maxPassengerSeats = useMemo(() => {
+    if (!selectedVehicle) return 4;
+    return Math.max(1, selectedVehicle.capacity - 1);
+  }, [selectedVehicle]);
+
+  // Booked / confirmed seats on this ride if editing
+  const editingConfirmedSeats = useMemo(() => {
+    return editingRide?.confirmedSeatsCount || 0;
+  }, [editingRide]);
+
+  // If editing, availableSeats cannot exceed maxPassengerSeats - editingConfirmedSeats
+  const maxAvailableForEdit = useMemo(() => {
+    if (!editRideId) return maxPassengerSeats;
+    return Math.max(1, maxPassengerSeats - editingConfirmedSeats);
+  }, [editRideId, maxPassengerSeats, editingConfirmedSeats]);
+
+  // Effective max allowed seats for the custom/edit form
+  const effectiveMaxSeats = editRideId ? maxAvailableForEdit : maxPassengerSeats;
+
+  // React immediately to vehicle selection change or vehicle capacity change: clamp availableSeats
+  useEffect(() => {
+    if (availableSeats > effectiveMaxSeats) {
+      setAvailableSeats(effectiveMaxSeats);
+    }
+  }, [effectiveMaxSeats, availableSeats]);
+
+  // Quick Ride vehicle and seat capacity limits
+  const quickVehicle = useMemo(() => {
+    return vehicles.find((v) => v.id === quickVehicleId);
+  }, [vehicles, quickVehicleId]);
+
+  const maxQuickPassengerSeats = useMemo(() => {
+    if (!quickVehicle) return 4;
+    return Math.max(1, quickVehicle.capacity - 1);
+  }, [quickVehicle]);
+
+  // React immediately to quick vehicle selection change: clamp quickSeats
+  useEffect(() => {
+    if (quickSeats > maxQuickPassengerSeats) {
+      setQuickSeats(maxQuickPassengerSeats);
+    }
+  }, [maxQuickPassengerSeats, quickSeats]);
 
   // Min departure time allowed (10 minutes from now in Asia/Kolkata)
   const minAllowedDateTime = useMemo(() => {
@@ -156,16 +206,19 @@ export const OfferRidePage: React.FC = () => {
     setSelectedTemplate(template);
 
     // Vehicle check: if template vehicle is deleted or not found, fall back to first active vehicle
-    const isVehicleAvailable = vehicles.some((v) => v.id === template.vehicleId);
-    if (isVehicleAvailable) {
+    const matchedVehicle = vehicles.find((v) => v.id === template.vehicleId);
+    const fallbackVehicle = vehicles.length > 0 ? vehicles[0] : null;
+    const activeV = matchedVehicle || fallbackVehicle;
+    if (matchedVehicle) {
       setQuickVehicleId(template.vehicleId);
-    } else if (vehicles.length > 0) {
-      setQuickVehicleId(vehicles[0].id);
+    } else if (fallbackVehicle) {
+      setQuickVehicleId(fallbackVehicle.id);
     } else {
       setQuickVehicleId(template.vehicleId);
     }
 
-    setQuickSeats(template.availableSeats || 3);
+    const templateMaxSeats = activeV ? Math.max(1, activeV.capacity - 1) : 4;
+    setQuickSeats(Math.min(template.availableSeats || 3, templateMaxSeats));
     setQuickCost(template.costPerSeat !== null ? template.costPerSeat.toString() : '50');
 
     // Smart default departure time in Asia/Kolkata:
@@ -200,6 +253,7 @@ export const OfferRidePage: React.FC = () => {
           const myRides: DriverRideResponseDto[] = await res.json();
           const target = myRides.find((r) => r.id === editRideId);
           if (target) {
+            setEditingRide(target);
             setSelectedVehicleId(target.vehicleId);
             setOrigin(target.origin);
             setDestination(target.destination);
@@ -297,6 +351,18 @@ export const OfferRidePage: React.FC = () => {
       return;
     }
 
+    if (quickSeats < 1) {
+      setError('Available seats must be at least 1.');
+      return;
+    }
+
+    if (quickSeats > maxQuickPassengerSeats) {
+      setError(
+        `Vehicle capacity is ${quickVehicle?.capacity || 4} seats (including driver). You cannot offer more than ${maxQuickPassengerSeats} passenger seats.`
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload: any = {
@@ -388,6 +454,24 @@ export const OfferRidePage: React.FC = () => {
     const costNum = costPerSeat.trim() === '' ? 0 : Number(costPerSeat);
     if (isNaN(costNum) || costNum < 0 || costNum > 250) {
       setError('Cost contribution must be between ₹0 and ₹250 per seat (Cars-only non-commercial cap).');
+      return;
+    }
+
+    if (availableSeats < 1) {
+      setError('Available seats must be at least 1.');
+      return;
+    }
+
+    if (availableSeats > effectiveMaxSeats) {
+      if (editRideId && editingConfirmedSeats > 0) {
+        setError(
+          `Cannot offer more than ${effectiveMaxSeats} passenger seats for this vehicle (${editingConfirmedSeats} already booked).`
+        );
+      } else {
+        setError(
+          `Vehicle capacity is ${selectedVehicle?.capacity || 4} seats (including driver). You cannot offer more than ${maxPassengerSeats} passenger seats.`
+        );
+      }
       return;
     }
 
@@ -582,7 +666,7 @@ export const OfferRidePage: React.FC = () => {
             <Car size={18} /> No Registered Vehicles Found
           </div>
           <p style={{ margin: 0, fontSize: '0.875rem', color: '#78350f' }}>
-            To offer a ride, you must register at least one verified car. Two-wheelers and commercial vehicles are not permitted.
+            To offer a ride, you must register at least one passenger car. Two-wheelers and commercial vehicles are not permitted.
           </p>
           <div>
             <Link to="/vehicles">
@@ -982,7 +1066,15 @@ export const OfferRidePage: React.FC = () => {
                       </label>
                       <select
                         value={quickVehicleId}
-                        onChange={(e) => setQuickVehicleId(e.target.value)}
+                        onChange={(e) => {
+                          const newId = e.target.value;
+                          setQuickVehicleId(newId);
+                          const v = vehicles.find((item) => item.id === newId);
+                          if (v) {
+                            const maxSeats = Math.max(1, v.capacity - 1);
+                            setQuickSeats((prev) => Math.min(prev, maxSeats));
+                          }
+                        }}
                         required
                         disabled={vehicles.length === 0}
                         style={{
@@ -1023,12 +1115,15 @@ export const OfferRidePage: React.FC = () => {
                         }}
                         id="quick-seats-select"
                       >
-                        {[1, 2, 3, 4, 5, 6].map((num) => (
+                        {Array.from({ length: maxQuickPassengerSeats }, (_, i) => i + 1).map((num) => (
                           <option key={num} value={num}>
                             {num} {num === 1 ? 'Seat' : 'Seats'}
                           </option>
                         ))}
                       </select>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                        Max {maxQuickPassengerSeats} passenger seat{maxQuickPassengerSeats > 1 ? 's' : ''} ({quickVehicle?.capacity || 4}-seater vehicle)
+                      </span>
                     </div>
 
                     {/* Cost Per Seat */}
@@ -1146,9 +1241,13 @@ export const OfferRidePage: React.FC = () => {
             <select
               value={selectedVehicleId}
               onChange={(e) => {
-                setSelectedVehicleId(e.target.value);
-                const v = vehicles.find((item) => item.id === e.target.value);
-                if (v) setAvailableSeats(Math.min(v.capacity - 1, 4));
+                const newId = e.target.value;
+                setSelectedVehicleId(newId);
+                const v = vehicles.find((item) => item.id === newId);
+                if (v) {
+                  const maxSeats = Math.max(1, v.capacity - 1);
+                  setAvailableSeats((prev) => Math.min(prev, maxSeats));
+                }
               }}
               required
               disabled={vehicles.length === 0 || loadingRide}
@@ -1256,12 +1355,17 @@ export const OfferRidePage: React.FC = () => {
                 }}
                 id="offer-seats-select"
               >
-                {[1, 2, 3, 4, 5, 6].map((num) => (
+                {Array.from({ length: effectiveMaxSeats }, (_, i) => i + 1).map((num) => (
                   <option key={num} value={num}>
                     {num} {num === 1 ? 'Seat' : 'Seats'}
                   </option>
                 ))}
               </select>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                {editRideId && editingConfirmedSeats > 0
+                  ? `Max ${effectiveMaxSeats} passenger seats available (${editingConfirmedSeats} already booked)`
+                  : `Max ${effectiveMaxSeats} passenger seat${effectiveMaxSeats > 1 ? 's' : ''} for this ${selectedVehicle?.capacity || 4}-seater vehicle`}
+              </span>
             </div>
 
             <div>
