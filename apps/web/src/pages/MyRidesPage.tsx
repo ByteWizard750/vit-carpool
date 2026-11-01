@@ -498,48 +498,21 @@ export const MyRidesPage: React.FC = () => {
 
       {/* Segmented Category Tabs */}
       <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          borderBottom: '1px solid var(--border-light, #e2e8f0)',
-          marginBottom: '24px',
-          overflowX: 'auto',
-          paddingBottom: '4px',
-        }}
+        className="my-rides-tablist"
         role="tablist"
+        aria-label="Filter rides by status"
       >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'UPCOMING'}
           onClick={() => setActiveTab('UPCOMING')}
-          style={{
-            padding: '10px 18px',
-            border: 'none',
-            borderBottom: activeTab === 'UPCOMING' ? '2px solid var(--color-brand-600, #2563eb)' : '2px solid transparent',
-            background: 'none',
-            fontSize: '0.9rem',
-            fontWeight: activeTab === 'UPCOMING' ? 700 : 500,
-            color: activeTab === 'UPCOMING' ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            whiteSpace: 'nowrap',
-          }}
+          className={`my-rides-tab-btn ${activeTab === 'UPCOMING' ? 'active' : ''}`}
           id="tab-upcoming-rides"
         >
-          <span>Upcoming Rides</span>
-          <span
-            style={{
-              padding: '2px 8px',
-              borderRadius: '9999px',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              backgroundColor: activeTab === 'UPCOMING' ? 'var(--color-brand-100, #dbeafe)' : '#f1f5f9',
-              color: activeTab === 'UPCOMING' ? 'var(--color-brand-800, #1e40af)' : '#64748b',
-            }}
-          >
+          <span className="my-rides-tab-label-full">Upcoming Rides</span>
+          <span className="my-rides-tab-label-short">Upcoming</span>
+          <span className="my-rides-tab-badge">
             {upcomingRides.length}
           </span>
         </button>
@@ -549,33 +522,11 @@ export const MyRidesPage: React.FC = () => {
           role="tab"
           aria-selected={activeTab === 'COMPLETED'}
           onClick={() => setActiveTab('COMPLETED')}
-          style={{
-            padding: '10px 18px',
-            border: 'none',
-            borderBottom: activeTab === 'COMPLETED' ? '2px solid var(--color-brand-600, #2563eb)' : '2px solid transparent',
-            background: 'none',
-            fontSize: '0.9rem',
-            fontWeight: activeTab === 'COMPLETED' ? 700 : 500,
-            color: activeTab === 'COMPLETED' ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            whiteSpace: 'nowrap',
-          }}
+          className={`my-rides-tab-btn ${activeTab === 'COMPLETED' ? 'active' : ''}`}
           id="tab-completed-rides"
         >
           <span>Completed</span>
-          <span
-            style={{
-              padding: '2px 8px',
-              borderRadius: '9999px',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              backgroundColor: activeTab === 'COMPLETED' ? 'var(--color-brand-100, #dbeafe)' : '#f1f5f9',
-              color: activeTab === 'COMPLETED' ? 'var(--color-brand-800, #1e40af)' : '#64748b',
-            }}
-          >
+          <span className="my-rides-tab-badge">
             {completedRides.length}
           </span>
         </button>
@@ -585,33 +536,11 @@ export const MyRidesPage: React.FC = () => {
           role="tab"
           aria-selected={activeTab === 'CANCELLED'}
           onClick={() => setActiveTab('CANCELLED')}
-          style={{
-            padding: '10px 18px',
-            border: 'none',
-            borderBottom: activeTab === 'CANCELLED' ? '2px solid var(--color-brand-600, #2563eb)' : '2px solid transparent',
-            background: 'none',
-            fontSize: '0.9rem',
-            fontWeight: activeTab === 'CANCELLED' ? 700 : 500,
-            color: activeTab === 'CANCELLED' ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            whiteSpace: 'nowrap',
-          }}
+          className={`my-rides-tab-btn ${activeTab === 'CANCELLED' ? 'active' : ''}`}
           id="tab-cancelled-rides"
         >
           <span>Cancelled</span>
-          <span
-            style={{
-              padding: '2px 8px',
-              borderRadius: '9999px',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              backgroundColor: activeTab === 'CANCELLED' ? 'var(--color-brand-100, #dbeafe)' : '#f1f5f9',
-              color: activeTab === 'CANCELLED' ? 'var(--color-brand-800, #1e40af)' : '#64748b',
-            }}
-          >
+          <span className="my-rides-tab-badge">
             {cancelledRides.length}
           </span>
         </button>
@@ -662,7 +591,7 @@ export const MyRidesPage: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 330px), 1fr))',
             gap: '20px',
           }}
         >
@@ -820,7 +749,7 @@ export const MyRidesPage: React.FC = () => {
 
                 {/* Bottom Card Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-light)', paddingTop: '14px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                     {/* View Passenger Requests Button */}
                     <button
                       type="button"

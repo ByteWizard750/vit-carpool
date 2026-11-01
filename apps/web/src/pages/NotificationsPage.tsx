@@ -237,80 +237,85 @@ export const NotificationsPage: React.FC = () => {
         description="Real-time updates on your ride alerts, booking requests, and commutes."
         tabs={<InboxTabs counts={{ notifications: unreadCount }} />}
         action={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          unreadCount > 0 ? (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={() => fetchNotifications(true)}
-              disabled={loading || refreshing}
-              title="Refresh notifications"
+              onClick={handleMarkAllAsRead}
+              disabled={actionLoadingId === 'all'}
+              leftIcon={<CheckCheck size={16} />}
+              id="mark-all-read-btn"
             >
-              <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+              {actionLoadingId === 'all' ? 'Marking...' : 'Mark all as read'}
             </Button>
-
-            {unreadCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleMarkAllAsRead}
-                disabled={actionLoadingId === 'all'}
-                leftIcon={<CheckCheck size={16} />}
-                id="mark-all-read-btn"
-              >
-                {actionLoadingId === 'all' ? 'Marking...' : 'Mark all as read'}
-              </Button>
-            )}
-          </div>
+          ) : undefined
         }
       />
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs & Refresh Action */}
       <div
         style={{
           display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           gap: '8px',
           marginBottom: '20px',
           borderBottom: '1px solid var(--border-medium)',
           paddingBottom: '8px',
+          flexWrap: 'wrap',
         }}
       >
-        <button
-          type="button"
-          onClick={() => setFilter('ALL')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: filter === 'ALL' ? '#eff6ff' : 'transparent',
-            color: filter === 'ALL' ? '#1d4ed8' : 'var(--text-secondary)',
-            fontWeight: filter === 'ALL' ? 700 : 500,
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-          id="filter-all-btn"
-        >
-          All Notifications ({notifications.length})
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => setFilter('ALL')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: filter === 'ALL' ? '#eff6ff' : 'transparent',
+              color: filter === 'ALL' ? '#1d4ed8' : 'var(--text-secondary)',
+              fontWeight: filter === 'ALL' ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            id="filter-all-btn"
+          >
+            All Notifications ({notifications.length})
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setFilter('UNREAD')}
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: filter === 'UNREAD' ? '#eff6ff' : 'transparent',
-            color: filter === 'UNREAD' ? '#1d4ed8' : 'var(--text-secondary)',
-            fontWeight: filter === 'UNREAD' ? 700 : 500,
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-          id="filter-unread-btn"
+          <button
+            type="button"
+            onClick={() => setFilter('UNREAD')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: filter === 'UNREAD' ? '#eff6ff' : 'transparent',
+              color: filter === 'UNREAD' ? '#1d4ed8' : 'var(--text-secondary)',
+              fontWeight: filter === 'UNREAD' ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            id="filter-unread-btn"
+          >
+            Unread ({unreadCount})
+          </button>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => fetchNotifications(true)}
+          disabled={loading || refreshing}
+          title="Refresh notifications"
+          style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}
+          aria-label="Refresh notifications"
         >
-          Unread ({unreadCount})
-        </button>
+          <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+        </Button>
       </div>
 
       {/* Error Banner */}

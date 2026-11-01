@@ -14,6 +14,7 @@ export const AppLayout: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const isMessagesPage = location.pathname.startsWith('/messages');
+  const isAuthPage = location.pathname === '/auth';
   const [devDrawerOpen, setDevDrawerOpen] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
 
@@ -101,7 +102,7 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {!isMessagesPage && <Footer onOpenDevStatus={() => setDevDrawerOpen(true)} />}
+      {!isMessagesPage && !isAuthPage && <Footer onOpenDevStatus={() => setDevDrawerOpen(true)} />}
 
       <DevDiagnosticsDrawer
         isOpen={devDrawerOpen}

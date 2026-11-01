@@ -379,78 +379,38 @@ export const AdminDashboardPage: React.FC = () => {
       )}
 
       {/* Console Tab Navigation */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          borderBottom: '1px solid var(--border-light)',
-          marginBottom: '28px',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          whiteSpace: 'nowrap',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}
-      >
+      <div className="admin-console-tabs" role="tablist">
         <button
           onClick={() => setActiveTab('verifications')}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            background: 'none',
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            color: activeTab === 'verifications' ? 'var(--color-brand-600)' : 'var(--text-secondary)',
-            borderBottom: activeTab === 'verifications' ? '2px solid var(--color-brand-600)' : '2px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
+          className={`admin-tab-btn ${activeTab === 'verifications' ? 'active' : ''}`}
+          id="admin-tab-verifications"
+          aria-label="ID Verification Queue"
         >
           <UserCheck size={18} />
-          ID Verification Queue
+          <span className="admin-tab-label-full">ID Verification Queue</span>
+          <span className="admin-tab-label-short">Verifications</span>
         </button>
 
         <button
           onClick={() => setActiveTab('reports')}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            background: 'none',
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            color: activeTab === 'reports' ? 'var(--color-brand-600)' : 'var(--text-secondary)',
-            borderBottom: activeTab === 'reports' ? '2px solid var(--color-brand-600)' : '2px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
+          className={`admin-tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
+          id="admin-tab-reports"
+          aria-label="Incident & Safety Reports"
         >
           <ShieldAlert size={18} />
-          Incident & Safety Reports
+          <span className="admin-tab-label-full">Incident & Safety Reports</span>
+          <span className="admin-tab-label-short">Reports</span>
         </button>
 
         <button
           onClick={() => setActiveTab('users')}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            background: 'none',
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            color: activeTab === 'users' ? 'var(--color-brand-600)' : 'var(--text-secondary)',
-            borderBottom: activeTab === 'users' ? '2px solid var(--color-brand-600)' : '2px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
+          className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+          id="admin-tab-users"
+          aria-label="User Management & Suspension"
         >
           <User size={18} />
-          User Management & Suspension
+          <span className="admin-tab-label-full">User Management & Suspension</span>
+          <span className="admin-tab-label-short">Users</span>
         </button>
       </div>
 
@@ -460,37 +420,21 @@ export const AdminDashboardPage: React.FC = () => {
       {activeTab === 'verifications' && (
         <div>
           {/* Filter Bar */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center',
-              marginBottom: '20px',
-              flexWrap: 'wrap',
-            }}
-          >
+          <div className="admin-filter-bar">
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Status Filter:
             </span>
-            {['PENDING', 'APPROVED', 'REJECTED', 'ALL'].map((s) => (
-              <button
-                key={s}
-                onClick={() => setVerifFilter(s)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1px solid',
-                  borderColor: verifFilter === s ? 'var(--color-brand-600)' : 'var(--border-light)',
-                  backgroundColor: verifFilter === s ? 'var(--color-brand-50)' : '#ffffff',
-                  color: verifFilter === s ? 'var(--color-brand-700)' : 'var(--text-secondary)',
-                  fontSize: '0.825rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {s}
-              </button>
-            ))}
+            <div className="admin-filter-pills">
+              {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setVerifFilter(s)}
+                  className={`admin-filter-pill ${verifFilter === s ? 'active' : ''}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
 
           {loadingVerif ? (

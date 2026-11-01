@@ -405,32 +405,13 @@ export const RecurringCommutesPage: React.FC = () => {
       {activeTab === 'LIST' && (
         <div>
           {/* Status Filter Bar */}
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              marginBottom: 'var(--space-6)',
-              overflowX: 'auto',
-              paddingBottom: 'var(--space-2)',
-            }}
-          >
+          <div className="commutes-filter-group">
             {(['ALL', 'ACTIVE', 'PAUSED', 'CANCELLED'] as const).map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => setStatusFilter(status)}
-                style={{
-                  padding: 'var(--space-2) var(--space-4)',
-                  borderRadius: 'var(--radius-full)',
-                  border: '1px solid',
-                  borderColor: statusFilter === status ? 'var(--color-brand-600)' : 'var(--border-light)',
-                  backgroundColor: statusFilter === status ? 'var(--color-brand-50)' : 'var(--bg-surface)',
-                  color: statusFilter === status ? 'var(--color-brand-700)' : 'var(--text-secondary)',
-                  fontWeight: 600,
-                  fontSize: 'var(--text-sm)',
-                  cursor: 'pointer',
-                  transition: 'all var(--transition-fast)',
-                }}
+                className={`commutes-filter-btn ${statusFilter === status ? 'active' : ''}`}
               >
                 {status === 'ALL' ? 'All Schedules' : status} (
                 {status === 'ALL'
@@ -497,6 +478,7 @@ export const RecurringCommutesPage: React.FC = () => {
                 return (
                   <div
                     key={schedule.id}
+                    className="commute-schedule-card"
                     style={{
                       backgroundColor: 'var(--bg-surface)',
                       borderRadius: 'var(--radius-lg)',
@@ -506,7 +488,6 @@ export const RecurringCommutesPage: React.FC = () => {
                         : isPaused
                         ? 'var(--status-warning-border)'
                         : 'var(--border-light)',
-                      padding: 'var(--space-5)',
                       boxShadow: 'var(--shadow-sm)',
                       display: 'flex',
                       flexDirection: 'column',
@@ -516,7 +497,7 @@ export const RecurringCommutesPage: React.FC = () => {
                   >
                     {/* Card Header: Route & Status */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-                      <div style={{ flex: 1, minWidth: 0, paddingRight: 'var(--space-3)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <RouteSpine
                           origin={schedule.origin}
                           destination={schedule.destination}
@@ -553,7 +534,7 @@ export const RecurringCommutesPage: React.FC = () => {
                       </div>
 
                       {/* Days Pills */}
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         {WEEKDAYS_LIST.map((w) => {
                           const isSelected = schedule.weekdays.includes(w.id);
                           return (

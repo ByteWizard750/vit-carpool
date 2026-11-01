@@ -846,6 +846,10 @@
   body {
     padding-bottom: calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px));
   }
+
+  .site-footer {
+    padding-bottom: calc(var(--bottom-nav-height, 64px) + var(--space-6) + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* ── Seat Indicator ─────────────────────────────────────────────────────────── */
@@ -1054,6 +1058,14 @@
   box-sizing: border-box;
 }
 
+@media (max-width: 640px) {
+  .page-header {
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+}
+
 .page-header-row {
   display: flex;
   align-items: flex-start;
@@ -1072,6 +1084,13 @@
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+/* Mobile fix: prevent overly tall title block */
+@media (max-width: 640px) {
+  .page-header-title-block {
+    flex: 0 0 auto;
+  }
 }
 
 .page-header-title-row {
@@ -1112,10 +1131,12 @@
   .page-header-action {
     width: 100%;
     display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
-  .page-header-action a,
-  .page-header-action button {
+  .page-header-action a:not(.btn-ghost):not(.btn-icon),
+  .page-header-action button:not(.btn-ghost):not(.btn-icon) {
     width: 100%;
     justify-content: center;
   }
@@ -1458,6 +1479,8 @@
 @media (min-width: 768px) {
   .chat-layout-container {
     grid-template-columns: minmax(280px, 340px) 1fr;
+    height: calc(100vh - 165px);
+    min-height: 520px;
   }
 }
 
@@ -1481,6 +1504,22 @@
 }
 
 @media (max-width: 767px) {
+  .chat-layout-container {
+    height: auto;
+    min-height: 360px;
+    border-radius: 12px;
+  }
+
+  .chat-layout-container.has-selected-conversation {
+    height: calc(100dvh - 210px);
+    min-height: 440px;
+  }
+
+  .chat-layout-container:not(.has-selected-conversation) .chat-conversations-list-pane {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   .chat-layout-container.has-selected-conversation .chat-conversations-list-pane {
     display: none !important;
   }
@@ -1495,6 +1534,249 @@
 @media (min-width: 768px) {
   .chat-mobile-back-btn {
     display: none !important;
+  }
+}
+
+/* ── MyRides Subtabs Responsive System ───────────────────────────────────── */
+.my-rides-tablist {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-light, #e2e8f0);
+  margin-bottom: 24px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.my-rides-tab-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.my-rides-tab-btn.active {
+  font-weight: 700;
+  color: var(--color-brand-700, #1d4ed8);
+  border-bottom-color: var(--color-brand-600, #2563eb);
+}
+
+.my-rides-tab-badge {
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background-color: #f1f5f9;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.my-rides-tab-btn.active .my-rides-tab-badge {
+  background-color: var(--color-brand-100, #dbeafe);
+  color: var(--color-brand-800, #1e40af);
+}
+
+.my-rides-tab-label-short {
+  display: none;
+}
+.my-rides-tab-label-full {
+  display: inline;
+}
+
+@media (max-width: 480px) {
+  .my-rides-tab-btn {
+    padding: 8px 4px;
+    font-size: 0.8125rem;
+    gap: 4px;
+  }
+  .my-rides-tab-badge {
+    padding: 1px 5px;
+    font-size: 0.7rem;
+  }
+  .my-rides-tab-label-full {
+    display: none;
+  }
+  .my-rides-tab-label-short {
+    display: inline;
+  }
+}
+
+/* ── Admin Console Tabs Responsive System ────────────────────────────────── */
+.admin-console-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-console-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  background: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.admin-tab-btn.active {
+  color: var(--color-brand-600);
+  border-bottom-color: var(--color-brand-600);
+}
+
+.admin-tab-label-short {
+  display: none;
+}
+.admin-tab-label-full {
+  display: inline;
+}
+
+.admin-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.admin-filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-filter-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-light);
+  background-color: #ffffff;
+  color: var(--text-secondary);
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.admin-filter-pill.active {
+  border-color: var(--color-brand-600);
+  background-color: var(--color-brand-50);
+  color: var(--color-brand-700);
+}
+
+@media (max-width: 640px) {
+  .admin-tab-btn {
+    padding: 10px 8px;
+    font-size: 0.85rem;
+    gap: 6px;
+    flex: 1 1 0;
+    justify-content: center;
+  }
+  .admin-tab-label-full {
+    display: none;
+  }
+  .admin-tab-label-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-filter-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .admin-filter-pills {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .admin-filter-pill {
+    padding: 6px 2px;
+    font-size: 0.75rem;
+    text-align: center;
+    width: 100%;
+  }
+}
+
+/* ── Recurring Commutes Filter Pills ─────────────────────────────────────── */
+.commutes-filter-group {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.commutes-filter-btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-light);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.commutes-filter-btn.active {
+  border-color: var(--color-brand-600);
+  background-color: var(--color-brand-50);
+  color: var(--color-brand-700);
+}
+
+@media (max-width: 480px) {
+  .commutes-filter-group {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .commutes-filter-btn {
+    padding: 8px 10px;
+    font-size: var(--text-xs);
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+.commute-schedule-card {
+  padding: var(--space-5);
+}
+
+@media (max-width: 480px) {
+  .commute-schedule-card {
+    padding: var(--space-4);
   }
 }
 
@@ -1538,6 +1820,13 @@
   background-color: var(--bg-page);
   width: 100%;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .auth-page-container {
+    min-height: calc(100dvh - var(--header-height, 64px));
+    padding-bottom: calc(var(--bottom-nav-height, 64px) + 24px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .auth-page-card {
