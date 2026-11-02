@@ -82,6 +82,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         <nav className="nav-desktop-links" aria-label="Primary Navigation">
           {user ? (
             <>
+              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Home size={15} />
+                <span>Home</span>
+              </NavLink>
               <NavLink to="/dashboard" className={getNavLinkClass} id="nav-link-dashboard">
                 Dashboard
               </NavLink>
@@ -135,8 +139,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
             </>
           ) : (
             <>
-              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home">
-                Home
+              <NavLink to="/" end className={getNavLinkClass} id="nav-link-home" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Home size={15} />
+                <span>Home</span>
               </NavLink>
               <NavLink to="/rides" className={getNavLinkClass} id="nav-link-rides">
                 Find Rides
@@ -202,31 +207,87 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               {/* User Identity / Dashboard Link Card */}
               <Link
                 to="/dashboard"
-                className="nav-link"
                 onClick={() => setMobileMenuOpen(false)}
                 id="mobile-drawer-dashboard"
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  padding: '12px 14px',
                   borderRadius: '10px',
-                  backgroundColor: 'var(--bg-subtle)',
-                  marginBottom: '6px',
+                  backgroundColor: 'var(--bg-subtle, #f8fafc)',
+                  border: '1px solid var(--border-light, #e2e8f0)',
+                  marginBottom: '8px',
                   textDecoration: 'none',
+                  minWidth: 0,
+                  width: '100%',
+                  boxSizing: 'border-box',
                 }}
               >
-                <div>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user.fullName}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {user.email} &bull; {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--color-brand-600, #2563eb)',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <span>Dashboard</span>
+                    <span>&rarr;</span>
                   </div>
                 </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-brand-600)', fontWeight: 600 }}>
-                  Dashboard &rarr;
-                </span>
+
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '100%',
+                  }}
+                  title={`${user.email} • ${user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}`}
+                >
+                  <span>{user.email}</span>
+                  <span style={{ margin: '0 5px', opacity: 0.6 }}>&bull;</span>
+                  <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
+                  </span>
+                </div>
+              </Link>
+
+              {/* Home Navigation Link */}
+              <Link
+                to="/"
+                className="nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+                id="mobile-drawer-home"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  marginBottom: '6px',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  color: location.pathname === '/' ? 'var(--color-brand-600, #2563eb)' : 'var(--text-primary)',
+                  backgroundColor: location.pathname === '/' ? 'var(--bg-subtle, #f1f5f9)' : 'transparent',
+                }}
+              >
+                <Home size={16} style={{ marginRight: '8px', color: 'var(--color-brand-600, #2563eb)' }} />
+                <span>Home</span>
               </Link>
 
               {/* Primary Action CTA */}

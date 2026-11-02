@@ -20,6 +20,8 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
+  background-color: #ffffff;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -31,6 +33,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overscroll-behavior-y: none;
 }
 
 #root {

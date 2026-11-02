@@ -8,6 +8,11 @@ export const NotificationTypeSchema = z.enum([
   'BOOKING_REJECTED',
   'BOOKING_CANCELLED',
   'RIDE_CANCELLED',
+  'RIDE_STARTED',
+  'DRIVER_APPROACHING',
+  'DRIVER_ARRIVED',
+  'MISSED_PICKUP',
+  'RIDE_COMPLETED',
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 

@@ -10,6 +10,8 @@ import {
   UseGuards,
   BadRequestException,
   Headers,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { RidesService } from './rides.service';
@@ -124,6 +126,15 @@ export class RidesController {
     @Param('id') id: string,
   ): Promise<DriverRideResponseDto> {
     return this.ridesService.cancelMyRide(user, id);
+  }
+
+  @Post(':id/start')
+  @ApiOperation({ summary: 'Start a scheduled ride and initiate live tracking (Driver only)' })
+  async startRide(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<DriverRideResponseDto> {
+    return this.ridesService.startMyRide(user, id);
   }
 
   @Post(':id/cancel')

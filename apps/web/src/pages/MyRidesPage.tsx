@@ -20,6 +20,7 @@ import {
   Sparkles,
   Info,
   MessageSquare,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -324,7 +325,7 @@ export const MyRidesPage: React.FC = () => {
   // Categorize rides into categories
   const now = Date.now();
   const upcomingRides = rides.filter(
-    (r) => r.status === 'SCHEDULED' && new Date(r.departureTime).getTime() > now
+    (r) => r.status === 'IN_PROGRESS' || (r.status === 'SCHEDULED' && new Date(r.departureTime).getTime() > now)
   );
   const completedRides = rides.filter(
     (r) => r.status === 'COMPLETED' || (r.status === 'SCHEDULED' && new Date(r.departureTime).getTime() <= now)
@@ -814,8 +815,25 @@ export const MyRidesPage: React.FC = () => {
                       </Link>
                     )}
 
+                    {/* Tracking Button */}
+                    {(ride.status === 'SCHEDULED' || ride.status === 'IN_PROGRESS') && (
+                      <Link
+                        to={`/rides/${ride.id}/track`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <Button
+                          variant={ride.status === 'IN_PROGRESS' ? 'primary' : 'outline'}
+                          size="sm"
+                          leftIcon={<Radio size={13} style={ride.status === 'IN_PROGRESS' ? { animation: 'map-pulse 1.5s infinite' } : undefined} />}
+                          id={`btn-track-${ride.id}`}
+                        >
+                          {ride.status === 'IN_PROGRESS' ? 'Live Tracking' : 'Start & Track'}
+                        </Button>
+                      </Link>
+                    )}
+
                     {/* Complete Ride Button */}
-                    {ride.status === 'SCHEDULED' && (
+                    {(ride.status === 'SCHEDULED' || ride.status === 'IN_PROGRESS') && (
                       <Button
                         variant="outline"
                         size="sm"

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AudienceTypeSchema } from './audience.contract';
 import { VehicleResponseSchema, PublicVehicleSummarySchema } from './vehicle.contract';
 
-export const RideStatusSchema = z.enum(['SCHEDULED', 'CANCELLED', 'COMPLETED']);
+export const RideStatusSchema = z.enum(['SCHEDULED', 'IN_PROGRESS', 'CANCELLED', 'COMPLETED']);
 export type RideStatus = z.infer<typeof RideStatusSchema>;
 
 /**

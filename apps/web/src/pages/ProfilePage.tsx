@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   GraduationCap,
   Briefcase,
@@ -11,6 +11,7 @@ import {
   Star,
   UserX,
   Loader2,
+  Home,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { PageShell } from '../components/layout/PageShell';
@@ -95,6 +96,20 @@ export const ProfilePage: React.FC = () => {
       <PageHeader
         title="Profile"
         description="Manage your campus affiliation, verification credentials, reputation, and privacy settings."
+        action={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Link to="/dashboard" style={{ textDecoration: 'none' }}>
+              <Button variant="outline" size="sm" leftIcon={<Home size={14} />}>
+                Dashboard
+              </Button>
+            </Link>
+            <Link to="/" style={{ textDecoration: 'none' }}>
+              <Button variant="outline" size="sm" leftIcon={<Home size={14} />}>
+                Home
+              </Button>
+            </Link>
+          </div>
+        }
       />
 
       {/* Main Profile Card */}

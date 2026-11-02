@@ -9,6 +9,7 @@ import {
   LogOut,
   ChevronDown,
   CheckCircle2,
+  Home,
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/AuthContext';
 
@@ -209,6 +210,29 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
           </div>
 
           {/* Menu Links */}
+          <Link
+            to="/"
+            className="account-menu-item"
+            onClick={() => setIsOpen(false)}
+            role="menuitem"
+            id="account-menu-home"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-sm, 6px)',
+              color: 'var(--text-primary)',
+              textDecoration: 'none',
+              fontSize: '13px',
+              fontWeight: 500,
+              transition: 'background var(--transition-fast)',
+            }}
+          >
+            <Home size={15} style={{ color: 'var(--text-secondary)' }} />
+            <span>Home</span>
+          </Link>
+
           <Link
             to="/profile"
             className="account-menu-item"

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Optional,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -18,6 +19,7 @@ import {
 } from '@vit-carpool/contracts';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../moderation/moderation.service';
+import { TrackingGateway } from '../tracking/tracking.gateway';
 
 @Injectable()
 export class BookingsService {
@@ -28,6 +30,7 @@ export class BookingsService {
     private readonly audit: AuditLogService,
     private readonly notificationsService: NotificationsService,
     private readonly moderationService: ModerationService,
+    @Optional() private readonly trackingGateway?: TrackingGateway,
   ) {}
 
   /**
@@ -49,6 +52,13 @@ export class BookingsService {
       audience: booking.audience,
       requestedSeats: booking.requestedSeats,
       status: booking.status,
+      pickupAddress: booking.pickupAddress,
+      pickupLatitude: booking.pickupLatitude,
+      pickupLongitude: booking.pickupLongitude,
+      pickupDescription: isConfirmed ? (booking.pickupDescription || booking.ride.pickupDescription) : undefined,
+      boardingStatus: booking.boardingStatus,
+      boardedAt: booking.boardedAt ? booking.boardedAt.toISOString() : null,
+      proximityNotifiedAt: booking.proximityNotifiedAt ? booking.proximityNotifiedAt.toISOString() : null,
       confirmedAt: booking.confirmedAt ? booking.confirmedAt.toISOString() : null,
       rejectedAt: booking.rejectedAt ? booking.rejectedAt.toISOString() : null,
       cancelledAt: booking.cancelledAt ? booking.cancelledAt.toISOString() : null,
@@ -103,6 +113,13 @@ export class BookingsService {
       audience: booking.audience,
       requestedSeats: booking.requestedSeats,
       status: booking.status,
+      pickupAddress: booking.pickupAddress,
+      pickupLatitude: booking.pickupLatitude,
+      pickupLongitude: booking.pickupLongitude,
+      pickupDescription: isConfirmed ? (booking.pickupDescription || booking.ride.pickupDescription) : undefined,
+      boardingStatus: booking.boardingStatus,
+      boardedAt: booking.boardedAt ? booking.boardedAt.toISOString() : null,
+      proximityNotifiedAt: booking.proximityNotifiedAt ? booking.proximityNotifiedAt.toISOString() : null,
       confirmedAt: booking.confirmedAt ? booking.confirmedAt.toISOString() : null,
       rejectedAt: booking.rejectedAt ? booking.rejectedAt.toISOString() : null,
       cancelledAt: booking.cancelledAt ? booking.cancelledAt.toISOString() : null,
@@ -174,6 +191,10 @@ export class BookingsService {
       throw new BadRequestException('Cannot request seats on a completed ride.');
     }
 
+    if (ride.status === RideStatus.IN_PROGRESS) {
+      throw new BadRequestException('Cannot request seats on a ride that is already in progress.');
+    }
+
     if (ride.departureTime.getTime() <= Date.now()) {
       throw new BadRequestException('Cannot request seats on a ride that has already departed.');
     }
@@ -210,6 +231,10 @@ export class BookingsService {
             audience: user.audience!,
             requestedSeats: dto.requestedSeats,
             status: BookingStatus.PENDING,
+            pickupAddress: dto.pickupAddress ?? ride!.originAddress ?? null,
+            pickupLatitude: dto.pickupLatitude ?? ride!.originLatitude ?? null,
+            pickupLongitude: dto.pickupLongitude ?? ride!.originLongitude ?? null,
+            pickupDescription: dto.pickupDescription ?? ride!.pickupDescription ?? null,
           },
           include: {
             ride: {
@@ -699,6 +724,13 @@ export class BookingsService {
       await this.notificationsService.createNotification(notificationData);
     } catch (err) {
       this.logger.error(`[BookingsService] Failed to notify driver of booking cancellation: ${err}`);
+    }
+
+    // Revoke tracking room access for this passenger if they were tracking
+    try {
+      await this.trackingGateway?.revokePassengerAccess(result.rideId, user.id, 'BOOKING_CANCELLED');
+    } catch (err) {
+      this.logger.warn(`Failed to revoke tracking access for cancelled passenger: ${err}`);
     }
 
     return result;

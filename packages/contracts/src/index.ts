@@ -66,6 +66,8 @@ export {
 export {
   BookingStatusSchema,
   type BookingStatus,
+  BoardingStatusSchema,
+  type BoardingStatus,
   CreateBookingRequestSchema,
   type CreateBookingRequestDto,
   RejectBookingSchema,
@@ -196,4 +198,19 @@ export {
   AdminUserSummarySchema,
   type AdminUserSummaryDto,
 } from './moderation.contract';
+
+export {
+  EtaSourceSchema,
+  type EtaSource,
+  DriverLocationUpdateSchema,
+  type DriverLocationUpdateDto,
+  UpdateBoardingStatusSchema,
+  type UpdateBoardingStatusDto,
+  PassengerTrackingInfoSchema,
+  type PassengerTrackingInfoDto,
+  DriverLocationSnapshotSchema,
+  type DriverLocationSnapshotDto,
+  TrackingSessionStateSchema,
+  type TrackingSessionStateDto,
+} from './tracking.contract';
 

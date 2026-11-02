@@ -13,6 +13,7 @@ import {
   Search,
   MessageSquare,
   Star,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -497,16 +498,31 @@ export const BookingsPage: React.FC = () => {
                             gap: '8px',
                           }}
                         >
-                          <Link to={`/messages?bookingId=${b.id}`}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              leftIcon={<MessageSquare size={13} style={{ color: '#2563eb' }} />}
-                              id={`btn-chat-driver-${b.id}`}
-                            >
-                              Chat with Driver
-                            </Button>
-                          </Link>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {isConfirmed && (
+                              <Link to={`/rides/${b.ride.id}/track`} style={{ textDecoration: 'none' }}>
+                                <Button
+                                  variant={b.ride.status === 'IN_PROGRESS' ? 'primary' : 'outline'}
+                                  size="sm"
+                                  leftIcon={<Radio size={13} style={b.ride.status === 'IN_PROGRESS' ? { animation: 'map-pulse 1.5s infinite' } : undefined} />}
+                                  id={`btn-track-booking-${b.id}`}
+                                >
+                                  {b.ride.status === 'IN_PROGRESS' ? 'Track Driver Live' : 'View Tracking'}
+                                </Button>
+                              </Link>
+                            )}
+
+                            <Link to={`/messages?bookingId=${b.id}`}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                leftIcon={<MessageSquare size={13} style={{ color: '#2563eb' }} />}
+                                id={`btn-chat-driver-${b.id}`}
+                              >
+                                Chat with Driver
+                              </Button>
+                            </Link>
+                          </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {isConfirmed && isCompleted && (

@@ -109,6 +109,7 @@ model User {
   filedReports                Report[]              @relation("UserReportsFiled")
   receivedReports             Report[]              @relation("UserReportsReceived")
   reviewedReports             Report[]              @relation("AdminReviewedReports")
+  webPushSubscriptions        WebPushSubscription[]
 
   @@unique([id, audience])
   @@map("users")
@@ -187,6 +188,7 @@ model Vehicle {
 
 enum RideStatus {
   SCHEDULED
+  IN_PROGRESS
   CANCELLED
   COMPLETED
 
@@ -229,6 +231,8 @@ model Ride {
   notifications      Notification[]
   idempotencyKeys    IdempotencyKey[]
   reports            Report[]          @relation("ReportedRides")
+  trackingSession    RideTrackingSession?
+  locationSnapshots  DriverLocationSnapshot[]
 
   @@unique([id, audience])
   @@unique([id, driverId])
@@ -254,20 +258,39 @@ enum BookingStatus {
   @@map("booking_status_type")
 }
 
+enum BoardingStatus {
+  WAITING
+  BOARDING
+  BOARDED
+  MISSED
+
+  @@map("boarding_status_type")
+}
+
 model Booking {
-  id                 String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  rideId             String        @map("ride_id") @db.Uuid
-  passengerId        String        @map("passenger_id") @db.Uuid
-  driverId           String        @map("driver_id") @db.Uuid
-  audience           Audience
-  requestedSeats     Int           @map("requested_seats") @db.Integer
-  status             BookingStatus @default(PENDING)
-  confirmedAt        DateTime?     @map("confirmed_at") @db.Timestamptz(6)
-  rejectedAt         DateTime?     @map("rejected_at") @db.Timestamptz(6)
-  cancelledAt        DateTime?     @map("cancelled_at") @db.Timestamptz(6)
-  cancellationReason String?       @map("cancellation_reason") @db.VarChar(255)
-  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rideId              String         @map("ride_id") @db.Uuid
+  passengerId         String         @map("passenger_id") @db.Uuid
+  driverId            String         @map("driver_id") @db.Uuid
+  audience            Audience
+  requestedSeats      Int            @map("requested_seats") @db.Integer
+  status              BookingStatus  @default(PENDING)
+  pickupAddress       String?        @map("pickup_address") @db.VarChar(255)
+  pickupLatitude      Float?         @map("pickup_latitude")
+  pickupLongitude     Float?         @map("pickup_longitude")
+  pickupDescription   String?        @map("pickup_description") @db.VarChar(255)
+  boardingStatus      BoardingStatus @default(WAITING) @map("boarding_status")
+  boardedAt           DateTime?      @map("boarded_at") @db.Timestamptz(6)
+  proximityNotifiedAt DateTime?      @map("proximity_notified_at") @db.Timestamptz(6)
+  arrivedNotifiedAt   DateTime?      @map("arrived_notified_at") @db.Timestamptz(6)
+  missedNotifiedAt    DateTime?      @map("missed_notified_at") @db.Timestamptz(6)
+  missedAt            DateTime?      @map("missed_at") @db.Timestamptz(6)
+  confirmedAt         DateTime?      @map("confirmed_at") @db.Timestamptz(6)
+  rejectedAt          DateTime?      @map("rejected_at") @db.Timestamptz(6)
+  cancelledAt         DateTime?      @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason  String?        @map("cancellation_reason") @db.VarChar(255)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   ride         Ride          @relation("RideBookings", fields: [rideId, audience], references: [id, audience], onDelete: Restrict)
   passenger    User          @relation("PassengerBookings", fields: [passengerId, audience], references: [id, audience], onDelete: Restrict)
@@ -282,6 +305,7 @@ model Booking {
   @@index([driverId])
   @@index([status])
   @@index([audience, status])
+  @@index([rideId, boardingStatus])
   @@map("bookings")
 }
 
@@ -351,6 +375,42 @@ model DriverRating {
   @@index([passengerId])
   @@index([rideId])
   @@map("driver_ratings")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 7.1 Real-Time Ride Tracking & Boarding Models
+// -----------------------------------------------------------------------------
+
+model RideTrackingSession {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rideId       String    @unique @map("ride_id") @db.Uuid
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(6)
+  isStale      Boolean   @default(false) @map("is_stale")
+  lastUpdateAt DateTime? @map("last_update_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ride         Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  @@index([rideId])
+  @@map("ride_tracking_sessions")
+}
+
+model DriverLocationSnapshot {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rideId     String   @map("ride_id") @db.Uuid
+  latitude   Float    @map("latitude")
+  longitude  Float    @map("longitude")
+  accuracy   Float?   @map("accuracy")
+  speedKmh   Float?   @map("speed_kmh")
+  heading    Float?   @map("heading")
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  ride       Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  @@index([rideId, recordedAt(sort: Desc)])
+  @@map("driver_location_snapshots")
 }
 
 // -----------------------------------------------------------------------------
@@ -497,6 +557,11 @@ enum NotificationType {
   BOOKING_REJECTED
   BOOKING_CANCELLED
   RIDE_CANCELLED
+  RIDE_STARTED
+  DRIVER_APPROACHING
+  DRIVER_ARRIVED
+  MISSED_PICKUP
+  RIDE_COMPLETED
 
   @@map("notification_type")
 }
@@ -601,6 +666,26 @@ model Report {
   @@index([category])
   @@index([createdAt(sort: Desc)])
   @@map("reports")
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 7.6 Web Push Subscriptions
+// -----------------------------------------------------------------------------
+
+model WebPushSubscription {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+  @@map("web_push_subscriptions")
 }
 
 

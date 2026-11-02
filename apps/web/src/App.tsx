@@ -20,6 +20,7 @@ import { RideAlertsPage } from './pages/RideAlertsPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { SafetyPage } from './pages/SafetyPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { RideTrackingPage } from './pages/RideTrackingPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export const App: React.FC = () => {
@@ -66,6 +67,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute requireVerified>
                 <MyRidesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/rides/:id/track"
+            element={
+              <ProtectedRoute requireVerified>
+                <RideTrackingPage />
               </ProtectedRoute>
             }
           />

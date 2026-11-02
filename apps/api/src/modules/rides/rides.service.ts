@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Optional,
   Logger,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
@@ -23,6 +24,7 @@ import { RatingsService } from '../ratings/ratings.service';
 import { RideAlertsMatcherService } from '../ride-alerts/ride-alerts-matcher.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../moderation/moderation.service';
+import { TrackingGateway } from '../tracking/tracking.gateway';
 
 @Injectable()
 export class RidesService {
@@ -35,6 +37,7 @@ export class RidesService {
     private readonly alertsMatcher: RideAlertsMatcherService,
     private readonly notificationsService: NotificationsService,
     private readonly moderationService: ModerationService,
+    @Optional() private readonly trackingGateway?: TrackingGateway,
   ) {}
 
   /**
@@ -816,6 +819,10 @@ export class RidesService {
         throw new BadRequestException('Cannot modify a ride that has already been completed.');
       }
 
+      if (ride.status === RideStatus.IN_PROGRESS) {
+        throw new BadRequestException('Cannot modify a ride that is already in progress.');
+      }
+
       // Policy: Scheduled rides cannot be edited within 15 minutes of departure or after departure
       if (ride.departureTime.getTime() <= Date.now() + 15 * 60 * 1000) {
         throw new BadRequestException(
@@ -915,7 +922,7 @@ export class RidesService {
         throw new BadRequestException('Cannot cancel a completed ride.');
       }
 
-      if (ride.departureTime.getTime() <= Date.now()) {
+      if (ride.departureTime.getTime() <= Date.now() && ride.status !== RideStatus.IN_PROGRESS) {
         throw new BadRequestException('Cannot cancel a ride that has already departed.');
       }
 
@@ -955,6 +962,17 @@ export class RidesService {
             },
           },
         },
+      });
+
+      // Close tracking session if active
+      await tx.rideTrackingSession.updateMany({
+        where: { rideId },
+        data: { endedAt: new Date(), isStale: true },
+      });
+
+      // Remove active location data according to retention rules (M7.7)
+      await tx.driverLocationSnapshot.deleteMany({
+        where: { rideId },
       });
 
       await this.audit.log(
@@ -1012,85 +1030,260 @@ export class RidesService {
       }
     }
 
+    // Evict any active tracking room listeners and emit access revocation
+    try {
+      await this.trackingGateway?.revokeRideAccess(rideId, 'RIDE_CANCELLED');
+    } catch (err) {
+      this.logger.warn(`Failed to revoke tracking room access on ride cancellation: ${err}`);
+    }
+
     return result;
   }
 
   /**
-   * Mark a scheduled ride as completed (Driver only).
+   * Start a scheduled ride and initiate live tracking (Driver only).
+   */
+  async startMyRide(user: User, rideId: string): Promise<DriverRideResponseDto> {
+    const { result, confirmedBookings, rideOrigin, rideDestination, rideAudience } =
+      await this.prisma.$transaction(async (tx) => {
+        const lockedRides = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM rides
+          WHERE id = ${rideId}::uuid AND driver_id = ${user.id}::uuid
+          FOR UPDATE
+        `;
+
+        if (!lockedRides.length) {
+          throw new NotFoundException('Ride not found or you do not have permission to start it.');
+        }
+
+        const ride = await tx.ride.findFirst({
+          where: { id: rideId, driverId: user.id },
+          include: {
+            vehicle: true,
+            bookings: {
+              select: { id: true, status: true, requestedSeats: true, passengerId: true },
+            },
+          },
+        });
+
+        if (!ride) {
+          throw new NotFoundException('Ride not found or you do not have permission to start it.');
+        }
+
+        if (ride.status === RideStatus.CANCELLED) {
+          throw new BadRequestException('Cannot start a ride that has been cancelled.');
+        }
+
+        if (ride.status === RideStatus.COMPLETED) {
+          throw new BadRequestException('Cannot start a ride that has already completed.');
+        }
+
+        if (ride.status === RideStatus.IN_PROGRESS) {
+          const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+          return {
+            result: this.toDriverRideDto(ride, ratingMap.get(user.id) || null),
+            confirmedBookings: [],
+            rideOrigin: ride.origin,
+            rideDestination: ride.destination,
+            rideAudience: ride.audience,
+          };
+        }
+
+        const startedRide = await tx.ride.update({
+          where: { id: rideId },
+          data: { status: RideStatus.IN_PROGRESS },
+          include: {
+            vehicle: true,
+            bookings: {
+              select: { id: true, status: true, requestedSeats: true, passengerId: true },
+            },
+          },
+        });
+
+        // Upsert tracking session
+        await tx.rideTrackingSession.upsert({
+          where: { rideId },
+          create: {
+            rideId,
+            startedAt: new Date(),
+            isStale: false,
+          },
+          update: {
+            startedAt: new Date(),
+            endedAt: null,
+            isStale: false,
+          },
+        });
+
+        await this.audit.log(
+          {
+            actorId: user.id,
+            actorRole: user.role,
+            action: 'RIDE_STARTED',
+            targetType: 'RIDE',
+            targetId: rideId,
+            changes: { status: 'IN_PROGRESS' },
+          },
+          tx,
+        );
+
+        const confirmed = ride.bookings.filter((b) => b.status === BookingStatus.CONFIRMED);
+
+        const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+        return {
+          result: this.toDriverRideDto(startedRide, ratingMap.get(user.id) || null),
+          confirmedBookings: confirmed,
+          rideOrigin: ride.origin,
+          rideDestination: ride.destination,
+          rideAudience: ride.audience,
+        };
+      });
+
+    // Notify all confirmed passengers that driver started the ride
+    for (const b of confirmedBookings) {
+      try {
+        await this.notificationsService.createNotification({
+          recipientId: b.passengerId,
+          audience: rideAudience,
+          type: NotificationType.RIDE_STARTED,
+          title: '🚗 Ride Started',
+          message: `Your driver has started the ride from ${rideOrigin} to ${rideDestination}. Live tracking is now active.`,
+          rideId,
+          bookingId: b.id,
+          dedupKey: `ride_started:${rideId}:${b.passengerId}`,
+        });
+      } catch (err) {
+        this.logger.error(`[RidesService] Failed to notify passenger of ride start: ${err}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Mark a scheduled or in-progress ride as completed (Driver only).
    */
   async completeMyRide(user: User, rideId: string): Promise<DriverRideResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
-      const lockedRides = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM rides
-        WHERE id = ${rideId}::uuid AND driver_id = ${user.id}::uuid
-        FOR UPDATE
-      `;
+    const { result, confirmedBookings, rideOrigin, rideDestination, rideAudience } =
+      await this.prisma.$transaction(async (tx) => {
+        const lockedRides = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM rides
+          WHERE id = ${rideId}::uuid AND driver_id = ${user.id}::uuid
+          FOR UPDATE
+        `;
 
-      if (!lockedRides.length) {
-        throw new NotFoundException('Ride not found or you do not have permission to complete it.');
-      }
+        if (!lockedRides.length) {
+          throw new NotFoundException('Ride not found or you do not have permission to complete it.');
+        }
 
-      const ride = await tx.ride.findFirst({
-        where: { id: rideId, driverId: user.id },
-        include: {
-          vehicle: true,
-          bookings: {
-            select: { id: true, status: true, requestedSeats: true },
+        const ride = await tx.ride.findFirst({
+          where: { id: rideId, driverId: user.id },
+          include: {
+            vehicle: true,
+            bookings: {
+              select: { id: true, status: true, requestedSeats: true, passengerId: true },
+            },
           },
-        },
-      });
+        });
 
-      if (!ride) {
-        throw new NotFoundException('Ride not found.');
-      }
+        if (!ride) {
+          throw new NotFoundException('Ride not found.');
+        }
 
-      if (ride.status === RideStatus.CANCELLED) {
-        throw new BadRequestException('Cannot complete a cancelled ride.');
-      }
+        if (ride.status === RideStatus.CANCELLED) {
+          throw new BadRequestException('Cannot complete a cancelled ride.');
+        }
 
-      if (ride.status === RideStatus.COMPLETED) {
+        if (ride.status === RideStatus.COMPLETED) {
+          const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
+          return {
+            result: this.toDriverRideDto(ride, ratingMap.get(user.id) || null),
+            confirmedBookings: [],
+            rideOrigin: ride.origin,
+            rideDestination: ride.destination,
+            rideAudience: ride.audience,
+          };
+        }
+
+        // Close tracking session
+        await tx.rideTrackingSession.updateMany({
+          where: { rideId },
+          data: { endedAt: new Date(), isStale: true },
+        });
+
+        // When a ride is completed by driver, transition any remaining PENDING passenger bookings to CANCELLED
+        await tx.booking.updateMany({
+          where: {
+            rideId,
+            status: BookingStatus.PENDING,
+          },
+          data: {
+            status: BookingStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancellationReason: 'Ride completed without accepting pending booking request',
+          },
+        });
+
+        const completed = await tx.ride.update({
+          where: { id: rideId },
+          data: { status: RideStatus.COMPLETED },
+          include: {
+            vehicle: true,
+            bookings: {
+              select: { id: true, status: true, requestedSeats: true, passengerId: true },
+            },
+          },
+        });
+
+        await this.audit.log(
+          {
+            actorId: user.id,
+            actorRole: user.role,
+            action: 'RIDE_COMPLETED',
+            targetType: 'RIDE',
+            targetId: rideId,
+            changes: { status: 'COMPLETED' },
+          },
+          tx,
+        );
+
+        const confirmed = ride.bookings.filter((b) => b.status === BookingStatus.CONFIRMED);
+
         const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
-        return this.toDriverRideDto(ride, ratingMap.get(user.id) || null);
-      }
+        return {
+          result: this.toDriverRideDto(completed, ratingMap.get(user.id) || null),
+          confirmedBookings: confirmed,
+          rideOrigin: ride.origin,
+          rideDestination: ride.destination,
+          rideAudience: ride.audience,
+        };
+      });
 
-      // When a ride is completed by driver, transition any remaining PENDING passenger bookings to CANCELLED
-      await tx.booking.updateMany({
-        where: {
+    // Notify all confirmed passengers that ride completed
+    for (const b of confirmedBookings) {
+      try {
+        await this.notificationsService.createNotification({
+          recipientId: b.passengerId,
+          audience: rideAudience,
+          type: NotificationType.RIDE_COMPLETED,
+          title: '✅ Ride Completed',
+          message: `The ride from ${rideOrigin} to ${rideDestination} has arrived at its destination.`,
           rideId,
-          status: BookingStatus.PENDING,
-        },
-        data: {
-          status: BookingStatus.CANCELLED,
-          cancelledAt: new Date(),
-          cancellationReason: 'Ride completed without accepting pending booking request',
-        },
-      });
+          bookingId: b.id,
+          dedupKey: `ride_completed:${rideId}:${b.passengerId}`,
+        });
+      } catch (err) {
+        this.logger.error(`[RidesService] Failed to notify passenger of ride completion: ${err}`);
+      }
+    }
 
-      const completed = await tx.ride.update({
-        where: { id: rideId },
-        data: { status: RideStatus.COMPLETED },
-        include: {
-          vehicle: true,
-          bookings: {
-            select: { id: true, status: true, requestedSeats: true },
-          },
-        },
-      });
+    // Evict any active tracking room listeners and emit access revocation
+    try {
+      await this.trackingGateway?.revokeRideAccess(rideId, 'RIDE_COMPLETED');
+    } catch (err) {
+      this.logger.warn(`Failed to revoke tracking room access on ride completion: ${err}`);
+    }
 
-      await this.audit.log(
-        {
-          actorId: user.id,
-          actorRole: user.role,
-          action: 'RIDE_COMPLETED',
-          targetType: 'RIDE',
-          targetId: rideId,
-          changes: { status: 'COMPLETED' },
-        },
-        tx,
-      );
-
-      const ratingMap = await this.ratingsService.getDriverRatingAggregates([user.id]);
-      return this.toDriverRideDto(completed, ratingMap.get(user.id) || null);
-    });
+    return result;
   }
 }

@@ -11,6 +11,9 @@ export const BookingStatusSchema = z.enum([
 ]);
 export type BookingStatus = z.infer<typeof BookingStatusSchema>;
 
+export const BoardingStatusSchema = z.enum(['WAITING', 'BOARDING', 'BOARDED', 'MISSED']);
+export type BoardingStatus = z.infer<typeof BoardingStatusSchema>;
+
 /**
  * Passenger booking request schema.
  * Disallows client-supplied passengerId, driverId, audience, or status.
@@ -23,6 +26,10 @@ export const CreateBookingRequestSchema = z
       .int('Requested seats must be an integer')
       .min(1, 'Must request at least 1 passenger seat')
       .max(6, 'Cannot request more than 6 passenger seats'),
+    pickupAddress: z.string().trim().max(255).optional().nullable(),
+    pickupLatitude: z.number().min(-90).max(90).optional().nullable(),
+    pickupLongitude: z.number().min(-180).max(180).optional().nullable(),
+    pickupDescription: z.string().trim().max(255).optional().nullable(),
   })
   .strict();
 
@@ -70,6 +77,13 @@ export const PassengerBookingResponseSchema = z.object({
   audience: AudienceTypeSchema,
   requestedSeats: z.number().int(),
   status: BookingStatusSchema,
+  pickupAddress: z.string().nullable().optional(),
+  pickupLatitude: z.number().nullable().optional(),
+  pickupLongitude: z.number().nullable().optional(),
+  pickupDescription: z.string().nullable().optional(),
+  boardingStatus: BoardingStatusSchema.optional(),
+  boardedAt: z.string().datetime().nullable().optional(),
+  proximityNotifiedAt: z.string().datetime().nullable().optional(),
   confirmedAt: z.string().datetime().nullable(),
   rejectedAt: z.string().datetime().nullable(),
   cancelledAt: z.string().datetime().nullable(),
@@ -109,6 +123,13 @@ export const DriverBookingResponseSchema = z.object({
   audience: AudienceTypeSchema,
   requestedSeats: z.number().int(),
   status: BookingStatusSchema,
+  pickupAddress: z.string().nullable().optional(),
+  pickupLatitude: z.number().nullable().optional(),
+  pickupLongitude: z.number().nullable().optional(),
+  pickupDescription: z.string().nullable().optional(),
+  boardingStatus: BoardingStatusSchema.optional(),
+  boardedAt: z.string().datetime().nullable().optional(),
+  proximityNotifiedAt: z.string().datetime().nullable().optional(),
   confirmedAt: z.string().datetime().nullable(),
   rejectedAt: z.string().datetime().nullable(),
   cancelledAt: z.string().datetime().nullable(),

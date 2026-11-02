@@ -18,6 +18,7 @@ import { RecurringCommutesModule } from './modules/recurring-commutes/recurring-
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
+import { TrackingModule } from './modules/tracking/tracking.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     RecurringCommutesModule,
     NotificationsModule,
     RideAlertsModule,
+    TrackingModule,
     HealthModule,
   ],
 })

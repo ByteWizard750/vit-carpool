@@ -6,16 +6,46 @@ import { MapboxLocationProvider } from './providers/mapbox-location.provider';
 import {
   LocationSuggestionDto,
   LocationAutocompleteResponseDto,
+  EtaSource,
 } from '@vit-carpool/contracts';
+
+export interface EtaCalculationOptions {
+  rideId?: string;
+  forceFresh?: boolean;
+}
+
+export interface EtaResult {
+  etaSeconds: number | null;
+  etaMinutes: number | null;
+  distanceMeters: number | null;
+  calculatedAt: string | null;
+  source: EtaSource;
+  isApproximate: boolean;
+}
+
+interface CachedEtaEntry {
+  result: EtaResult;
+  originLat: number;
+  originLng: number;
+  destLat: number;
+  destLng: number;
+  timestamp: number;
+}
 
 @Injectable()
 export class LocationsService {
   private readonly logger = new Logger(LocationsService.name);
   private readonly provider: ILocationProvider;
 
+  // In-memory ETA cache keyed by "rideId:destLat:destLng"
+  private readonly etaCache = new Map<string, CachedEtaEntry>();
+
+  // Per-ride rate limit counter (max 15 external routing queries / min per ride)
+  private readonly rideRequestCounters = new Map<string, { count: number; windowStart: number }>();
+
   constructor(private readonly config: ConfigService) {
     const nodeEnv = this.config.get<string>('NODE_ENV', 'development');
-    const providerType = this.config.get<string>('LOCATION_PROVIDER', 'mock');
+    const providerType = process.env.LOCATION_PROVIDER || this.config.get<string>('LOCATION_PROVIDER', 'mock');
     const mapboxToken = this.config.get<string>('MAPBOX_ACCESS_TOKEN', '');
     const bbox = this.config.get<string>('MAPBOX_SEARCH_BBOX', '79.80,12.60,80.35,13.35');
     const proximity = this.config.get<string>('MAPBOX_PROXIMITY', '80.1534,12.8406');
@@ -55,5 +85,208 @@ export class LocationsService {
 
     const suggestions = await this.provider.search(trimmed, limit);
     return { suggestions };
+  }
+
+  /**
+   * Helper to compute straight-line Haversine distance in meters.
+   */
+  public haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+  }
+
+  /**
+   * Intelligent campus corridor fallback when Mapbox is unavailable, rate-limited, or disabled.
+   * Never presents raw straight-line distance as a driving route; applies realistic road detour
+   * factor (1.25x) and Chennai suburban corridor speed (~28 km/h = 7.78 m/s + 45s transit buffer).
+   */
+  public calculateCampusFallback(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+  ): EtaResult {
+    const straightLine = this.haversine(originLat, originLng, destLat, destLng);
+    const distanceMeters = Math.round(straightLine * 1.25);
+    const drivingTimeSec = Math.round(distanceMeters / 7.78);
+    const etaSeconds = Math.max(30, drivingTimeSec + 45);
+    const etaMinutes = Math.max(1, Math.round(etaSeconds / 60));
+
+    return {
+      etaSeconds,
+      etaMinutes,
+      distanceMeters,
+      calculatedAt: new Date().toISOString(),
+      source: 'CAMPUS_ESTIMATE_FALLBACK',
+      isApproximate: true,
+    };
+  }
+
+  /**
+   * Calculate driving ETA and distance between coordinates with movement thresholding,
+   * caching, per-ride rate limits, and fallback estimation.
+   */
+  async calculateEta(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+    options?: EtaCalculationOptions,
+  ): Promise<EtaResult> {
+    // 1. Coordinate Validation: Never invent or assume coordinates
+    if (
+      originLat == null ||
+      originLng == null ||
+      destLat == null ||
+      destLng == null ||
+      isNaN(originLat) ||
+      isNaN(originLng) ||
+      isNaN(destLat) ||
+      isNaN(destLng) ||
+      originLat < -90 ||
+      originLat > 90 ||
+      destLat < -90 ||
+      destLat > 90 ||
+      originLng < -180 ||
+      originLng > 180 ||
+      destLng < -180 ||
+      destLng > 180
+    ) {
+      return {
+        etaSeconds: null,
+        etaMinutes: null,
+        distanceMeters: null,
+        calculatedAt: null,
+        source: 'UNAVAILABLE',
+        isApproximate: false,
+      };
+    }
+
+    const rideId = options?.rideId || 'global';
+    const cacheKey = `${rideId}:${destLat.toFixed(4)}:${destLng.toFixed(4)}`;
+    const now = Date.now();
+
+    // 2. Cache & Meaningful Movement Threshold Check
+    const cached = this.etaCache.get(cacheKey);
+    if (cached && !options?.forceFresh) {
+      const distanceMoved = this.haversine(originLat, originLng, cached.originLat, cached.originLng);
+      const elapsedMs = now - cached.timestamp;
+      const elapsedSec = Math.floor(elapsedMs / 1000);
+
+      // If driver moved < 50m and cache is < 60s old, reuse cached result adjusted by elapsed time
+      if (distanceMoved < 50 && elapsedMs < 60000) {
+        const adjustedSeconds = Math.max(0, (cached.result.etaSeconds ?? 60) - elapsedSec);
+        return {
+          etaSeconds: adjustedSeconds,
+          etaMinutes: adjustedSeconds <= 30 ? 1 : Math.max(1, Math.round(adjustedSeconds / 60)),
+          distanceMeters: Math.max(0, (cached.result.distanceMeters ?? 0) - Math.round(distanceMoved)),
+          calculatedAt: cached.result.calculatedAt,
+          source: 'CACHED',
+          isApproximate: cached.result.isApproximate,
+        };
+      }
+
+      // If queried within last 25s, do not hit external API; return adjusted cached result
+      if (elapsedMs < 25000) {
+        const adjustedSeconds = Math.max(0, (cached.result.etaSeconds ?? 60) - elapsedSec);
+        return {
+          etaSeconds: adjustedSeconds,
+          etaMinutes: adjustedSeconds <= 30 ? 1 : Math.max(1, Math.round(adjustedSeconds / 60)),
+          distanceMeters: Math.max(0, (cached.result.distanceMeters ?? 0) - Math.round(distanceMoved)),
+          calculatedAt: cached.result.calculatedAt,
+          source: 'CACHED',
+          isApproximate: cached.result.isApproximate,
+        };
+      }
+    }
+
+    // 3. Per-Ride Request Limit (Max 15 routing API requests/min per ride)
+    if (rideId !== 'global') {
+      const counter = this.rideRequestCounters.get(rideId);
+      if (!counter || now - counter.windowStart > 60000) {
+        this.rideRequestCounters.set(rideId, { count: 1, windowStart: now });
+      } else {
+        counter.count++;
+        if (counter.count > 15) {
+          this.logger.debug(
+            `[LocationsService] Per-ride Mapbox request limit exceeded for ride ${rideId} (${counter.count}/min), using fallback`,
+          );
+          const fallback = this.calculateCampusFallback(originLat, originLng, destLat, destLng);
+          this.etaCache.set(cacheKey, {
+            result: fallback,
+            originLat,
+            originLng,
+            destLat,
+            destLng,
+            timestamp: now,
+          });
+          return fallback;
+        }
+      }
+    }
+
+    // 4. Mapbox Directions API Integration
+    const mapboxToken = this.config.get<string>('MAPBOX_ACCESS_TOKEN');
+    const providerType = process.env.LOCATION_PROVIDER || this.config.get<string>('LOCATION_PROVIDER', 'mock');
+
+    if (providerType === 'mapbox' && mapboxToken && mapboxToken.trim()) {
+      try {
+        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${originLng},${originLat};${destLng},${destLat}?access_token=${mapboxToken}&overview=false`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          if (data.routes && data.routes[0]) {
+            const durationSec = Math.round(data.routes[0].duration);
+            const distM = Math.round(data.routes[0].distance);
+            const freshResult: EtaResult = {
+              etaSeconds: durationSec,
+              etaMinutes: Math.max(1, Math.round(durationSec / 60)),
+              distanceMeters: distM,
+              calculatedAt: new Date().toISOString(),
+              source: 'MAPBOX_DIRECTIONS',
+              isApproximate: false,
+            };
+
+            this.etaCache.set(cacheKey, {
+              result: freshResult,
+              originLat,
+              originLng,
+              destLat,
+              destLng,
+              timestamp: now,
+            });
+
+            return freshResult;
+          }
+        } else if (res.status === 429) {
+          this.logger.warn('[LocationsService] Mapbox Directions API rate limit reached (HTTP 429), using fallback');
+        } else {
+          this.logger.warn(`[LocationsService] Mapbox Directions API returned HTTP ${res.status}`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`[LocationsService] Mapbox Directions API failed: ${err.message}`);
+      }
+    }
+
+    // 5. Intelligent Fallback Estimation
+    const fallbackResult = this.calculateCampusFallback(originLat, originLng, destLat, destLng);
+    this.etaCache.set(cacheKey, {
+      result: fallbackResult,
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+      timestamp: now,
+    });
+    return fallbackResult;
   }
 }
