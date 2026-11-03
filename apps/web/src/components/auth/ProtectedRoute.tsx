@@ -47,13 +47,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Not signed in: redirect to /auth preserving destination
+  // Not signed in: redirect to /admin/login if requireAdmin, else /auth
   if (!token) {
+    if (requireAdmin) {
+      return <Navigate to="/admin/login" state={{ from: location }} replace />;
+    }
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
-  // Requires admin role
-  if (requireAdmin && user?.role !== 'ADMIN') {
+  // Requires administrative role
+  const adminRoles = ['MODERATOR', 'ADMIN', 'SUPER_ADMIN'];
+  if (requireAdmin && !adminRoles.includes(user?.role || '')) {
     return <Navigate to="/dashboard" replace />;
   }
 

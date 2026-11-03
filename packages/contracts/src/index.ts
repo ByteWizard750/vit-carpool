@@ -26,6 +26,8 @@ export {
   type UpdateUserRoleDto,
   UserProfileResponseSchema,
   type UserProfileResponseDto,
+  UpdateUserProfileSchema,
+  type UpdateUserProfileDto,
 } from './audience.contract';
 
 export {
@@ -78,6 +80,16 @@ export {
   type PassengerBookingResponseDto,
   DriverBookingResponseSchema,
   type DriverBookingResponseDto,
+  BoardingOtpResponseSchema,
+  type BoardingOtpResponseDto,
+  VerifyBoardingOtpSchema,
+  type VerifyBoardingOtpDto,
+  VerifyBoardingResponseSchema,
+  type VerifyBoardingResponseDto,
+  MarkNoShowSchema,
+  type MarkNoShowDto,
+  MarkNoShowResponseSchema,
+  type MarkNoShowResponseDto,
 } from './booking.contract';
 
 export {
@@ -213,4 +225,7 @@ export {
   TrackingSessionStateSchema,
   type TrackingSessionStateDto,
 } from './tracking.contract';
+
+export * from './admin.contract';
+
 

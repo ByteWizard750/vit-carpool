@@ -45,6 +45,7 @@ export class RidesService {
    */
   private toDriverRideDto(
     ride: Ride & {
+      driver?: User | null;
       vehicle?: Vehicle | null;
       bookings?: Array<{ id: string; status: BookingStatus; requestedSeats: number }>;
     },
@@ -59,6 +60,8 @@ export class RidesService {
     return {
       id: ride.id,
       driverId: ride.driverId,
+      driverName: ride.driver?.fullName || 'Verified Driver',
+      driverAvatarUrl: ride.driver?.avatarUrl ?? null,
       vehicleId: ride.vehicleId,
       audience: ride.audience,
       origin: ride.origin,
@@ -92,6 +95,7 @@ export class RidesService {
             color: ride.vehicle.color,
             registrationNumber: ride.vehicle.registrationNumber,
             capacity: ride.vehicle.capacity,
+            imageUrl: ride.vehicle.imageUrl ?? null,
             createdAt: ride.vehicle.createdAt.toISOString(),
             updatedAt: ride.vehicle.updatedAt.toISOString(),
           }
@@ -112,6 +116,7 @@ export class RidesService {
       id: ride.id,
       driverId: ride.driverId,
       driverName: ride.driver?.fullName || 'Verified Member',
+      driverAvatarUrl: ride.driver?.avatarUrl ?? null,
       audience: ride.audience,
       origin: ride.origin,
       originAddress: ride.originAddress ?? undefined,
@@ -135,6 +140,7 @@ export class RidesService {
             model: ride.vehicle.model,
             color: ride.vehicle.color,
             capacity: ride.vehicle.capacity,
+            imageUrl: ride.vehicle.imageUrl ?? null,
           }
         : undefined,
       driverRating: driverRating ?? undefined,

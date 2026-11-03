@@ -200,7 +200,7 @@ export const RideSearchPanel: React.FC<RideSearchPanelProps> = ({ onSearch, onOf
               }}
               id="link-offer-ride"
             >
-              Preview driver publishing &rarr;
+              Offer a Ride &rarr;
             </button>
           </div>
         </div>

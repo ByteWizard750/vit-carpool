@@ -27,7 +27,7 @@ export class TrackingAccessService {
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
       include: {
-        driver: { select: { id: true, fullName: true, phoneNumber: true } },
+        driver: { select: { id: true, fullName: true, phoneNumber: true, avatarUrl: true } },
         vehicle: true,
         trackingSession: true,
       },

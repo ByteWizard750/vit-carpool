@@ -441,20 +441,32 @@ describe('Milestone 7.2: Secure WebSocket Gateway & Location Backend (e2e)', () 
 
     expect(boardingRes.body.boardingStatus).toBe('BOARDING');
 
-    // 2. Driver marks BOARDED
-    const boardedRes = await request(app.getHttpServer())
+    // 2. Direct transition to BOARDED is rejected with 403
+    await request(app.getHttpServer())
       .post(`/rides/${activeRideId}/boarding`)
       .set('Authorization', `Bearer ${driverToken}`)
       .send({
         bookingId: confirmedBookingId,
         boardingStatus: 'BOARDED',
       })
+      .expect(403);
+
+    // 3. Driver verifies passenger boarding OTP to transition to BOARDED
+    const otpRes = await request(app.getHttpServer())
+      .get(`/bookings/${confirmedBookingId}/boarding-otp`)
+      .set('Authorization', `Bearer ${passengerAToken}`)
+      .expect(200);
+
+    const boardedRes = await request(app.getHttpServer())
+      .post(`/bookings/${confirmedBookingId}/verify-boarding`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ otp: otpRes.body.rawOtp })
       .expect(200);
 
     expect(boardedRes.body.boardingStatus).toBe('BOARDED');
     expect(boardedRes.body.boardedAt).not.toBeNull();
 
-    // 3. Stranger rejected with 403
+    // 4. Stranger rejected with 403
     await request(app.getHttpServer())
       .post(`/rides/${activeRideId}/boarding`)
       .set('Authorization', `Bearer ${strangerToken}`)

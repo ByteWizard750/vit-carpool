@@ -55,7 +55,9 @@ enum VerificationMethod {
 
 enum UserRole {
   USER
+  MODERATOR
   ADMIN
+  SUPER_ADMIN
 
   @@map("user_role_type")
 }
@@ -80,10 +82,14 @@ model User {
   role               UserRole            @default(USER)
   fullName           String              @map("full_name") @db.VarChar(255)
   phoneNumber        String?             @map("phone_number") @db.VarChar(32)
+  avatarUrl          String?             @map("avatar_url") @db.VarChar(1000)
   isSuspended        Boolean             @default(false) @map("is_suspended")
   suspensionReason   String?             @map("suspension_reason") @db.VarChar(500)
   suspendedAt        DateTime?           @map("suspended_at") @db.Timestamptz(6)
   suspendedBy        String?             @map("suspended_by") @db.Uuid
+  adminMfaEnabled    Boolean             @default(false) @map("admin_mfa_enabled")
+  adminMfaSecret     String?             @map("admin_mfa_secret") @db.VarChar(128)
+  adminMfaVerifiedAt DateTime?           @map("admin_mfa_verified_at") @db.Timestamptz(6)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -110,6 +116,9 @@ model User {
   receivedReports             Report[]              @relation("UserReportsReceived")
   reviewedReports             Report[]              @relation("AdminReviewedReports")
   webPushSubscriptions        WebPushSubscription[]
+  adminInvitations            AdminInvitation[]     @relation("InvitedAdmins")
+  moderationNotesWritten      ModerationNote[]      @relation("AuthorModerationNotes")
+  moderationNotesReceived     ModerationNote[]      @relation("TargetUserModerationNotes")
 
   @@unique([id, audience])
   @@map("users")
@@ -169,6 +178,7 @@ model Vehicle {
   color              String    @db.VarChar(32)
   registrationNumber String    @map("registration_number") @db.VarChar(32)
   capacity           Int       @db.Integer
+  imageUrl           String?   @map("image_url") @db.VarChar(1000)
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -231,6 +241,7 @@ model Ride {
   notifications      Notification[]
   idempotencyKeys    IdempotencyKey[]
   reports            Report[]          @relation("ReportedRides")
+  moderationNotes    ModerationNote[]  @relation("TargetRideModerationNotes")
   trackingSession    RideTrackingSession?
   locationSnapshots  DriverLocationSnapshot[]
 
@@ -285,6 +296,17 @@ model Booking {
   arrivedNotifiedAt   DateTime?      @map("arrived_notified_at") @db.Timestamptz(6)
   missedNotifiedAt    DateTime?      @map("missed_notified_at") @db.Timestamptz(6)
   missedAt            DateTime?      @map("missed_at") @db.Timestamptz(6)
+
+  // Milestone 8: Secure Boarding Verification OTP
+  boardingOtpHash           String?        @map("boarding_otp_hash") @db.VarChar(128)
+  boardingOtpSalt           String?        @map("boarding_otp_salt") @db.VarChar(64)
+  boardingOtpEncrypted      String?        @map("boarding_otp_encrypted") @db.Text
+  boardingOtpExpiresAt      DateTime?      @map("boarding_otp_expires_at") @db.Timestamptz(6)
+  boardingOtpFailedAttempts Int            @default(0) @map("boarding_otp_failed_attempts")
+  boardingOtpLockoutUntil   DateTime?      @map("boarding_otp_lockout_until") @db.Timestamptz(6)
+  boardingOtpRegenCount     Int            @default(0) @map("boarding_otp_regen_count")
+  boardingOtpLastRegenAt    DateTime?      @map("boarding_otp_last_regen_at") @db.Timestamptz(6)
+  boardingOtpConsumedAt     DateTime?      @map("boarding_otp_consumed_at") @db.Timestamptz(6)
   confirmedAt         DateTime?      @map("confirmed_at") @db.Timestamptz(6)
   rejectedAt          DateTime?      @map("rejected_at") @db.Timestamptz(6)
   cancelledAt         DateTime?      @map("cancelled_at") @db.Timestamptz(6)
@@ -659,6 +681,7 @@ model Report {
   ride            Ride?          @relation("ReportedRides", fields: [rideId], references: [id], onDelete: SetNull)
   booking         Booking?       @relation("ReportedBookings", fields: [bookingId], references: [id], onDelete: SetNull)
   message         Message?       @relation("ReportedMessages", fields: [messageId], references: [id], onDelete: SetNull)
+  moderationNotes ModerationNote[] @relation("TargetReportModerationNotes")
 
   @@index([reporterId])
   @@index([reportedUserId])
@@ -687,6 +710,49 @@ model WebPushSubscription {
   @@index([userId])
   @@map("web_push_subscriptions")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 14: Administrative RBAC, Invitations & Moderation Notes
+// -----------------------------------------------------------------------------
+
+model AdminInvitation {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email      String    @db.VarChar(255)
+  role       UserRole  @default(MODERATOR)
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(128)
+  invitedBy  String    @map("invited_by") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  inviter    User      @relation("InvitedAdmins", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([tokenHash])
+  @@map("admin_invitations")
+}
+
+model ModerationNote {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  targetUserId   String?  @map("target_user_id") @db.Uuid
+  targetRideId   String?  @map("target_ride_id") @db.Uuid
+  targetReportId String?  @map("target_report_id") @db.Uuid
+  authorId       String   @map("author_id") @db.Uuid
+  content        String   @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  targetUser   User?    @relation("TargetUserModerationNotes", fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetRide   Ride?    @relation("TargetRideModerationNotes", fields: [targetRideId], references: [id], onDelete: Cascade)
+  targetReport Report?  @relation("TargetReportModerationNotes", fields: [targetReportId], references: [id], onDelete: Cascade)
+  author       User     @relation("AuthorModerationNotes", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@index([targetRideId])
+  @@index([targetReportId])
+  @@map("moderation_notes")
+}
+
 
 
 

@@ -18,7 +18,12 @@ export const VerificationMethodSchema = z.enum([
 ]);
 export type VerificationMethod = z.infer<typeof VerificationMethodSchema>;
 
-export const UserRoleSchema = z.enum(['USER', 'ADMIN']);
+export const UserRoleSchema = z.enum([
+  'USER',
+  'MODERATOR',
+  'ADMIN',
+  'SUPER_ADMIN',
+]);
 export type UserRole = z.infer<typeof UserRoleSchema>;
 
 export const VerificationRequestStatusSchema = z.enum([
@@ -73,6 +78,7 @@ export const UserProfileResponseSchema = z.object({
   email: z.string().email(),
   fullName: z.string(),
   phoneNumber: z.string().nullable(),
+  avatarUrl: z.string().nullable().optional(),
   audience: AudienceTypeSchema.nullable(),
   verificationStatus: VerificationStatusSchema,
   verificationMethod: VerificationMethodSchema.nullable(),
@@ -85,3 +91,12 @@ export const UserProfileResponseSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type UserProfileResponseDto = z.infer<typeof UserProfileResponseSchema>;
+
+export const UpdateUserProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(2).max(100).optional(),
+    phoneNumber: z.string().trim().max(32).optional().nullable(),
+    avatarUrl: z.string().trim().max(1000).optional().nullable(),
+  })
+  .strict();
+export type UpdateUserProfileDto = z.infer<typeof UpdateUserProfileSchema>;

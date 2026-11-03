@@ -10,7 +10,8 @@
     "build": "prisma generate && tsc",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "bootstrap:admin": "ts-node scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "ts-node scripts/bootstrap-admin.ts",
+    "bootstrap:super-admin": "ts-node scripts/bootstrap-super-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

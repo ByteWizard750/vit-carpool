@@ -86,10 +86,10 @@ export const HowItWorksPage: React.FC = () => {
 
             <div style={{ padding: '20px', backgroundColor: 'var(--bg-subtle)', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
               <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '6px' }}>
-                ₹250 Hard Seat Cap
+                Fair Fuel Cost Sharing
               </div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Drivers cannot charge more than ₹250 per seat, ensuring contributions only offset fuel and toll costs.
+                Drivers set reasonable, fair contributions to offset petrol and toll expenses without commercial surge pricing.
               </div>
             </div>
 

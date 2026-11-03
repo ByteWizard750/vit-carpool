@@ -6,13 +6,13 @@ import {
   Loader2,
   AlertCircle,
   ArrowLeft,
-  Clock,
   Check,
   CheckCheck,
   ShieldAlert,
   ChevronRight,
   RefreshCw,
   UserX,
+  MoreVertical,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { PageShell } from '../components/layout/PageShell';
@@ -53,13 +53,21 @@ export const MessagesPage: React.FC = () => {
   // Moderation action modals
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Scroll to bottom of message list
+  // Scroll to bottom of message list (scoped exclusively to the chat message container)
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    const scrollContainer = document.getElementById('chat-messages-scroll-area');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior,
+      });
+    }
   };
 
   // Fetch list of conversations
@@ -114,7 +122,22 @@ export const MessagesPage: React.FC = () => {
         }
 
         const data: ConversationDetailDto = await res.json();
-        setActiveConv(data);
+        setActiveConv((prev) => {
+          // If silent polling and messages haven't changed, retain previous state to prevent re-renders
+          if (
+            prev &&
+            prev.id === data.id &&
+            prev.messages.length === data.messages.length &&
+            prev.messages[prev.messages.length - 1]?.id ===
+              data.messages[data.messages.length - 1]?.id &&
+            prev.messages[prev.messages.length - 1]?.readAt ===
+              data.messages[data.messages.length - 1]?.readAt &&
+            prev.isReadOnly === data.isReadOnly
+          ) {
+            return prev;
+          }
+          return data;
+        });
 
         // Update unread count in conversations list
         setConversations((prev) =>
@@ -171,16 +194,33 @@ export const MessagesPage: React.FC = () => {
   // Initial load
   useEffect(() => {
     fetchConversations();
-  }, [fetchConversations]);
+    if (token) {
+      fetch('/notifications/unread-count', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          const count = typeof d?.unreadCount === 'number' ? d.unreadCount : typeof d?.count === 'number' ? d.count : 0;
+          setNotifUnreadCount(count);
+        })
+        .catch(() => {});
+    }
+  }, [fetchConversations, token]);
 
   // When route param changes or selectedConvId changes
   useEffect(() => {
     if (paramConvId && paramConvId !== selectedConvId) {
       setSelectedConvId(paramConvId);
+    } else if (!paramConvId && selectedConvId !== null && !bookingIdQuery) {
+      setSelectedConvId(null);
+      setActiveConv(null);
     }
-  }, [paramConvId, selectedConvId]);
+  }, [paramConvId, selectedConvId, bookingIdQuery]);
 
   useEffect(() => {
+    if (selectedConvId) {
+      window.scrollTo(0, 0);
+    }
     if (selectedConvId && !bookingIdQuery) {
       fetchActiveConversation(selectedConvId);
     }
@@ -193,17 +233,32 @@ export const MessagesPage: React.FC = () => {
     }
   }, [activeConv?.messages?.length]);
 
-  // Polling for new messages every 4 seconds when conversation is open
+  // Polling for new messages every 5 seconds when conversation is open
   useEffect(() => {
     if (!token || !selectedConvId) return;
 
+    let tick = 0;
     const interval = setInterval(() => {
+      tick++;
       fetchActiveConversation(selectedConvId, true);
-      fetchConversations(true);
-    }, 4000);
+      // Only refresh conversations list every 15s to reduce redundant server traffic
+      if (tick % 3 === 0) {
+        fetchConversations(true);
+      }
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [token, selectedConvId, fetchActiveConversation, fetchConversations]);
+
+  // Dynamic auto-expanding textarea change handler
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageText(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 120);
+      textareaRef.current.style.height = `${Math.max(newHeight, 42)}px`;
+    }
+  };
 
   // Send message handler
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -233,17 +288,20 @@ export const MessagesPage: React.FC = () => {
 
       const newMsg: MessageResponseDto = body;
       setMessageText('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '42px';
+      }
 
-      // Optimistically append new message
-      setActiveConv((prev) =>
-        prev
-          ? {
-              ...prev,
-              messages: [...prev.messages, newMsg],
-              updatedAt: newMsg.createdAt,
-            }
-          : prev,
-      );
+      // Optimistically append new message if not already present
+      setActiveConv((prev) => {
+        if (!prev) return prev;
+        if (prev.messages.some((m) => m.id === newMsg.id)) return prev;
+        return {
+          ...prev,
+          messages: [...prev.messages, newMsg],
+          updatedAt: newMsg.createdAt,
+        };
+      });
 
       // Refresh list to update snippet
       fetchConversations(true);
@@ -293,12 +351,21 @@ export const MessagesPage: React.FC = () => {
   };
 
   return (
-    <PageShell width="wide">
-      <PageHeader
-        title="Ride Messages"
-        description="Private, ride-specific communication between passengers and verified hosts."
-        tabs={<InboxTabs counts={{ messages: conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0) }} />}
-      />
+    <PageShell width="wide" className={selectedConvId ? 'chat-page-shell-active' : ''}>
+      <div className={`chat-page-header-container ${selectedConvId ? 'is-active-conv' : ''}`}>
+        <PageHeader
+          title="Ride Messages"
+          description="Private, ride-specific communication between passengers and verified hosts."
+          tabs={
+            <InboxTabs
+              counts={{
+                messages: conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0),
+                notifications: notifUnreadCount,
+              }}
+            />
+          }
+        />
+      </div>
 
       {/* Main Chat Interface Container */}
       <div
@@ -407,30 +474,57 @@ export const MessagesPage: React.FC = () => {
                         alignItems: 'center',
                       }}
                     >
-                      <span
-                        style={{
-                          fontWeight: isSelected ? 700 : 600,
-                          fontSize: '0.9rem',
-                          color: 'var(--text-primary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        {c.otherParticipant.fullName}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {c.otherParticipant.avatarUrl ? (
+                          <img
+                            src={c.otherParticipant.avatarUrl}
+                            alt={c.otherParticipant.fullName}
+                            style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              backgroundColor: isDriver ? '#dcfce7' : '#f3e8ff',
+                              color: isDriver ? '#166534' : '#6b21a8',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.75rem',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {c.otherParticipant.fullName.charAt(0)}
+                          </div>
+                        )}
                         <span
                           style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 700,
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: isDriver ? '#dcfce7' : '#f3e8ff',
-                            color: isDriver ? '#166534' : '#6b21a8',
+                            fontWeight: isSelected ? 700 : 600,
+                            fontSize: '0.9rem',
+                            color: 'var(--text-primary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
                           }}
                         >
-                          {isDriver ? 'DRIVER' : 'PASSENGER'}
+                          {c.otherParticipant.fullName}
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: isDriver ? '#dcfce7' : '#f3e8ff',
+                              color: isDriver ? '#166534' : '#6b21a8',
+                            }}
+                          >
+                            {isDriver ? 'DRIVER' : 'PASSENGER'}
+                          </span>
                         </span>
-                      </span>
+                      </div>
 
                       {c.unreadCount > 0 && (
                         <span
@@ -491,17 +585,18 @@ export const MessagesPage: React.FC = () => {
               {/* Conversation Top Header */}
               <div
                 style={{
-                  padding: '12px 20px',
-                  borderBottom: '1px solid var(--border-light)',
+                  padding: '10px 14px',
+                  borderBottom: '1px solid var(--border-light, #e2e8f0)',
                   backgroundColor: '#ffffff',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '12px',
+                  gap: '8px',
+                  position: 'relative',
                 }}
+                className="chat-thread-header"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                   {/* Mobile Back Button */}
                   <button
                     type="button"
@@ -513,12 +608,16 @@ export const MessagesPage: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      padding: '8px',
+                      padding: '6px',
                       cursor: 'pointer',
+                      display: 'flex',
                       alignItems: 'center',
-                      color: 'var(--text-secondary)',
-                      minWidth: '40px',
-                      minHeight: '40px',
+                      justifyContent: 'center',
+                      color: 'var(--text-secondary, #475569)',
+                      minWidth: '36px',
+                      minHeight: '36px',
+                      borderRadius: '8px',
+                      flexShrink: 0,
                     }}
                     id="btn-chat-mobile-back"
                     aria-label="Back to conversations list"
@@ -526,97 +625,104 @@ export const MessagesPage: React.FC = () => {
                     <ArrowLeft size={20} />
                   </button>
 
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {activeConv.otherParticipant.avatarUrl ? (
+                    <img
+                      src={activeConv.otherParticipant.avatarUrl}
+                      alt={activeConv.otherParticipant.fullName}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        flexShrink: 0,
+                        border: '1px solid var(--border-light, #e2e8f0)',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        backgroundColor: activeConv.otherParticipant.role === 'DRIVER' ? '#dcfce7' : '#f3e8ff',
+                        color: activeConv.otherParticipant.role === 'DRIVER' ? '#166534' : '#6b21a8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '0.875rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {activeConv.otherParticipant.fullName.charAt(0)}
+                    </div>
+                  )}
+
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: '0.925rem',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={activeConv.otherParticipant.fullName}
+                    >
+                      {activeConv.otherParticipant.fullName.replace(/\s*\((Student Driver|Passenger)\)/i, '')}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: '0.725rem',
+                        color: 'var(--text-muted, #64748b)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        marginTop: '2px',
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       <span
                         style={{
-                          fontSize: '1rem',
+                          fontSize: '0.625rem',
                           fontWeight: 700,
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        {activeConv.otherParticipant.fullName}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                          padding: '2px 8px',
+                          padding: '1px 5px',
                           borderRadius: '4px',
                           backgroundColor:
                             activeConv.otherParticipant.role === 'DRIVER' ? '#dcfce7' : '#f3e8ff',
                           color:
                             activeConv.otherParticipant.role === 'DRIVER' ? '#166534' : '#6b21a8',
+                          letterSpacing: '0.04em',
+                          flexShrink: 0,
                         }}
                       >
                         {activeConv.otherParticipant.role}
                       </span>
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: '0.775rem',
-                        color: 'var(--text-muted)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        marginTop: '2px',
-                      }}
-                    >
-                      <span>
-                        {activeConv.ride.origin} &rarr; {activeConv.ride.destination}
-                      </span>
-                      <span>&bull;</span>
-                      <Clock size={12} />
-                      <span>{formatDepartureDate(activeConv.ride.departureTime)}</span>
+                      {Boolean(activeConv.ride?.origin && activeConv.ride?.destination) && (
+                        <>
+                          <span>&bull;</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                            {activeConv.ride.origin} &rarr; {activeConv.ride.destination}
+                          </span>
+                        </>
+                      )}
+                      {Boolean(activeConv.ride?.departureTime) && (
+                        <>
+                          <span className="desktop-only-text">&bull;</span>
+                          <span className="desktop-only-text" style={{ flexShrink: 0 }}>
+                            {formatDepartureDate(activeConv.ride.departureTime)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Moderation & Navigation Controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => setReportModalOpen(true)}
-                    style={{
-                      fontSize: '0.75rem',
-                      color: '#b91c1c',
-                      background: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      borderRadius: '6px',
-                      padding: '5px 9px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                    title="Report safety or conduct violation"
-                  >
-                    <ShieldAlert size={13} />
-                    <span>Report</span>
-                  </button>
-
-                  <button
-                    onClick={() => setBlockModalOpen(true)}
-                    style={{
-                      fontSize: '0.75rem',
-                      color: '#4b5563',
-                      background: '#f3f4f6',
-                      border: '1px solid var(--border-light)',
-                      borderRadius: '6px',
-                      padding: '5px 9px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                    title="Block this member"
-                  >
-                    <UserX size={13} />
-                    <span>Block</span>
-                  </button>
-
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, position: 'relative' }}>
                   <Link
                     to={
                       activeConv.otherParticipant.role === 'DRIVER'
@@ -624,21 +730,123 @@ export const MessagesPage: React.FC = () => {
                         : `/bookings?tab=driver&rideId=${activeConv.rideId}`
                     }
                     style={{
-                      fontSize: '0.8rem',
-                      color: 'var(--color-brand-600)',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-brand-600, #2563eb)',
                       fontWeight: 600,
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
-                      padding: '6px 10px',
+                      gap: '3px',
+                      padding: '5px 8px',
                       borderRadius: '6px',
-                      backgroundColor: 'var(--bg-subtle)',
+                      backgroundColor: 'var(--bg-subtle, #f8fafc)',
+                      border: '1px solid var(--border-light, #e2e8f0)',
+                      whiteSpace: 'nowrap',
+                      textDecoration: 'none',
                     }}
                     id="link-return-to-booking"
                   >
-                    <span>View Booking Details</span>
+                    <span className="desktop-only-text">View Booking Details</span>
+                    <span className="mobile-only-text">Booking</span>
                     <ChevronRight size={13} />
                   </Link>
+
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpen((prev) => !prev)}
+                      style={{
+                        background: menuOpen ? '#f1f5f9' : 'none',
+                        border: '1px solid var(--border-light, #e2e8f0)',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--text-secondary, #475569)',
+                        minWidth: '32px',
+                        minHeight: '32px',
+                      }}
+                      title="More actions"
+                      aria-label="More actions"
+                      id="btn-chat-more-actions"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    {menuOpen && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: '100%',
+                          marginTop: '6px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-light, #e2e8f0)',
+                          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+                          padding: '6px',
+                          zIndex: 100,
+                          minWidth: '160px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setReportModalOpen(true);
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            color: '#b91c1c',
+                            background: 'none',
+                            border: 'none',
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}
+                        >
+                          <ShieldAlert size={14} />
+                          <span>Report Safety Issue</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setBlockModalOpen(true);
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            color: '#4b5563',
+                            background: 'none',
+                            border: 'none',
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}
+                        >
+                          <UserX size={14} />
+                          <span>Block User</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -662,65 +870,61 @@ export const MessagesPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Read-Only Status Banner */}
-              {activeConv.isReadOnly && (
-                <div
-                  style={{
-                    padding: '10px 16px',
-                    backgroundColor: '#fffbeb',
-                    borderBottom: '1px solid #fef3c7',
-                    color: '#92400e',
-                    fontSize: '0.825rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                  id="chat-readonly-banner"
-                >
-                  <ShieldAlert size={16} />
-                  <span>
-                    {activeConv.readOnlyReason ||
-                      'Messaging is closed for this ride. History is preserved in read-only mode.'}
-                  </span>
-                </div>
-              )}
-
               {/* Scrollable Messages Stream */}
               <div
                 style={{
-                  flex: 1,
+                  flex: '1 1 0%',
+                  minHeight: 0,
                   overflowY: 'auto',
-                  padding: '20px 24px',
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch',
+                  padding: '16px 20px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
+                  gap: '10px',
                   backgroundColor: '#f8fafc',
                 }}
                 id="chat-messages-scroll-area"
               >
                 {loadingDetail && activeConv.messages.length === 0 ? (
                   <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <Loader2 size={28} className="animate-spin" style={{ margin: '0 auto 8px' }} />
-                    <div>Loading chat history...</div>
+                    <Loader2 size={28} className="animate-spin" style={{ margin: '0 auto 8px', color: 'var(--color-brand-600)' }} />
+                    <div style={{ fontSize: '0.85rem' }}>Loading conversation history...</div>
                   </div>
                 ) : activeConv.messages.length === 0 ? (
                   <div
                     style={{
-                      padding: '40px 20px',
+                      padding: '36px 20px',
                       textAlign: 'center',
                       color: 'var(--text-muted)',
                       backgroundColor: '#ffffff',
-                      borderRadius: '12px',
-                      border: '1px dashed var(--border-light)',
-                      margin: 'auto 0',
+                      borderRadius: '16px',
+                      border: '1px dashed var(--border-light, #e2e8f0)',
+                      margin: 'auto 8px',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
                     }}
+                    id="chat-empty-thread-notice"
                   >
-                    <MessageSquare size={32} style={{ margin: '0 auto 8px', opacity: 0.6 }} />
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                    <div
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '50%',
+                        backgroundColor: '#eff6ff',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 10px',
+                      }}
+                    >
+                      <MessageSquare size={22} />
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.925rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
                       Start the Conversation
                     </div>
-                    <div style={{ fontSize: '0.8rem', marginTop: '4px' }}>
-                      Confirm pickup landmarks, luggage details, or scheduled departure adjustments.
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.45', maxWidth: '280px', margin: '0 auto' }}>
+                      Confirm pickup landmarks, luggage space, or departure timing with your peer commuter.
                     </div>
                   </div>
                 ) : (
@@ -734,38 +938,26 @@ export const MessagesPage: React.FC = () => {
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: isMine ? 'flex-end' : 'flex-start',
-                          maxWidth: '75%',
+                          maxWidth: '85%',
                           alignSelf: isMine ? 'flex-end' : 'flex-start',
                         }}
                         id={`chat-message-${m.id}`}
                       >
-                        {!isMine && (
-                          <span
-                            style={{
-                              fontSize: '0.725rem',
-                              fontWeight: 600,
-                              color: 'var(--text-muted)',
-                              marginBottom: '2px',
-                              marginLeft: '4px',
-                            }}
-                          >
-                            {m.senderName}
-                          </span>
-                        )}
-
                         <div
                           style={{
-                            padding: '10px 14px',
+                            padding: '9px 13px',
                             borderRadius: isMine
-                              ? '14px 14px 2px 14px'
-                              : '14px 14px 14px 2px',
-                            backgroundColor: isMine ? '#2563eb' : '#ffffff',
-                            color: isMine ? '#ffffff' : 'var(--text-primary)',
+                              ? '16px 16px 4px 16px'
+                              : '16px 16px 16px 4px',
+                            backgroundColor: isMine ? 'var(--brand-blue, #2340b8)' : '#ffffff',
+                            color: isMine ? '#ffffff' : 'var(--text-primary, #0f172a)',
                             fontSize: '0.875rem',
                             lineHeight: '1.45',
                             wordBreak: 'break-word',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                            border: isMine ? 'none' : '1px solid var(--border-light)',
+                            boxShadow: isMine
+                              ? '0 1px 3px rgba(35, 64, 184, 0.18)'
+                              : '0 1px 2px rgba(0, 0, 0, 0.05)',
+                            border: isMine ? 'none' : '1px solid var(--border-light, #e2e8f0)',
                           }}
                         >
                           {m.content}
@@ -775,9 +967,9 @@ export const MessagesPage: React.FC = () => {
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
+                            gap: '3px',
                             fontSize: '0.675rem',
-                            color: 'var(--text-muted)',
+                            color: 'var(--text-muted, #94a3b8)',
                             marginTop: '2px',
                             paddingRight: isMine ? '4px' : '0',
                             paddingLeft: !isMine ? '4px' : '0',
@@ -787,11 +979,11 @@ export const MessagesPage: React.FC = () => {
                           {isMine &&
                             (m.readAt ? (
                               <span title="Read" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                <CheckCheck size={13} style={{ color: '#2563eb' }} />
+                                <CheckCheck size={13} style={{ color: 'var(--brand-blue, #2340b8)' }} />
                               </span>
                             ) : (
                               <span title="Sent" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                <Check size={13} style={{ color: 'var(--text-muted)' }} />
+                                <Check size={13} style={{ color: 'var(--text-muted, #94a3b8)' }} />
                               </span>
                             ))}
                         </div>
@@ -802,91 +994,140 @@ export const MessagesPage: React.FC = () => {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Message Composer */}
-              <div
-                style={{
-                  padding: '14px 20px',
-                  borderTop: '1px solid var(--border-light)',
-                  backgroundColor: '#ffffff',
-                }}
-              >
-                {sendError && (
-                  <div
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: '#fee2e2',
-                      border: '1px solid #fecaca',
-                      borderRadius: '8px',
-                      color: '#991b1b',
-                      fontSize: '0.8rem',
-                      marginBottom: '8px',
-                    }}
-                  >
-                    {sendError}
-                  </div>
-                )}
-
-                <form
-                  onSubmit={handleSendMessage}
+              {/* Message Composer or Read-Only Notice */}
+              {activeConv.isReadOnly ? (
+                <div
                   style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#f8fafc',
+                    borderTop: '1px solid var(--border-light)',
                     display: 'flex',
-                    alignItems: 'flex-end',
-                    gap: '10px',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.825rem',
+                    textAlign: 'center',
+                    flexShrink: 0,
+                  }}
+                  id="chat-readonly-footer"
+                >
+                  <ShieldAlert size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <span>
+                    {activeConv.readOnlyReason ||
+                      'This ride has completed. Conversation is archived in read-only mode.'}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className="chat-composer-section"
+                  style={{
+                    padding: '10px 14px',
+                    borderTop: '1px solid var(--border-light, #e2e8f0)',
+                    backgroundColor: '#ffffff',
+                    flexShrink: 0,
                   }}
                 >
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <textarea
-                      ref={textareaRef}
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={
-                        activeConv.isReadOnly
-                          ? 'Messaging is closed for this ride'
-                          : 'Type a message... (Press Enter to send)'
-                      }
-                      disabled={activeConv.isReadOnly || sending}
-                      maxLength={1000}
-                      rows={1}
-                      style={{
-                        width: '100%',
-                        resize: 'none',
-                        minHeight: '44px',
-                        maxHeight: '120px',
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        border: '1px solid var(--border-light)',
-                        fontSize: '0.875rem',
-                        outline: 'none',
-                        fontFamily: 'inherit',
-                        backgroundColor: activeConv.isReadOnly ? '#f1f5f9' : '#ffffff',
-                      }}
-                      id="input-chat-message"
-                    />
+                  {sendError && (
                     <div
                       style={{
-                        fontSize: '0.65rem',
-                        color: 'var(--text-muted)',
-                        textAlign: 'right',
-                        marginTop: '2px',
+                        padding: '6px 12px',
+                        backgroundColor: '#fee2e2',
+                        border: '1px solid #fecaca',
+                        borderRadius: '8px',
+                        color: '#991b1b',
+                        fontSize: '0.78rem',
+                        marginBottom: '8px',
                       }}
                     >
-                      {messageText.length}/1000
+                      {sendError}
                     </div>
-                  </div>
+                  )}
 
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="md"
-                    disabled={activeConv.isReadOnly || !messageText.trim() || sending}
-                    leftIcon={sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    id="btn-send-message"
+                  <form
+                    onSubmit={handleSendMessage}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: '8px',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
                   >
-                    Send
-                  </Button>
-                </form>
-              </div>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                      <textarea
+                        ref={textareaRef}
+                        value={messageText}
+                        onChange={handleTextareaChange}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type a message... (Press Enter to send)"
+                        disabled={sending}
+                        maxLength={1000}
+                        rows={1}
+                        style={{
+                          width: '100%',
+                          resize: 'none',
+                          minHeight: '42px',
+                          maxHeight: '120px',
+                          height: '42px',
+                          lineHeight: '1.4',
+                          padding: '10px 14px',
+                          borderRadius: '16px',
+                          border: '1.5px solid var(--border-medium, #cbd5e1)',
+                          fontSize: '0.875rem',
+                          outline: 'none',
+                          fontFamily: 'inherit',
+                          backgroundColor: '#f8fafc',
+                          boxSizing: 'border-box',
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                        }}
+                        id="input-chat-message"
+                      />
+                      {messageText.length > 800 && (
+                        <div
+                          style={{
+                            fontSize: '0.65rem',
+                            color: messageText.length > 950 ? '#dc2626' : 'var(--text-muted)',
+                            textAlign: 'right',
+                            marginTop: '2px',
+                            paddingRight: '6px',
+                          }}
+                        >
+                          {messageText.length}/1000
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!messageText.trim() || sending}
+                      className="chat-send-btn"
+                      style={{
+                        backgroundColor: !messageText.trim() || sending ? '#e2e8f0' : '#2563eb',
+                        color: !messageText.trim() || sending ? '#94a3b8' : '#ffffff',
+                        border: 'none',
+                        cursor: !messageText.trim() || sending ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.15s ease',
+                        flexShrink: 0,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                      }}
+                      id="btn-send-message"
+                      aria-label="Send message"
+                    >
+                      {sending ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Send size={16} />
+                      )}
+                      <span className="chat-send-btn-label">Send</span>
+                    </button>
+                  </form>
+                </div>
+              )}
             </>
           ) : (
             <div

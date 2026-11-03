@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Car,
   Plus,
@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Loader2,
   ShieldCheck,
+  Camera,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -37,6 +38,13 @@ export const VehiclesPage: React.FC = () => {
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [capacity, setCapacity] = useState<number>(4);
   const [submitting, setSubmitting] = useState(false);
+
+  // Photo upload state
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [uploadingVehicleId, setUploadingVehicleId] = useState<string | null>(null);
+  const modalFileInputRef = useRef<HTMLInputElement>(null);
+  const cardFileInputRef = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   const fetchVehicles = async () => {
     if (!token || user?.verificationStatus !== 'VERIFIED') return;
@@ -72,9 +80,12 @@ export const VehiclesPage: React.FC = () => {
     setColor('');
     setRegistrationNumber('');
     setCapacity(4);
+    setSelectedImageFile(null);
+    setImagePreviewUrl(null);
     setEditingVehicleId(null);
     setFormMode(null);
     setError(null);
+    if (modalFileInputRef.current) modalFileInputRef.current.value = '';
   };
 
   const handleStartCreate = () => {
@@ -89,6 +100,8 @@ export const VehiclesPage: React.FC = () => {
     setColor(v.color);
     setRegistrationNumber(v.registrationNumber);
     setCapacity(v.capacity);
+    setImagePreviewUrl(v.imageUrl || null);
+    setSelectedImageFile(null);
     setFormMode('EDIT');
   };
 
@@ -122,6 +135,24 @@ export const VehiclesPage: React.FC = () => {
       const body = await res.json();
 
       if (res.ok) {
+        const vehicleId = formMode === 'EDIT' ? editingVehicleId! : body.id;
+
+        // Handle car photo upload or removal if changed
+        if (selectedImageFile && vehicleId) {
+          const formData = new FormData();
+          formData.append('file', selectedImageFile);
+          await fetch(`/api/vehicles/${vehicleId}/image`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+        } else if (formMode === 'EDIT' && !imagePreviewUrl && editingVehicleId) {
+          await fetch(`/api/vehicles/${editingVehicleId}/image`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+
         setSuccessMsg(formMode === 'EDIT' ? 'Vehicle updated successfully!' : 'Vehicle registered successfully!');
         resetForm();
         fetchVehicles();
@@ -132,6 +163,62 @@ export const VehiclesPage: React.FC = () => {
       setError('A network error occurred. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCardImageUpload = async (vehicleId: string, file: File) => {
+    if (!token || !file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Only JPEG, PNG, or WebP images are allowed.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Vehicle image file size must be less than 5MB.');
+      return;
+    }
+
+    setUploadingVehicleId(vehicleId);
+    setError(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) {
+        setSuccessMsg('Car photo updated successfully!');
+        fetchVehicles();
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        const b = await res.json().catch(() => ({}));
+        setError(b.message || 'Failed to upload car photo.');
+      }
+    } catch {
+      setError('Network error uploading car photo.');
+    } finally {
+      setUploadingVehicleId(null);
+    }
+  };
+
+  const handleCardImageRemove = async (vehicleId: string) => {
+    if (!token) return;
+    setUploadingVehicleId(vehicleId);
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/image`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setSuccessMsg('Car photo removed.');
+        fetchVehicles();
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+    } catch {
+      setError('Failed to remove car photo.');
+    } finally {
+      setUploadingVehicleId(null);
     }
   };
 
@@ -275,60 +362,125 @@ export const VehiclesPage: React.FC = () => {
                 backgroundColor: '#ffffff',
                 borderRadius: '14px',
                 border: '1px solid var(--border-light)',
-                padding: '20px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                gap: '16px',
+                overflow: 'hidden',
               }}
               className="vehicle-card"
             >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              {/* Vehicle Photo Banner / Placeholder */}
+              <div style={{ position: 'relative', height: '140px', backgroundColor: '#f1f5f9' }}>
+                {v.imageUrl ? (
+                  <img
+                    src={v.imageUrl}
+                    alt={`${v.make} ${v.model}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
                   <div
                     style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--color-brand-100)',
-                      color: 'var(--color-brand-700)',
+                      width: '100%',
+                      height: '100%',
                       display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      color: 'var(--text-muted)',
+                      gap: '6px',
                     }}
                   >
-                    <Car size={22} />
+                    <Car size={36} opacity={0.4} />
+                    <span style={{ fontSize: '12px', fontWeight: 500 }}>No car photo added</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <StatusBadge status="REGISTERED_VEHICLE" domain="vehicle" />
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        backgroundColor: '#f1f5f9',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      {v.capacity} Seats
-                    </span>
-                  </div>
+                )}
+                {/* Instant Card Photo Upload Badge */}
+                <button
+                  type="button"
+                  id={`btn-vehicle-photo-${v.id}`}
+                  title="Upload / Change Car Photo"
+                  onClick={() => cardFileInputRef.current[v.id]?.click()}
+                  disabled={uploadingVehicleId === v.id}
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    padding: '6px 10px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+                    backdropFilter: 'blur(4px)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  {uploadingVehicleId === v.id ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Camera size={12} />
+                  )}
+                  <span>{v.imageUrl ? 'Change' : 'Add Photo'}</span>
+                </button>
+                <input
+                  type="file"
+                  ref={(el) => { cardFileInputRef.current[v.id] = el; }}
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleCardImageUpload(v.id, file);
+                  }}
+                />
+              </div>
+
+              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <StatusBadge status="REGISTERED_VEHICLE" domain="vehicle" />
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: '#f1f5f9',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {v.capacity} Seats
+                  </span>
                 </div>
 
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                   {v.make} {v.model}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   Color: {v.color}
                 </div>
-                <div style={{ fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-brand-800)', backgroundColor: 'var(--bg-subtle)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
-                  {v.registrationNumber}
+                <div>
+                  <span style={{ fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-brand-800)', backgroundColor: 'var(--bg-subtle)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
+                    {v.registrationNumber}
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-light)', padding: '12px 20px' }}>
+                {v.imageUrl && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCardImageRemove(v.id)}
+                    disabled={uploadingVehicleId === v.id}
+                  >
+                    <span style={{ color: '#dc2626', fontSize: '12px' }}>Remove Photo</span>
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -360,6 +512,84 @@ export const VehiclesPage: React.FC = () => {
           maxWidth="480px"
         >
           <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Car Photo Upload in Modal */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
+                Car Photo (Optional)
+              </label>
+              {imagePreviewUrl ? (
+                <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-medium)', marginBottom: '8px' }}>
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Vehicle preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreviewUrl(null);
+                      setSelectedImageFile(null);
+                      if (modalFileInputRef.current) modalFileInputRef.current.value = '';
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      padding: '4px 8px',
+                      backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Remove Photo
+                  </button>
+                </div>
+              ) : (
+                <div
+                  id="dropzone-vehicle-photo"
+                  onClick={() => modalFileInputRef.current?.click()}
+                  style={{
+                    border: '2px dashed var(--border-medium)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    backgroundColor: '#f8fafc',
+                    marginBottom: '8px',
+                  }}
+                >
+                  <Camera size={24} style={{ color: 'var(--text-muted)', margin: '0 auto 6px' }} />
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-brand-600)' }}>
+                    Click to select car photo
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    JPEG, PNG, or WebP up to 5MB
+                  </div>
+                </div>
+              )}
+              <input
+                ref={modalFileInputRef}
+                type="file"
+                id="input-vehicle-photo"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                      setError('Car photo size must be less than 5MB');
+                      return;
+                    }
+                    setSelectedImageFile(file);
+                    setImagePreviewUrl(URL.createObjectURL(file));
+                  }
+                }}
+              />
+            </div>
             <div className="responsive-two-col" style={{ gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>

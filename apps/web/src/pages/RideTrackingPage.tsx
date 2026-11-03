@@ -19,6 +19,10 @@ import {
   Phone,
   MessageSquare,
   Home,
+  KeyRound,
+  Copy,
+  RotateCw,
+  Check,
 } from 'lucide-react';
 import { TrackingSessionStateDto, BoardingStatus } from '@vit-carpool/contracts';
 
@@ -79,6 +83,24 @@ export const RideTrackingPage: React.FC = () => {
   const [isMissedNoticeVisible, setIsMissedNoticeVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
+
+  // Milestone 8: Passenger Boarding OTP state
+  const [passengerOtpData, setPassengerOtpData] = useState<any>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpCopied, setOtpCopied] = useState(false);
+  const [regenCooldown, setRegenCooldown] = useState(0);
+
+  // Milestone 8: Driver Verification Modal state
+  const [selectedPassengerForOtp, setSelectedPassengerForOtp] = useState<any>(null);
+  const [otpInput, setOtpInput] = useState('');
+  const [otpVerifyError, setOtpVerifyError] = useState<string | null>(null);
+  const [otpVerifyLoading, setOtpVerifyLoading] = useState(false);
+  const [otpSuccessMessage, setOtpSuccessMessage] = useState<string | null>(null);
+
+  // Milestone 8: Driver No-Show Modal state
+  const [selectedPassengerForNoShow, setSelectedPassengerForNoShow] = useState<any>(null);
+  const [noShowReason, setNoShowReason] = useState('');
+  const [noShowLoading, setNoShowLoading] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -335,6 +357,40 @@ export const RideTrackingPage: React.FC = () => {
     };
   }, [isDriver, trackingState?.status]);
 
+  // Fetch passenger boarding OTP
+  useEffect(() => {
+    if (!token || !trackingState?.myPickup?.bookingId || isDriver) return;
+    const fetchOtp = async () => {
+      setOtpLoading(true);
+      try {
+        const res = await fetch(`/bookings/${trackingState.myPickup!.bookingId}/boarding-otp`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPassengerOtpData(data);
+          if (data.cooldownSecondsRemaining > 0) {
+            setRegenCooldown(data.cooldownSecondsRemaining);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch boarding OTP:', err);
+      } finally {
+        setOtpLoading(false);
+      }
+    };
+    fetchOtp();
+  }, [token, trackingState?.myPickup?.bookingId, isDriver]);
+
+  // Cooldown countdown timer tick
+  useEffect(() => {
+    if (regenCooldown <= 0) return;
+    const t = setInterval(() => {
+      setRegenCooldown((c) => Math.max(0, c - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [regenCooldown]);
+
   // 4. Driver GPS Geolocation Collection
   const startDriverTracking = () => {
     if (!navigator.geolocation) {
@@ -587,6 +643,121 @@ export const RideTrackingPage: React.FC = () => {
     }
   };
 
+  const handleRegenerateOtp = async () => {
+    if (!token || !trackingState?.myPickup?.bookingId || regenCooldown > 0) return;
+    setOtpLoading(true);
+    try {
+      const res = await fetch(`/bookings/${trackingState.myPickup.bookingId}/boarding-otp/regenerate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPassengerOtpData(data);
+        setRegenCooldown(60);
+      } else {
+        const err = await res.json();
+        alert(err.message || 'Failed to regenerate OTP');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to regenerate OTP');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtpSubmit = async () => {
+    if (!selectedPassengerForOtp || !token) return;
+    const cleanOtp = otpInput.replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      setOtpVerifyError('Boarding OTP must be exactly 6 digits.');
+      return;
+    }
+
+    setOtpVerifyLoading(true);
+    setOtpVerifyError(null);
+    try {
+      const res = await fetch(`/bookings/${selectedPassengerForOtp.bookingId}/verify-boarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ otp: cleanOtp }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        setOtpVerifyError(body.message || 'Verification failed. Please check the OTP.');
+        return;
+      }
+
+      // Success! Update local tracking state
+      setTrackingState((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          passengers: prev.passengers.map((p) =>
+            p.bookingId === selectedPassengerForOtp.bookingId
+              ? { ...p, boardingStatus: 'BOARDED' as BoardingStatus }
+              : p,
+          ),
+        };
+      });
+
+      setOtpSuccessMessage(`✓ Verified! ${selectedPassengerForOtp.passengerName} is now marked as BOARDED.`);
+      setTimeout(() => {
+        setSelectedPassengerForOtp(null);
+        setOtpInput('');
+        setOtpSuccessMessage(null);
+      }, 1000);
+    } catch (err: any) {
+      setOtpVerifyError(err.message || 'An error occurred during verification.');
+    } finally {
+      setOtpVerifyLoading(false);
+    }
+  };
+
+  const handleMarkNoShowSubmit = async () => {
+    if (!selectedPassengerForNoShow || !token) return;
+    setNoShowLoading(true);
+    try {
+      const res = await fetch(`/bookings/${selectedPassengerForNoShow.bookingId}/mark-no-show`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: noShowReason || undefined }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        alert(body.message || 'Failed to mark passenger as no-show.');
+        return;
+      }
+
+      setTrackingState((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          passengers: prev.passengers.map((p) =>
+            p.bookingId === selectedPassengerForNoShow.bookingId
+              ? { ...p, boardingStatus: 'MISSED' as BoardingStatus }
+              : p,
+          ),
+        };
+      });
+
+      setSelectedPassengerForNoShow(null);
+      setNoShowReason('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark passenger as no-show.');
+    } finally {
+      setNoShowLoading(false);
+    }
+  };
+
   const handleUpdateBoarding = async (bookingId: string, status: BoardingStatus) => {
     if (!rideId || !token) return;
     setActionLoading(true);
@@ -753,7 +924,16 @@ export const RideTrackingPage: React.FC = () => {
               </span>
             )}
             <span>•</span>
-            <span>Driver: <strong>{driverName}</strong></span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {trackingState.driverAvatarUrl ? (
+                <img
+                  src={trackingState.driverAvatarUrl}
+                  alt={driverName}
+                  style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : null}
+              <span>Driver: <strong>{driverName}</strong></span>
+            </span>
             {lastSuccessfulUpdate && (
               <>
                 <span>•</span>
@@ -1083,86 +1263,161 @@ export const RideTrackingPage: React.FC = () => {
         </div>
       )}
 
-      {/* Passenger Boarding Prompt Modal / Card */}
-      {showBoardingPrompt && myPickup && myPickup.boardingStatus !== 'BOARDED' && (
+      {/* Milestone 8: Passenger Boarding OTP Card */}
+      {!isDriver && myPickup && (
         <div
-          id="passenger-boarding-prompt"
+          id="passenger-boarding-otp-card"
           style={{
-            background: '#ecfdf5',
-            border: '2px solid #10b981',
+            background: myPickup.boardingStatus === 'BOARDED' ? '#f0fdf4' : '#eff6ff',
+            border: `2px solid ${myPickup.boardingStatus === 'BOARDED' ? '#86efac' : '#93c5fd'}`,
             borderRadius: '12px',
-            padding: '16px 20px',
+            padding: '20px',
             marginBottom: '16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <CheckCircle2 size={24} color="#059669" />
-            <div>
-              <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#065f46', marginBottom: '2px' }}>
-                Your driver appears to be near your pickup. Are you boarding?
-              </h4>
-              <p style={{ fontSize: '13px', color: '#047857', margin: 0 }}>
-                Please confirm once you meet your driver or get into the vehicle.
-              </p>
+          {myPickup.boardingStatus === 'BOARDED' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#22c55e',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Check size={26} strokeWidth={3} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: '16px', fontWeight: 700, color: '#15803d', margin: '0 0 3px 0' }}>
+                  ✓ Boarding Verified
+                </h4>
+                <p style={{ fontSize: '13px', color: '#166534', margin: 0 }}>
+                  Driver has verified your boarding OTP. You are safely onboard and en route!
+                </p>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              id="btn-confirm-boarded"
-              onClick={() => myPickup && handleUpdateBoarding(myPickup.bookingId, 'BOARDED')}
-              disabled={actionLoading}
-              style={{
-                background: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              ✓ Yes, I Have Boarded
-            </button>
-            <button
-              id="btn-confirm-boarding"
-              onClick={() => myPickup && handleUpdateBoarding(myPickup.bookingId, 'BOARDING')}
-              disabled={actionLoading}
-              style={{
-                background: '#fef3c7',
-                color: '#b45309',
-                border: '1px solid #fde68a',
-                borderRadius: '8px',
-                padding: '8px 14px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              🚶 Boarding Now
-            </button>
-            <button
-              id="btn-dismiss-boarding"
-              onClick={() => setShowBoardingPrompt(false)}
-              style={{
-                background: 'transparent',
-                color: '#065f46',
-                border: '1px solid #6ee7b7',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '13px',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              Dismiss
-            </button>
-          </div>
+          ) : (
+            <div>
+              {showBoardingPrompt && (
+                <div
+                  id="driver-arrived-banner"
+                  style={{
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    marginBottom: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: '#92400e',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Radio size={16} color="#d97706" />
+                  <span>Driver has arrived near your pickup point! Please board and share your OTP.</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <KeyRound size={20} color="#2563eb" />
+                  <h4 style={{ fontSize: '16px', fontWeight: 700, color: '#1e3a8a', margin: 0 }}>
+                    Your Boarding OTP
+                  </h4>
+                </div>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                  Pickup: <strong>{myPickup.pickupAddress || myPickup.pickupDescription || origin}</strong>
+                </span>
+              </div>
+
+              <p style={{ fontSize: '13px', color: '#3b82f6', margin: '0 0 14px 0' }}>
+                Show this 6-digit code to your driver upon entering the vehicle. Only after verification will your seat be confirmed as boarded.
+              </p>
+
+              {otpLoading && !passengerOtpData ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                  Loading secure boarding OTP...
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {/* Large formatted OTP box */}
+                  <div
+                    id="passenger-otp-display"
+                    style={{
+                      background: 'white',
+                      border: '2px dashed #2563eb',
+                      borderRadius: '10px',
+                      padding: '10px 24px',
+                      fontSize: '28px',
+                      fontWeight: 800,
+                      letterSpacing: '6px',
+                      color: '#1d4ed8',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {passengerOtpData?.otp || '••••••'}
+                  </div>
+
+                  <button
+                    id="btn-copy-otp"
+                    onClick={() => {
+                      if (passengerOtpData?.rawOtp) {
+                        navigator.clipboard.writeText(passengerOtpData.rawOtp);
+                        setOtpCopied(true);
+                        setTimeout(() => setOtpCopied(false), 2000);
+                      }
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'white',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {otpCopied ? <Check size={16} color="#16a34a" /> : <Copy size={16} />}
+                    {otpCopied ? 'Copied!' : 'Copy Code'}
+                  </button>
+
+                  <button
+                    id="btn-regenerate-otp"
+                    onClick={handleRegenerateOtp}
+                    disabled={otpLoading || regenCooldown > 0 || (passengerOtpData && passengerOtpData.regenCountRemaining <= 0)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'transparent',
+                      border: '1px solid #94a3b8',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: regenCooldown > 0 ? '#94a3b8' : '#475569',
+                      cursor: regenCooldown > 0 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <RotateCw size={15} className={otpLoading ? 'spin' : ''} />
+                    {regenCooldown > 0 ? `Regenerate in ${regenCooldown}s` : 'Regenerate Code'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1263,22 +1518,82 @@ export const RideTrackingPage: React.FC = () => {
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Your Ride Driver
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {trackingState.driverAvatarUrl ? (
+                  <img
+                    src={trackingState.driverAvatarUrl}
+                    alt={driverName}
+                    style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #cbd5e1', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '50%',
+                      backgroundColor: '#dbeafe',
+                      color: '#1d4ed8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '16px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {driverName.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Your Ride Driver
+                    </span>
+                  </div>
+                  <h3 id="passenger-card-driver-name" style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {driverName}
+                  </h3>
+                </div>
               </div>
-              <h3 id="passenger-card-driver-name" style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                {driverName}
-              </h3>
               {vehicle && (
-                <div id="passenger-card-vehicle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', marginTop: '4px', flexWrap: 'wrap' }}>
-                  <Car size={15} color="#64748b" />
-                  <span>{vehicle.make} {vehicle.model} • {vehicle.color}</span>
-                  {vehicle.registrationNumber && (
-                    <strong style={{ background: '#f1f5f9', color: '#0f172a', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', border: '1px solid #e2e8f0' }}>
-                      {vehicle.registrationNumber}
-                    </strong>
+                <div style={{ marginTop: '4px' }}>
+                  <div id="passenger-card-vehicle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', flexWrap: 'wrap' }}>
+                    <Car size={15} color="#64748b" />
+                    <span>{vehicle.make} {vehicle.model} • {vehicle.color}</span>
+                    {vehicle.registrationNumber && (
+                      <strong style={{ background: '#f1f5f9', color: '#0f172a', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', border: '1px solid #e2e8f0' }}>
+                        {vehicle.registrationNumber}
+                      </strong>
+                    )}
+                  </div>
+                  {vehicle.imageUrl && (
+                    <div
+                      id="tracking-vehicle-appearance-card"
+                      style={{
+                        marginTop: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '8px 12px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <img
+                        src={vehicle.imageUrl}
+                        alt="Vehicle appearance"
+                        style={{ width: '56px', height: '42px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid #cbd5e1' }}
+                      />
+                      <div style={{ fontSize: '12px', minWidth: 0 }}>
+                        <span style={{ fontWeight: 600, color: '#0f172a', display: 'block' }}>
+                          Vehicle Appearance &bull; Look for this car
+                        </span>
+                        <span style={{ color: '#64748b', fontSize: '11px' }}>
+                          {vehicle.color} {vehicle.make} {vehicle.model}
+                        </span>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -1458,9 +1773,26 @@ export const RideTrackingPage: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
         {/* Passenger Roster Card */}
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '20px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Navigation size={16} color="#2563eb" /> Confirmed Passengers ({passengers.length})
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Navigation size={16} color="#2563eb" /> Confirmed Passengers ({passengers.length})
+            </h3>
+            {passengers.length > 0 && (
+              <span
+                id="driver-boarding-progress-pill"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  background: passengers.every((p) => p.boardingStatus === 'BOARDED') ? '#dcfce7' : '#eff6ff',
+                  color: passengers.every((p) => p.boardingStatus === 'BOARDED') ? '#15803d' : '#1d4ed8',
+                }}
+              >
+                Boarding: {passengers.filter((p) => p.boardingStatus === 'BOARDED').length} / {passengers.length} Verified
+              </span>
+            )}
+          </div>
 
           {passengers.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#64748b' }}>No confirmed passengers on this trip yet.</p>
@@ -1476,7 +1808,6 @@ export const RideTrackingPage: React.FC = () => {
                 })
                 .map((p, idx) => {
                   const isMe = user && p.passengerId === user.id;
-                  const canEditBoarding = isDriver || isMe;
                   const isUnboarded = p.boardingStatus !== 'BOARDED';
 
                   return (
@@ -1492,6 +1823,31 @@ export const RideTrackingPage: React.FC = () => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {p.passengerAvatarUrl ? (
+                            <img
+                              src={p.passengerAvatarUrl}
+                              alt={p.passengerName}
+                              style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #cbd5e1', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                backgroundColor: isMe ? '#dbeafe' : '#e2e8f0',
+                                color: isMe ? '#1d4ed8' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {p.passengerName.charAt(0)}
+                            </div>
+                          )}
                           {isDriver && isUnboarded && (
                             <span
                               className="pickup-stop-badge"
@@ -1578,61 +1934,62 @@ export const RideTrackingPage: React.FC = () => {
                       </div>
 
                     {/* Boarding Status Controls */}
-                    {canEditBoarding && status === 'IN_PROGRESS' && (
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
-                        {p.boardingStatus === 'WAITING' && (
+                    {status === 'IN_PROGRESS' && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {isDriver && p.boardingStatus !== 'BOARDED' && (
                           <button
-                            onClick={() => handleUpdateBoarding(p.bookingId, 'BOARDING')}
-                            disabled={actionLoading}
-                            style={{
-                              background: 'white',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              color: '#475569',
-                              cursor: 'pointer',
+                            id={`btn-verify-otp-${p.bookingId}`}
+                            onClick={() => {
+                              setSelectedPassengerForOtp(p);
+                              setOtpInput('');
+                              setOtpVerifyError(null);
+                              setOtpSuccessMessage(null);
                             }}
-                          >
-                            🚶 Boarding
-                          </button>
-                        )}
-                        {p.boardingStatus !== 'BOARDED' && (
-                          <button
-                            onClick={() => handleUpdateBoarding(p.bookingId, 'BOARDED')}
                             disabled={actionLoading}
                             style={{
-                              background: '#16a34a',
+                              background: '#2563eb',
                               border: 'none',
                               borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '12px',
+                              padding: '6px 14px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               color: 'white',
                               cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 1px 3px rgba(37, 99, 235, 0.25)',
                             }}
                           >
-                            ✓ Mark Boarded
+                            <KeyRound size={14} /> Verify OTP
                           </button>
                         )}
-                        {p.boardingStatus !== 'BOARDED' && p.boardingStatus !== 'MISSED' && (
+                        {isDriver && p.boardingStatus !== 'BOARDED' && p.boardingStatus !== 'MISSED' && (
                           <button
-                            onClick={() => handleUpdateBoarding(p.bookingId, 'MISSED')}
+                            id={`btn-mark-noshow-${p.bookingId}`}
+                            onClick={() => {
+                              setSelectedPassengerForNoShow(p);
+                              setNoShowReason('');
+                            }}
                             disabled={actionLoading}
                             style={{
                               background: '#fee2e2',
                               border: '1px solid #fca5a5',
                               borderRadius: '6px',
-                              padding: '4px 10px',
+                              padding: '6px 12px',
                               fontSize: '12px',
                               fontWeight: 600,
                               color: '#991b1b',
                               cursor: 'pointer',
                             }}
                           >
-                            ✕ Mark Missed
+                            ✕ No-Show
                           </button>
+                        )}
+                        {p.boardingStatus === 'BOARDED' && (
+                          <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <CheckCircle2 size={14} /> Boarded
+                          </span>
                         )}
                       </div>
                     )}
@@ -1856,6 +2213,311 @@ export const RideTrackingPage: React.FC = () => {
                 style={{ background: '#b91c1c', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: 600, color: 'white', cursor: 'pointer' }}
               >
                 {actionLoading ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Milestone 8: VERIFY BOARDING OTP MODAL */}
+      {selectedPassengerForOtp && (
+        <div
+          id="verify-boarding-otp-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '28px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <KeyRound size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  Verify Passenger Boarding
+                </h3>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                  Passenger: <strong>{selectedPassengerForOtp.passengerName}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                border: '1px solid #e2e8f0',
+                marginBottom: '18px',
+                fontSize: '13px',
+                color: '#475569',
+              }}
+            >
+              Pickup: <strong>{selectedPassengerForOtp.pickupAddress || selectedPassengerForOtp.pickupDescription || 'Campus corridor'}</strong>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.5, marginBottom: '16px' }}>
+              Enter the 6-digit code shown on {selectedPassengerForOtp.passengerName}’s device. Each passenger has a unique, secure boarding OTP.
+            </p>
+
+            {otpVerifyError && (
+              <div
+                id="otp-verify-error"
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  color: '#b91c1c',
+                  fontSize: '13px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <AlertTriangle size={16} />
+                <span>{otpVerifyError}</span>
+              </div>
+            )}
+
+            {otpSuccessMessage && (
+              <div
+                id="otp-verify-success"
+                style={{
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  color: '#065f46',
+                  fontSize: '13px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Check size={16} />
+                <span>{otpSuccessMessage}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleVerifyOtpSubmit();
+              }}
+            >
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  htmlFor="input-boarding-otp"
+                  style={{
+                    display: 'block',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#475569',
+                    marginBottom: '6px',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  6-Digit Boarding Code
+                </label>
+                <input
+                  id="input-boarding-otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={7}
+                  placeholder="e.g. 482916"
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value)}
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    fontSize: '22px',
+                    fontWeight: 700,
+                    letterSpacing: '6px',
+                    textAlign: 'center',
+                    border: '2px solid #cbd5e1',
+                    borderRadius: '10px',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    color: '#0f172a',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  id="btn-cancel-verify-otp"
+                  onClick={() => {
+                    setSelectedPassengerForOtp(null);
+                    setOtpInput('');
+                    setOtpVerifyError(null);
+                  }}
+                  disabled={otpVerifyLoading}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '10px 18px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#475569',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  id="btn-submit-verify-otp"
+                  disabled={otpVerifyLoading || otpInput.trim().length === 0}
+                  style={{
+                    background: '#2563eb',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 22px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'white',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.3)',
+                  }}
+                >
+                  {otpVerifyLoading ? 'Verifying...' : 'Verify Boarding'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Milestone 8: MARK NO-SHOW MODAL */}
+      {selectedPassengerForNoShow && (
+        <div
+          id="mark-noshow-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              maxWidth: '440px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+            }}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#b91c1c', marginBottom: '8px' }}>
+              Mark {selectedPassengerForNoShow.passengerName} as No-Show?
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.5, marginBottom: '16px' }}>
+              This records that the passenger was not physically present at the designated pickup point. The passenger will be notified immediately.
+            </p>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label
+                htmlFor="input-noshow-reason"
+                style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}
+              >
+                Reason (optional)
+              </label>
+              <input
+                id="input-noshow-reason"
+                type="text"
+                placeholder="e.g. Passenger not present after 10-minute wait"
+                value={noShowReason}
+                onChange={(e) => setNoShowReason(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  boxSizing: 'border-box',
+                  fontSize: '13px',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                id="btn-cancel-noshow"
+                onClick={() => setSelectedPassengerForNoShow(null)}
+                disabled={noShowLoading}
+                style={{
+                  background: 'white',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: '#475569',
+                  cursor: 'pointer',
+                }}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-noshow"
+                onClick={handleMarkNoShowSubmit}
+                disabled={noShowLoading}
+                style={{
+                  background: '#b91c1c',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                {noShowLoading ? 'Marking...' : 'Confirm No-Show'}
               </button>
             </div>
           </div>

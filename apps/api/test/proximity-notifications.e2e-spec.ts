@@ -335,20 +335,14 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
   });
 
   describe('3. Boarding Confirmation Workflow', () => {
-    it('allows passenger to confirm boarding (transitions WAITING -> BOARDED with timestamp)', async () => {
+    it('strictly forbids direct transition to BOARDED without OTP verification (403)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/rides/${activeRideId}/boarding`)
         .set('Authorization', `Bearer ${passengerAToken}`)
         .send({ bookingId: bookingAId, boardingStatus: 'BOARDED' })
-        .expect(200);
+        .expect(403);
 
-      expect(res.body.success).toBe(true);
-      expect(res.body.bookingId).toBe(bookingAId);
-      expect(res.body.boardingStatus).toBe('BOARDED');
-
-      const updated = await testPrisma.booking.findUnique({ where: { id: bookingAId } });
-      expect(updated?.boardingStatus).toBe('BOARDED');
-      expect(updated?.boardedAt).not.toBeNull();
+      expect(res.body.message).toContain('Direct boarding transition to BOARDED is disabled');
     });
 
     it('allows passenger to signal BOARDING status', async () => {
@@ -364,24 +358,38 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
     });
 
     it('strictly forbids a passenger from changing another passenger boarding status (403)', async () => {
-      // Passenger A tries to mark Passenger B as BOARDED
+      // Passenger A tries to mark Passenger B as BOARDING
       const res = await request(app.getHttpServer())
         .post(`/rides/${activeRideId}/boarding`)
         .set('Authorization', `Bearer ${passengerAToken}`)
-        .send({ bookingId: bookingBId, boardingStatus: 'BOARDED' })
+        .send({ bookingId: bookingBId, boardingStatus: 'BOARDING' })
         .expect(403);
 
       expect(res.body.message).toContain('You do not have permission to update boarding status for this booking');
     });
 
-    it('allows the driver to update boarding status for any confirmed passenger', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/rides/${activeRideId}/boarding`)
-        .set('Authorization', `Bearer ${driverToken}`)
-        .send({ bookingId: bookingAId, boardingStatus: 'BOARDED' })
+    it('allows driver to verify passenger boarding OTP and marks passenger as BOARDED', async () => {
+      // Passenger retrieves OTP
+      const otpRes = await request(app.getHttpServer())
+        .get(`/bookings/${bookingAId}/boarding-otp`)
+        .set('Authorization', `Bearer ${passengerAToken}`)
         .expect(200);
 
-      expect(res.body.boardingStatus).toBe('BOARDED');
+      expect(otpRes.body.rawOtp).toBeDefined();
+
+      // Driver verifies passenger OTP
+      const verifyRes = await request(app.getHttpServer())
+        .post(`/bookings/${bookingAId}/verify-boarding`)
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ otp: otpRes.body.rawOtp })
+        .expect(200);
+
+      expect(verifyRes.body.success).toBe(true);
+      expect(verifyRes.body.boardingStatus).toBe('BOARDED');
+
+      const updated = await testPrisma.booking.findUnique({ where: { id: bookingAId } });
+      expect(updated?.boardingStatus).toBe('BOARDED');
+      expect(updated?.boardedAt).not.toBeNull();
     });
   });
 

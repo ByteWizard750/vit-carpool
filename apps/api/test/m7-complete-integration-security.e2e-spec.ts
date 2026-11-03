@@ -324,11 +324,16 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
       expect(trackRes.body.myPickup.boardingStatus).toBe('WAITING');
       expect(trackRes.body.myPickup.etaMinutes).toBeLessThanOrEqual(5);
 
-      // Step 4: Passenger confirms boarding
-      const boardRes = await request(app.getHttpServer())
-        .post(`/rides/${activeRideId}/boarding`)
+      // Step 4: Passenger retrieves boarding OTP and driver verifies it
+      const otpRes = await request(app.getHttpServer())
+        .get(`/bookings/${booking1Id}/boarding-otp`)
         .set('Authorization', `Bearer ${p1Token}`)
-        .send({ bookingId: booking1Id, boardingStatus: 'BOARDED' })
+        .expect(200);
+
+      const boardRes = await request(app.getHttpServer())
+        .post(`/bookings/${booking1Id}/verify-boarding`)
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ otp: otpRes.body.rawOtp })
         .expect(200);
 
       expect(boardRes.body.boardingStatus).toBe('BOARDED');

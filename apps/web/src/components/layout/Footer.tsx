@@ -1,12 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Car, Terminal, ExternalLink } from 'lucide-react';
+import { Car } from 'lucide-react';
 
 interface FooterProps {
-  onOpenDevStatus: () => void;
+  onOpenDevStatus?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
+export const Footer: React.FC<FooterProps> = () => {
   return (
     <footer className="site-footer">
       <div className="container">
@@ -49,7 +49,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
                 <Link to="/offer-ride">Offer a Ride</Link>
               </li>
               <li>
-                <Link to="/safety">Cohort Separation</Link>
+                <Link to="/safety">Community Safety</Link>
               </li>
               <li>
                 <Link to="/how-it-works">How It Works</Link>
@@ -57,40 +57,22 @@ export const Footer: React.FC<FooterProps> = ({ onOpenDevStatus }) => {
             </ul>
           </div>
 
-          {/* Platform & Resources */}
+          {/* Platform & Trust Information */}
           <div>
-            <h4 className="footer-col-title">Resources</h4>
+            <h4 className="footer-col-title">Campus &amp; Legal</h4>
             <ul className="footer-links-list">
               <li>
-                <a
-                  href="https://github.com/ByteWizard750/vit-carpool"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                >
-                  <span>Architecture Docs</span>
-                  <ExternalLink size={12} />
-                </a>
+                <Link to="/how-it-works">About VIT Carpool</Link>
               </li>
-              {import.meta.env.DEV && (
-                <li>
-                  <button
-                    type="button"
-                    onClick={onOpenDevStatus}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      color: '#60a5fa',
-                      fontSize: '0.825rem',
-                    }}
-                    id="footer-dev-diagnostics-btn"
-                  >
-                    <Terminal size={13} />
-                    <span>Dev Diagnostics</span>
-                  </button>
-                </li>
-              )}
+              <li>
+                <Link to="/safety">Safety &amp; Privacy</Link>
+              </li>
+              <li>
+                <Link to="/safety#terms">Terms of Use</Link>
+              </li>
+              <li>
+                <a href="mailto:support@vitcarpool.app">Contact Support</a>
+              </li>
             </ul>
           </div>
         </div>

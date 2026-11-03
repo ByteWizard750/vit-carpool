@@ -31,11 +31,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span>Campus Carpool &bull; VIT Chennai</span>
             </div>
             <h1 className="hero-title">
-              Dedicated Campus Carpooling
+              Going the Same Way? Ride Together.
             </h1>
             <p className="hero-lead">
-              VIT Chennai students and faculty heading your way. Split the fuel, skip the solo drive,
-              and commute safely with verified campus peers.
+              Connect with VIT Chennai students and faculty travelling along your route. Share fuel costs, find commute companions and make every journey easier.
             </p>
           </div>
 

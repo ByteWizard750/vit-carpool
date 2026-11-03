@@ -9,17 +9,21 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
-import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, NotificationType, Prisma } from '@vit-carpool/db';
+import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, BoardingStatus, NotificationType, Prisma } from '@vit-carpool/db';
 import {
   CreateBookingRequestDto,
   CancelBookingDto,
   RejectBookingDto,
   PassengerBookingResponseDto,
   DriverBookingResponseDto,
+  BoardingOtpResponseDto,
+  VerifyBoardingResponseDto,
+  MarkNoShowResponseDto,
 } from '@vit-carpool/contracts';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../moderation/moderation.service';
 import { TrackingGateway } from '../tracking/tracking.gateway';
+import { BoardingOtpService } from './boarding-otp.service';
 
 @Injectable()
 export class BookingsService {
@@ -30,6 +34,7 @@ export class BookingsService {
     private readonly audit: AuditLogService,
     private readonly notificationsService: NotificationsService,
     private readonly moderationService: ModerationService,
+    private readonly boardingOtpService: BoardingOtpService,
     @Optional() private readonly trackingGateway?: TrackingGateway,
   ) {}
 
@@ -74,6 +79,7 @@ export class BookingsService {
         costPerSeat: booking.ride.costPerSeat,
         status: booking.ride.status,
         driverName: booking.ride.driver?.fullName || 'Verified Driver',
+        driverAvatarUrl: booking.ride.driver?.avatarUrl ?? null,
         // Privacy protection: Landmark notes and contact info disclosed ONLY if confirmed
         pickupDescription: isConfirmed ? booking.ride.pickupDescription : undefined,
         dropoffDescription: isConfirmed ? booking.ride.dropoffDescription : undefined,
@@ -85,6 +91,7 @@ export class BookingsService {
               model: booking.ride.vehicle.model,
               color: booking.ride.vehicle.color,
               capacity: booking.ride.vehicle.capacity,
+              imageUrl: booking.ride.vehicle.imageUrl ?? null,
             }
           : undefined,
       },
@@ -108,6 +115,7 @@ export class BookingsService {
       rideId: booking.rideId,
       passengerId: booking.passengerId,
       passengerName: booking.passenger?.fullName || 'Verified Passenger',
+      passengerAvatarUrl: booking.passenger?.avatarUrl ?? null,
       passengerPhone: isConfirmed ? booking.passenger?.phoneNumber : undefined,
       driverId: booking.driverId,
       audience: booking.audience,
@@ -457,12 +465,20 @@ export class BookingsService {
         data: { availableSeats: newAvailableSeats },
       });
 
-      // 6. Transition booking to CONFIRMED
+      // 6. Generate secure Boarding OTP and transition booking to CONFIRMED
+      const otpData = this.boardingOtpService.generateBoardingOtp(bookingId);
+
       const updatedBooking = await tx.booking.update({
         where: { id: bookingId },
         data: {
           status: BookingStatus.CONFIRMED,
           confirmedAt: new Date(),
+          boardingOtpHash: otpData.hash,
+          boardingOtpSalt: otpData.salt,
+          boardingOtpEncrypted: otpData.encrypted,
+          boardingOtpExpiresAt: otpData.expiresAt,
+          boardingOtpFailedAttempts: 0,
+          boardingOtpRegenCount: 0,
         },
         include: {
           passenger: true,
@@ -493,7 +509,7 @@ export class BookingsService {
         result: this.toDriverBookingDto(updatedBooking),
         notificationData: {
           recipientId: booking.passengerId,
-          audience: user.audience!,
+          audience: booking.audience || user.audience!,
           type: NotificationType.BOOKING_APPROVED,
           title: '✅ Booking Approved!',
           message: `Your booking for ${ride.origin} → ${ride.destination} was approved by the driver.`,
@@ -576,10 +592,12 @@ export class BookingsService {
         result: this.toDriverBookingDto(updated),
         notificationData: {
           recipientId: booking.passengerId,
-          audience: user.audience!,
+          audience: booking.audience || user.audience!,
           type: NotificationType.BOOKING_REJECTED,
           title: '⚠️ Booking Declined',
-          message: `Your booking request for ${booking.ride.origin} → ${booking.ride.destination} was declined by the driver.`,
+          message: dto?.reason?.trim()
+            ? `Your booking request for ${booking.ride.origin} → ${booking.ride.destination} was declined: "${dto.reason.trim()}".`
+            : `Your booking request for ${booking.ride.origin} → ${booking.ride.destination} was declined by the driver.`,
           rideId: booking.rideId,
           bookingId: booking.id,
           dedupKey: `booking_rejected:${booking.id}`,
@@ -734,5 +752,437 @@ export class BookingsService {
     }
 
     return result;
+  }
+
+  /**
+   * Milestone 8: Retrieve Passenger Boarding OTP (Passenger only).
+   */
+  async getPassengerBoardingOtp(user: User, bookingId: string): Promise<BoardingOtpResponseDto> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        ride: {
+          include: {
+            driver: true,
+            vehicle: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found.');
+    }
+
+    if (booking.passengerId !== user.id) {
+      throw new ForbiddenException('Only the booking passenger can view this boarding OTP.');
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Boarding OTP is only available for CONFIRMED bookings.');
+    }
+
+    // Cohort boundary check
+    if (user.audience && booking.ride.audience !== user.audience) {
+      throw new ForbiddenException('Audience cohort mismatch.');
+    }
+
+    let rawOtp: string | null = null;
+    let expiresAt = booking.boardingOtpExpiresAt;
+
+    // Check if OTP was already generated and encrypted
+    if (booking.boardingOtpEncrypted) {
+      rawOtp = this.boardingOtpService.decryptOtp(booking.boardingOtpEncrypted);
+    }
+
+    // Lazy generation for test fixtures or bookings confirmed prior to M8
+    if (!rawOtp || !expiresAt || expiresAt < new Date()) {
+      const generated = this.boardingOtpService.generateBoardingOtp(booking.id);
+      rawOtp = generated.rawOtp;
+      expiresAt = generated.expiresAt;
+
+      await this.prisma.booking.update({
+        where: { id: booking.id },
+        data: {
+          boardingOtpHash: generated.hash,
+          boardingOtpSalt: generated.salt,
+          boardingOtpEncrypted: generated.encrypted,
+          boardingOtpExpiresAt: generated.expiresAt,
+          boardingOtpFailedAttempts: 0,
+        },
+      });
+    }
+
+    const cooldownSecondsRemaining = this.boardingOtpService.getRegenCooldownSeconds(
+      booking.boardingOtpLastRegenAt,
+    );
+    const regenCountRemaining = Math.max(
+      0,
+      BoardingOtpService.MAX_REGEN_COUNT - booking.boardingOtpRegenCount,
+    );
+    const canRegenerate =
+      booking.boardingStatus !== BoardingStatus.BOARDED &&
+      cooldownSecondsRemaining === 0 &&
+      regenCountRemaining > 0;
+
+    return {
+      bookingId: booking.id,
+      rideId: booking.rideId,
+      otp: this.boardingOtpService.formatOtp(rawOtp),
+      rawOtp,
+      expiresAt: expiresAt.toISOString(),
+      boardingStatus: booking.boardingStatus,
+      canRegenerate,
+      cooldownSecondsRemaining,
+      regenCountRemaining,
+      driverName: booking.ride.driver.fullName,
+      vehiclePlate: booking.ride.vehicle.registrationNumber,
+      pickupAddress: booking.pickupAddress,
+    };
+  }
+
+  /**
+   * Milestone 8: Regenerate Passenger Boarding OTP (Passenger only).
+   */
+  async regeneratePassengerBoardingOtp(user: User, bookingId: string): Promise<BoardingOtpResponseDto> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        ride: {
+          include: {
+            driver: true,
+            vehicle: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found.');
+    }
+
+    if (booking.passengerId !== user.id) {
+      throw new ForbiddenException('Only the booking passenger can regenerate this boarding OTP.');
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Cannot regenerate OTP for a booking that is not CONFIRMED.');
+    }
+
+    if (booking.boardingStatus === BoardingStatus.BOARDED) {
+      throw new BadRequestException('Passenger has already been verified as boarded.');
+    }
+
+    if (booking.boardingOtpRegenCount >= BoardingOtpService.MAX_REGEN_COUNT) {
+      throw new BadRequestException('Maximum OTP regeneration limit reached (5).');
+    }
+
+    const cooldown = this.boardingOtpService.getRegenCooldownSeconds(booking.boardingOtpLastRegenAt);
+    if (cooldown > 0) {
+      throw new BadRequestException(`Please wait ${cooldown} seconds before regenerating OTP.`);
+    }
+
+    const newOtp = this.boardingOtpService.generateBoardingOtp(booking.id);
+    const now = new Date();
+
+    const updated = await this.prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        boardingOtpHash: newOtp.hash,
+        boardingOtpSalt: newOtp.salt,
+        boardingOtpEncrypted: newOtp.encrypted,
+        boardingOtpExpiresAt: newOtp.expiresAt,
+        boardingOtpFailedAttempts: 0,
+        boardingOtpLockoutUntil: null,
+        boardingOtpRegenCount: booking.boardingOtpRegenCount + 1,
+        boardingOtpLastRegenAt: now,
+      },
+      include: {
+        ride: {
+          include: {
+            driver: true,
+            vehicle: true,
+          },
+        },
+      },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'BOARDING_OTP_REGENERATED',
+      targetType: 'BOOKING',
+      targetId: booking.id,
+      changes: {
+        regenCount: updated.boardingOtpRegenCount,
+      },
+    });
+
+    return {
+      bookingId: updated.id,
+      rideId: updated.rideId,
+      otp: newOtp.formattedOtp,
+      rawOtp: newOtp.rawOtp,
+      expiresAt: newOtp.expiresAt.toISOString(),
+      boardingStatus: updated.boardingStatus,
+      canRegenerate: false,
+      cooldownSecondsRemaining: 60,
+      regenCountRemaining: Math.max(0, BoardingOtpService.MAX_REGEN_COUNT - updated.boardingOtpRegenCount),
+      driverName: updated.ride.driver.fullName,
+      vehiclePlate: updated.ride.vehicle.registrationNumber,
+      pickupAddress: updated.pickupAddress,
+    };
+  }
+
+  /**
+   * Milestone 8: Verify Boarding OTP (Driver only).
+   * Constant-time comparison, failed attempt lockout, and atomic transition to BOARDED.
+   */
+  async verifyBoardingOtp(
+    user: User,
+    bookingId: string,
+    candidateOtp: string,
+  ): Promise<VerifyBoardingResponseDto> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        ride: true,
+        passenger: true,
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found.');
+    }
+
+    if (booking.driverId !== user.id) {
+      throw new ForbiddenException('Only the driver of this ride can verify passenger boarding OTP.');
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Booking is not in CONFIRMED status.');
+    }
+
+    // Cohort verification
+    if (user.audience && booking.ride.audience !== user.audience) {
+      throw new ForbiddenException('Audience cohort mismatch.');
+    }
+
+    // Execute verification inside row-locked transaction
+    const { updatedBooking, notificationData } = await this.prisma.$transaction(async (tx) => {
+      const lockedBooking = await tx.booking.findUniqueOrThrow({
+        where: { id: bookingId },
+        include: {
+          ride: true,
+          passenger: true,
+        },
+      });
+
+      const verResult = this.boardingOtpService.verifyOtp(lockedBooking, candidateOtp);
+
+      if (!verResult.valid) {
+        if (verResult.code === 'INVALID_OTP') {
+          const nextFailed = lockedBooking.boardingOtpFailedAttempts + 1;
+          const isLockout = nextFailed >= BoardingOtpService.MAX_FAILED_ATTEMPTS;
+          const lockoutUntil = isLockout
+            ? new Date(Date.now() + BoardingOtpService.LOCKOUT_DURATION_MS)
+            : null;
+
+          await tx.booking.update({
+            where: { id: bookingId },
+            data: {
+              boardingOtpFailedAttempts: nextFailed,
+              boardingOtpLockoutUntil: lockoutUntil,
+            },
+          });
+
+          throw new BadRequestException(verResult.message);
+        }
+
+        if (verResult.code === 'LOCKOUT') {
+          throw new ForbiddenException(verResult.message);
+        }
+
+        if (verResult.code === 'ALREADY_BOARDED') {
+          throw new ConflictException(verResult.message);
+        }
+
+        throw new BadRequestException(verResult.message);
+      }
+
+      // Valid OTP! Atomically mark passenger as BOARDED
+      const now = new Date();
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          boardingStatus: BoardingStatus.BOARDED,
+          boardedAt: now,
+          boardingOtpConsumedAt: now,
+          boardingOtpFailedAttempts: 0,
+          boardingOtpLockoutUntil: null,
+        },
+        include: {
+          ride: true,
+          passenger: true,
+        },
+      });
+
+      await this.audit.log(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'PASSENGER_BOARDED',
+          targetType: 'BOOKING',
+          targetId: bookingId,
+          changes: {
+            rideId: lockedBooking.rideId,
+            passengerId: lockedBooking.passengerId,
+            boardedAt: now.toISOString(),
+          },
+        },
+        tx,
+      );
+
+      return {
+        updatedBooking: updated,
+        notificationData: {
+          recipientId: lockedBooking.passengerId,
+          audience: user.audience!,
+          type: NotificationType.BOOKING_APPROVED,
+          title: '✅ Boarding Confirmed',
+          message: `Your driver ${user.fullName} has verified your boarding OTP. Enjoy your ride!`,
+          rideId: lockedBooking.rideId,
+          bookingId: lockedBooking.id,
+          dedupKey: `boarding_verified:${lockedBooking.id}`,
+        },
+      };
+    });
+
+    // Notify passenger post-commit
+    try {
+      await this.notificationsService.createNotification(notificationData);
+    } catch (err) {
+      this.logger.error(`[BookingsService] Failed to notify passenger of verified boarding: ${err}`);
+    }
+
+    // Real-time broadcast to connected sockets
+    try {
+      this.trackingGateway?.broadcastBoarding(
+        updatedBooking.rideId,
+        updatedBooking.id,
+        updatedBooking.passengerId,
+        BoardingStatus.BOARDED,
+        updatedBooking.boardedAt?.toISOString() || null,
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to broadcast boarding verification: ${err}`);
+    }
+
+    return {
+      success: true,
+      bookingId: updatedBooking.id,
+      rideId: updatedBooking.rideId,
+      passengerId: updatedBooking.passengerId,
+      passengerName: updatedBooking.passenger.fullName,
+      boardingStatus: 'BOARDED',
+      boardedAt: updatedBooking.boardedAt!.toISOString(),
+      message: 'Boarding verified successfully.',
+    };
+  }
+
+  /**
+   * Milestone 8: Mark No-Show (Driver only).
+   */
+  async markNoShow(
+    user: User,
+    bookingId: string,
+    reason?: string,
+  ): Promise<MarkNoShowResponseDto> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        ride: true,
+        passenger: true,
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found.');
+    }
+
+    if (booking.driverId !== user.id) {
+      throw new ForbiddenException('Only the driver can mark a passenger as no-show.');
+    }
+
+    if (booking.boardingStatus === BoardingStatus.BOARDED) {
+      throw new BadRequestException('Cannot mark a passenger as no-show after they have already boarded.');
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        boardingStatus: BoardingStatus.MISSED,
+        missedAt: now,
+      },
+      include: {
+        ride: true,
+        passenger: true,
+      },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'PASSENGER_MISSED',
+      targetType: 'BOOKING',
+      targetId: bookingId,
+      changes: {
+        rideId: booking.rideId,
+        passengerId: booking.passengerId,
+        reason: reason || null,
+        missedAt: now.toISOString(),
+      },
+    });
+
+    // Notify passenger post-commit
+    try {
+      await this.notificationsService.createNotification({
+        recipientId: booking.passengerId,
+        audience: user.audience!,
+        type: NotificationType.MISSED_PICKUP,
+        title: '⚠️ Missed Pickup / No-Show',
+        message: `Your driver ${user.fullName} marked your pickup as missed.`,
+        rideId: booking.rideId,
+        bookingId: booking.id,
+        dedupKey: `passenger_missed:${booking.id}`,
+      });
+    } catch (err) {
+      this.logger.error(`[BookingsService] Failed to notify passenger of missed pickup: ${err}`);
+    }
+
+    // Real-time broadcast
+    try {
+      this.trackingGateway?.broadcastBoarding(
+        updated.rideId,
+        updated.id,
+        updated.passengerId,
+        BoardingStatus.MISSED,
+        now.toISOString(),
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to broadcast missed pickup: ${err}`);
+    }
+
+    return {
+      success: true,
+      bookingId: updated.id,
+      rideId: updated.rideId,
+      passengerId: updated.passengerId,
+      passengerName: updated.passenger.fullName,
+      boardingStatus: 'MISSED',
+      missedAt: now.toISOString(),
+      message: 'Passenger marked as no-show.',
+    };
   }
 }

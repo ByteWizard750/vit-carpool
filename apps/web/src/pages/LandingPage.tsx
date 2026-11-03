@@ -45,11 +45,10 @@ export const LandingPage: React.FC = () => {
               <span>Campus Carpool &bull; VIT Chennai</span>
             </div>
             <h1 className="hero-title">
-              Dedicated Campus Carpooling
+              Going the Same Way? Ride Together.
             </h1>
             <p className="hero-lead">
-              VIT Chennai students and faculty heading your way. Split the fuel, skip the solo drive,
-              and commute safely with verified campus peers.
+              Connect with VIT Chennai students and faculty travelling along your route. Share fuel costs, find commute companions and make every journey easier.
             </p>
           </div>
 
@@ -63,19 +62,19 @@ export const LandingPage: React.FC = () => {
           <div className="trust-strip">
             <div className="trust-item">
               <ShieldCheck size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Student &amp; Faculty Separation</span>
+              <span>Separate Student &amp; Faculty Communities</span>
             </div>
             <div className="trust-item">
               <GraduationCap size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Campus Affiliation Verification</span>
+              <span>Institutional Email Authentication</span>
             </div>
             <div className="trust-item">
               <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Registered Personal Vehicles</span>
+              <span>Driver-Approved Bookings</span>
             </div>
             <div className="trust-item">
               <CheckCircle2 size={14} style={{ color: 'var(--color-brand-600)' }} />
-              <span>Fair Fuel Cost Sharing</span>
+              <span>Direct Fuel Cost Sharing</span>
             </div>
           </div>
         </div>

@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Check,
+  X,
   MessageSquare,
   Home,
 } from 'lucide-react';
@@ -112,7 +113,13 @@ export const DashboardPage: React.FC = () => {
       setBookings(Array.isArray(bookingsRes) ? bookingsRes : bookingsRes?.bookings || []);
       setRides(Array.isArray(ridesRes) ? ridesRes : []);
       setVehicles(Array.isArray(vehiclesRes) ? vehiclesRes : []);
-      setUnreadNotifCount(typeof notifsRes?.unreadCount === 'number' ? notifsRes.unreadCount : 0);
+      setUnreadNotifCount(
+        typeof notifsRes?.unreadCount === 'number'
+          ? notifsRes.unreadCount
+          : typeof notifsRes?.count === 'number'
+          ? notifsRes.count
+          : 0,
+      );
       setAlertsCount(Array.isArray(alertsRes) ? alertsRes.length : 0);
       setPendingDriverBookings(Array.isArray(pendingRes) ? pendingRes : []);
     } catch (err) {
@@ -183,6 +190,33 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const handleRejectBooking = async (bookingId: string) => {
+    if (!token) return;
+    setActionLoadingId(bookingId);
+    setActionFeedback(null);
+    try {
+      const res = await fetch(`/bookings/${bookingId}/reject`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ reason: 'Declined by driver from dashboard' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || `Decline failed with status ${res.status}`);
+      }
+      setActionFeedback({ type: 'success', text: 'Booking request declined.' });
+      await fetchDashboardData();
+    } catch (err: any) {
+      setActionFeedback({ type: 'error', text: err?.message || 'Failed to decline booking' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // 1. ACTIVE RIDES (Highest priority)
   const activeDrivingRides = rides.filter((r) => r.status === 'IN_PROGRESS');
   const activePassengerBookings = bookings.filter(
@@ -190,11 +224,25 @@ export const DashboardPage: React.FC = () => {
   );
   const hasActiveRides = activeDrivingRides.length > 0 || activePassengerBookings.length > 0;
 
-  // 2. UPCOMING SCHEDULED
-  const upcomingDrivingRides = rides.filter((r) => r.status === 'SCHEDULED');
-  const upcomingPassengerBookings = bookings.filter(
-    (b) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && b.ride?.status === 'SCHEDULED'
+  // 2. UPCOMING SCHEDULED (Future rides only)
+  const nowMs = Date.now();
+  const upcomingDrivingRides = rides.filter(
+    (r) => r.status === 'SCHEDULED' && new Date(r.departureTime).getTime() > nowMs
   );
+  const upcomingPassengerBookings = bookings.filter(
+    (b) =>
+      (b.status === 'CONFIRMED' || b.status === 'PENDING') &&
+      b.ride?.status === 'SCHEDULED' &&
+      new Date(b.ride.departureTime).getTime() > nowMs
+  );
+
+  // 3. PENDING DRIVER REQUESTS (Actionable items)
+  // Only surface requests for rides that are scheduled or active and haven't departed
+  const actionablePendingBookings = pendingDriverBookings.filter((b) => {
+    const isRideActiveOrScheduled = b.ride.status === 'SCHEDULED' || b.ride.status === 'IN_PROGRESS';
+    const hasNotDeparted = new Date(b.ride.departureTime).getTime() > nowMs;
+    return isRideActiveOrScheduled && hasNotDeparted;
+  });
 
   return (
     <PageShell width="wide">
@@ -375,7 +423,7 @@ export const DashboardPage: React.FC = () => {
           <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Bookings</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>
-              {bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'PENDING').length}
+              {bookings.filter((b) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && b.ride?.status !== 'CANCELLED' && b.ride?.status !== 'COMPLETED').length}
             </div>
           </div>
           <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
@@ -423,6 +471,86 @@ export const DashboardPage: React.FC = () => {
               {user?.audience || 'COMMUNITY'}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Prominent Offer a Ride Quick Action Banner */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          padding: '16px 20px',
+          backgroundColor: '#f0fdf4',
+          borderRadius: '14px',
+          border: '1.5px solid #bbf7d0',
+          marginBottom: '24px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+        }}
+        id="dashboard-offer-ride-callout"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '260px', flex: 1 }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              backgroundColor: '#dcfce7',
+              color: '#15803d',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <PlusCircle size={24} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: '#14532d', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              Driving to Campus or Heading Home?
+              <span
+                style={{
+                  fontSize: '0.675rem',
+                  fontWeight: 700,
+                  backgroundColor: '#bbf7d0',
+                  color: '#166534',
+                  padding: '2px 7px',
+                  borderRadius: '12px',
+                }}
+              >
+                HOST A RIDE
+              </span>
+            </div>
+            <div style={{ fontSize: '0.825rem', color: '#166534', marginTop: '2px', lineHeight: '1.4' }}>
+              Publish your commute schedule in 30 seconds, share fuel expenses with verified campus peers, and cut campus traffic.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
+          <Link to="/offer-ride" style={{ textDecoration: 'none' }}>
+            <Button
+              variant="primary"
+              size="md"
+              leftIcon={<PlusCircle size={16} />}
+              style={{
+                backgroundColor: '#16a34a',
+                borderColor: '#15803d',
+                fontWeight: 700,
+                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)',
+              }}
+              id="btn-prominent-offer-ride"
+            >
+              Offer a Ride Now
+            </Button>
+          </Link>
+          <Link to="/vehicles" style={{ textDecoration: 'none' }}>
+            <Button variant="outline" size="md" leftIcon={<Car size={15} />} id="btn-dashboard-vehicles">
+              My Vehicles ({vehicles.length})
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -739,9 +867,9 @@ export const DashboardPage: React.FC = () => {
 
       {/* ─────────────────────────────────────────────────────────────────────────────
           2. ACTION ITEMS & ATTENTION NEEDED SECTION
-          Surfaces driver booking requests to approve and immediate items.
+          Surfaces driver booking requests to approve/decline and immediate items.
          ───────────────────────────────────────────────────────────────────────────── */}
-      {pendingDriverBookings.length > 0 && (
+      {actionablePendingBookings.length > 0 && (
         <section
           data-testid="action-items-section"
           style={{
@@ -760,7 +888,7 @@ export const DashboardPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertCircle size={20} style={{ color: '#d97706' }} />
               <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: '#92400e' }}>
-                Action Items ({pendingDriverBookings.length} Pending Approval)
+                Action Items ({actionablePendingBookings.length} Pending Approval)
               </h2>
             </div>
             <Link to="/my-rides" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309' }}>
@@ -769,7 +897,7 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {pendingDriverBookings.slice(0, 3).map((item) => (
+            {actionablePendingBookings.slice(0, 3).map((item) => (
               <div
                 key={item.id}
                 style={{
@@ -797,7 +925,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <Button
                     variant="primary"
                     size="sm"
@@ -805,8 +933,20 @@ export const DashboardPage: React.FC = () => {
                     onClick={() => handleApproveBooking(item.id)}
                     disabled={actionLoadingId === item.id}
                     style={{ backgroundColor: '#16a34a', borderColor: '#16a34a', minHeight: '38px' }}
+                    id={`btn-approve-${item.id}`}
                   >
                     {actionLoadingId === item.id ? 'Approving...' : 'Approve'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<X size={14} />}
+                    onClick={() => handleRejectBooking(item.id)}
+                    disabled={actionLoadingId === item.id}
+                    style={{ color: '#dc2626', borderColor: '#fca5a5', minHeight: '38px' }}
+                    id={`btn-decline-${item.id}`}
+                  >
+                    {actionLoadingId === item.id ? 'Declining...' : 'Decline'}
                   </Button>
                   <Link to="/my-rides">
                     <Button variant="outline" size="sm" style={{ minHeight: '38px' }}>
@@ -1021,10 +1161,19 @@ export const DashboardPage: React.FC = () => {
                       variant="compact"
                     />
 
-                    <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Pickup: {b.pickupAddress || b.ride.origin}
-                      </span>
+                    <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: 0 }}>
+                        {b.ride.vehicle?.imageUrl && (
+                          <img
+                            src={b.ride.vehicle.imageUrl}
+                            alt="Vehicle"
+                            style={{ width: '22px', height: '18px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light, #e2e8f0)' }}
+                          />
+                        )}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Pickup: {b.pickupAddress || b.ride.origin}
+                        </span>
+                      </div>
                       {b.status === 'CONFIRMED' && (
                         <Link to={`/rides/${b.rideId}/track`} style={{ textDecoration: 'none' }}>
                           <Button variant="outline" size="sm" leftIcon={<Radio size={12} />}>

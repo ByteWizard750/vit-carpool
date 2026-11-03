@@ -1,89 +1,65 @@
 import React from 'react';
-import { Shield, Car, CheckCircle2, DollarSign, Users, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, DollarSign, Users } from 'lucide-react';
 
 export const TrustCharterSection: React.FC = () => {
   return (
     <section className="section-padding charter-section" id="charter">
       <div className="container">
         <div className="section-header">
-          <span className="section-tag">Safety Standards & Operating Principles</span>
+          <span className="section-tag">Safety Standards &amp; Principles</span>
           <h2 className="section-title">The VIT Carpool Trust Charter</h2>
           <p className="section-subtitle">
-            Core principles guiding our community design: verified institutional affiliation, driver discretion,
-            and transparent non-commercial carpooling.
+            Core trust invariants guiding the platform: verified institutional affiliation, community separation,
+            driver discretion, and transparent fuel-cost sharing.
           </p>
         </div>
 
-        <div className="charter-grid">
-          {/* Item 1: Cars Only */}
+        <div className="charter-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+          {/* Fact 1: VIT institutional email authentication */}
           <div className="charter-card">
             <div className="charter-icon-box">
-              <Car size={22} />
+              <ShieldCheck size={22} />
             </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Cars Only Standard</h3>
+            <h3 style={{ fontSize: '1.15rem' }}>Institutional Email Authentication</h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Two-wheelers, auto-rickshaws, and commercial vehicles are not permitted. Every published ride
-              must be in a privately owned four-wheeler adhering to standard highway safety requirements.
+              Access requires an active <code>@vitstudent.ac.in</code> or <code>@vit.ac.in</code> email address
+              with automated OTP confirmation. Public consumer email accounts cannot access carpool features.
             </p>
           </div>
 
-          {/* Item 2: Institutional Verification */}
-          <div className="charter-card">
-            <div className="charter-icon-box">
-              <Shield size={22} />
-            </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Institutional Verification (Planned)</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Access will require confirmed institutional credentials. Public consumer email accounts (Gmail,
-              Outlook, Yahoo) will be ineligible from browsing or publishing rides.
-            </p>
-          </div>
-
-          {/* Item 3: Driver Discretion */}
-          <div className="charter-card">
-            <div className="charter-icon-box">
-              <Users size={22} />
-            </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Driver Seat Approval</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              No automatic bookings. Car owners will maintain complete discretion to accept or decline any
-              seat request after reviewing the passenger’s campus profile and proposed pickup point.
-            </p>
-          </div>
-
-          {/* Item 4: Direct Non-Commercial Fuel Share */}
-          <div className="charter-card">
-            <div className="charter-icon-box">
-              <DollarSign size={22} />
-            </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Non-Commercial Cost Sharing</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              VIT Carpool is not a commercial taxi service. Passengers contribute transparently toward direct
-              fuel and toll expenses via UPI or cash, with zero platform commissions.
-            </p>
-          </div>
-
-          {/* Item 5: Strict Audience Separation */}
+          {/* Fact 2: Separate student and faculty communities */}
           <div className="charter-card">
             <div className="charter-icon-box">
               <CheckCircle2 size={22} />
             </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Strict Circle Segregation (Design)</h3>
+            <h3 style={{ fontSize: '1.15rem' }}>Separate Student &amp; Faculty Communities</h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Enforced at the backend and database layer. Students cannot see or join faculty rides, and faculty
-              cannot view student rides, ensuring appropriate campus boundaries.
+              Enforced strictly at the API and database layer. Students and faculty discover, request, and share
+              rides exclusively within their respective campus communities.
             </p>
           </div>
 
-          {/* Item 6: Community Standards */}
+          {/* Fact 3: Driver-approved bookings */}
           <div className="charter-card">
             <div className="charter-icon-box">
-              <AlertTriangle size={22} />
+              <Users size={22} />
             </div>
-            <h3 style={{ fontSize: '1.15rem' }}>Community Standards</h3>
+            <h3 style={{ fontSize: '1.15rem' }}>Driver-Approved Bookings</h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Safe driving, punctuality, and mutual respect are essential. Unsafe driving, no-shows, harassment,
-              or commercial fare solicitation will result in permanent account suspension.
+              No automatic bookings. Car owners maintain complete discretion to accept or decline seat requests
+              after reviewing the passenger's verified campus profile and pickup stop.
+            </p>
+          </div>
+
+          {/* Fact 4: Direct fuel-cost sharing */}
+          <div className="charter-card">
+            <div className="charter-icon-box">
+              <DollarSign size={22} />
+            </div>
+            <h3 style={{ fontSize: '1.15rem' }}>Direct Fuel-Cost Sharing</h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+              A strictly non-commercial peer commute model. Passengers contribute fairly toward actual fuel
+              expenses directly to the driver with zero platform commissions.
             </p>
           </div>
         </div>

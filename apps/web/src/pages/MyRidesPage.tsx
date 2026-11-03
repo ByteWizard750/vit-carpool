@@ -1000,12 +1000,39 @@ export const MyRidesPage: React.FC = () => {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.925rem', color: 'var(--text-primary)' }}>
-                            {req.passengerName}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            Requested {req.requestedSeats} seat{req.requestedSeats > 1 ? 's' : ''} &bull; {new Date(req.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {req.passengerAvatarUrl ? (
+                            <img
+                              src={req.passengerAvatarUrl}
+                              alt={req.passengerName}
+                              style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-light)', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--color-brand-100)',
+                                color: 'var(--color-brand-700)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {req.passengerName.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.925rem', color: 'var(--text-primary)' }}>
+                              {req.passengerName}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              Requested {req.requestedSeats} seat{req.requestedSeats > 1 ? 's' : ''} &bull; {new Date(req.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </div>
                           </div>
                         </div>
 

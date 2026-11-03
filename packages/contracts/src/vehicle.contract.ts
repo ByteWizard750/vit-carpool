@@ -36,6 +36,7 @@ export const CreateVehicleSchema = z
       .int('Seat capacity must be an integer')
       .min(2, 'Total vehicle seating capacity must be at least 2 seats (1 driver + at least 1 passenger)')
       .max(7, 'Total vehicle seating capacity cannot exceed 7 seats (cars only)'),
+    imageUrl: z.string().trim().max(1000).optional().nullable(),
   })
   .strict();
 
@@ -80,6 +81,7 @@ export const UpdateVehicleSchema = z
       .min(2, 'Total vehicle seating capacity must be at least 2 seats (1 driver + at least 1 passenger)')
       .max(7, 'Total vehicle seating capacity cannot exceed 7 seats (cars only)')
       .optional(),
+    imageUrl: z.string().trim().max(1000).optional().nullable(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {
@@ -96,6 +98,7 @@ export const VehicleResponseSchema = z.object({
   color: z.string(),
   registrationNumber: z.string(),
   capacity: z.number().int(),
+  imageUrl: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -109,6 +112,7 @@ export const PublicVehicleSummarySchema = z.object({
   model: z.string(),
   color: z.string(),
   capacity: z.number().int(),
+  imageUrl: z.string().nullable().optional(),
 });
 
 export type PublicVehicleSummaryDto = z.infer<typeof PublicVehicleSummarySchema>;

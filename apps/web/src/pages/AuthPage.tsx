@@ -40,13 +40,29 @@ export const AuthPage: React.FC = () => {
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
 
+  const getDestinationUrl = () => {
+    const searchParams = new URLSearchParams(location.search);
+    const redirectQuery = searchParams.get('redirect');
+    if (redirectQuery && redirectQuery.startsWith('/')) {
+      return redirectQuery;
+    }
+    const fromState = (location.state as any)?.from;
+    if (fromState) {
+      if (typeof fromState === 'string') return fromState;
+      if (fromState.pathname) {
+        return `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`;
+      }
+    }
+    return '/dashboard';
+  };
+
   // If already authenticated, redirect to dashboard or intended route
   useEffect(() => {
     if (user) {
-      const destination = (location.state as any)?.from?.pathname || '/dashboard';
+      const destination = getDestinationUrl();
       navigate(destination, { replace: true });
     }
-  }, [user, navigate, location.state]);
+  }, [user, navigate, location.state, location.search]);
 
   // Handle session expiration notification
   useEffect(() => {
@@ -170,7 +186,7 @@ export const AuthPage: React.FC = () => {
       }
 
       login(data.token, data.user);
-      const destination = (location.state as any)?.from?.pathname || '/dashboard';
+      const destination = getDestinationUrl();
       navigate(destination, { replace: true });
     } catch {
       setError('Verification network request failed. Please check your connection.');

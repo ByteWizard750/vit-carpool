@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Star,
   Radio,
+  Car,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -449,6 +450,24 @@ export const BookingsPage: React.FC = () => {
                       <span>Departure: {formatDeparture(b.ride.departureTime)}</span>
                     </div>
 
+                    {/* Safe Vehicle Details */}
+                    {b.ride.vehicle && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                        {b.ride.vehicle.imageUrl ? (
+                          <img
+                            src={b.ride.vehicle.imageUrl}
+                            alt="Vehicle"
+                            style={{ width: '28px', height: '22px', borderRadius: '4px', objectFit: 'cover', border: '1px solid var(--border-light)' }}
+                          />
+                        ) : (
+                          <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
+                        )}
+                        <span>
+                          Vehicle: <strong>{b.ride.vehicle.color} {b.ride.vehicle.make} {b.ride.vehicle.model}</strong>
+                        </span>
+                      </div>
+                    )}
+
                     {/* Confirmed Details: Driver contact and pickup notes */}
                     {isConfirmed && (
                       <div
@@ -464,8 +483,17 @@ export const BookingsPage: React.FC = () => {
                           gap: '6px',
                         }}
                       >
-                        <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle2 size={15} /> Confirmed Driver Contact: {b.ride.driverName}
+                        <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {b.ride.driverAvatarUrl ? (
+                            <img
+                              src={b.ride.driverAvatarUrl}
+                              alt={b.ride.driverName}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #86efac', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <CheckCircle2 size={15} />
+                          )}
+                          <span>Confirmed Driver Contact: {b.ride.driverName}</span>
                         </div>
                         {b.ride.pickupDescription && (
                           <div>
@@ -477,8 +505,19 @@ export const BookingsPage: React.FC = () => {
 
                     {/* Pending state notice */}
                     {isPending && (
-                      <div style={{ fontSize: '0.8rem', color: '#92400e', backgroundColor: '#fffbeb', padding: '8px 12px', borderRadius: '6px' }}>
-                        Waiting for driver {b.ride.driverName} to confirm your seat request.
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: new Date(b.ride.departureTime).getTime() <= Date.now() ? '#b91c1c' : '#92400e',
+                          backgroundColor: new Date(b.ride.departureTime).getTime() <= Date.now() ? '#fef2f2' : '#fffbeb',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: new Date(b.ride.departureTime).getTime() <= Date.now() ? '1px solid #fecaca' : undefined,
+                        }}
+                      >
+                        {new Date(b.ride.departureTime).getTime() <= Date.now()
+                          ? 'This ride has departed without driver confirmation. The request has lapsed.'
+                          : `Waiting for driver ${b.ride.driverName} to confirm your seat request.`}
                       </div>
                     )}
 
@@ -652,6 +691,31 @@ export const BookingsPage: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          {req.passengerAvatarUrl ? (
+                            <img
+                              src={req.passengerAvatarUrl}
+                              alt={req.passengerName}
+                              style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-light)', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--color-brand-100)',
+                                color: 'var(--color-brand-700)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {req.passengerName.charAt(0)}
+                            </div>
+                          )}
                           <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
                             {req.passengerName}
                           </span>

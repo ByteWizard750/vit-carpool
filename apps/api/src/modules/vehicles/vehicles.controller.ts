@@ -7,9 +7,12 @@ import {
   Param,
   Body,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { VehiclesService } from './vehicles.service';
 import { VerifiedUserGuard } from '../auth/guards/verified-user.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -88,5 +91,31 @@ export class VehiclesController {
     @Param('id') id: string,
   ): Promise<{ success: boolean; message: string }> {
     return this.vehiclesService.deleteMyVehicle(user, id);
+  }
+
+  @Post(':id/image')
+  @ApiOperation({ summary: 'Upload vehicle photo (JPEG, PNG, WebP up to 5MB)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVehicleImage(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<{ imageUrl: string | null; vehicle: VehicleResponseDto }> {
+    if (!file) {
+      throw new BadRequestException('No image file uploaded');
+    }
+    const updated = await this.vehiclesService.updateVehicleImage(user, id, file);
+    return { imageUrl: updated.imageUrl ?? null, vehicle: updated };
+  }
+
+  @Delete(':id/image')
+  @ApiOperation({ summary: 'Remove vehicle photo' })
+  async deleteVehicleImage(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<{ success: boolean; vehicle: VehicleResponseDto }> {
+    const updated = await this.vehiclesService.deleteVehicleImage(user, id);
+    return { success: true, vehicle: updated };
   }
 }

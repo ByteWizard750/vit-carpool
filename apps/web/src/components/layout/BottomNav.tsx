@@ -26,7 +26,8 @@ export const BottomNav: React.FC = () => {
       })
         .then((r) => r.json())
         .then((d) => {
-          if (typeof d?.unreadCount === 'number') setNotifUnread(d.unreadCount);
+          const count = typeof d?.unreadCount === 'number' ? d.unreadCount : typeof d?.count === 'number' ? d.count : 0;
+          setNotifUnread(count);
         })
         .catch(() => {});
     };

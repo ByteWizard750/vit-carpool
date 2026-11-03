@@ -44,6 +44,7 @@ export const PassengerTrackingInfoSchema = z.object({
   bookingId: z.string().uuid(),
   passengerId: z.string().uuid(),
   passengerName: z.string(),
+  passengerAvatarUrl: z.string().nullable().optional(),
   pickupAddress: z.string().nullable().optional(),
   pickupLatitude: z.number().nullable().optional(),
   pickupLongitude: z.number().nullable().optional(),
@@ -87,12 +88,14 @@ export const TrackingSessionStateSchema = z.object({
   lastUpdateAt: z.string().nullable().optional(),
   driverId: z.string().uuid(),
   driverName: z.string(),
+  driverAvatarUrl: z.string().nullable().optional(),
   vehicle: z
     .object({
       make: z.string(),
       model: z.string(),
       color: z.string(),
       registrationNumber: z.string().optional(), // Driver or confirmed passenger only
+      imageUrl: z.string().nullable().optional(),
     })
     .optional(),
   origin: z.string(),

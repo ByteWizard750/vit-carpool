@@ -7,6 +7,8 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BookingsService } from './bookings.service';
@@ -19,6 +21,11 @@ import {
   RejectBookingSchema,
   PassengerBookingResponseDto,
   DriverBookingResponseDto,
+  BoardingOtpResponseDto,
+  VerifyBoardingOtpSchema,
+  VerifyBoardingResponseDto,
+  MarkNoShowSchema,
+  MarkNoShowResponseDto,
 } from '@vit-carpool/contracts';
 
 @ApiTags('bookings')
@@ -103,5 +110,51 @@ export class BookingsController {
     const parsed = CancelBookingSchema.safeParse(body || {});
     const dto = parsed.success ? parsed.data : undefined;
     return this.bookingsService.cancelBooking(user, id, dto);
+  }
+
+  @Get(':id/boarding-otp')
+  @ApiOperation({ summary: 'Retrieve unique boarding OTP (Passenger only)' })
+  async getBoardingOtp(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<BoardingOtpResponseDto> {
+    return this.bookingsService.getPassengerBoardingOtp(user, id);
+  }
+
+  @Post(':id/boarding-otp/regenerate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Regenerate boarding OTP with 60s cooldown (Passenger only)' })
+  async regenerateBoardingOtp(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<BoardingOtpResponseDto> {
+    return this.bookingsService.regeneratePassengerBoardingOtp(user, id);
+  }
+
+  @Post(':id/verify-boarding')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify passenger boarding OTP and mark BOARDED (Driver only)' })
+  async verifyBoarding(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<VerifyBoardingResponseDto> {
+    const parsed = VerifyBoardingOtpSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.errors.map((e: { message: string }) => e.message).join('; '));
+    }
+    return this.bookingsService.verifyBoardingOtp(user, id, parsed.data.otp);
+  }
+
+  @Post(':id/mark-no-show')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark passenger as no-show / missed pickup (Driver only)' })
+  async markNoShow(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<MarkNoShowResponseDto> {
+    const parsed = MarkNoShowSchema.safeParse(body || {});
+    return this.bookingsService.markNoShow(user, id, parsed.success ? parsed.data.reason : undefined);
   }
 }

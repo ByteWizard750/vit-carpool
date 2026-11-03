@@ -25,7 +25,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
     // Check hero heading
     const heroHeading = page.locator('h1.hero-title');
     await expect(heroHeading).toBeVisible();
-    await expect(heroHeading).toContainText(/Dedicated Campus Carpooling/i);
+    await expect(heroHeading).toContainText(/Going the Same Way\? Ride Together\./i);
 
     // Verify search widget container is present
     await expect(page.locator('.search-widget-container, #search').first()).toBeVisible();

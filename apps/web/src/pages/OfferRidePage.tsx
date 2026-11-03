@@ -110,6 +110,68 @@ export const OfferRidePage: React.FC = () => {
   // Effective max allowed seats for the custom/edit form
   const effectiveMaxSeats = editRideId ? maxAvailableForEdit : maxPassengerSeats;
 
+  // Non-binding fuel contribution guidance calculation based on road distance
+  const routeGuidance = useMemo(() => {
+    if (
+      originLocation?.latitude != null &&
+      originLocation?.longitude != null &&
+      destLocation?.latitude != null &&
+      destLocation?.longitude != null
+    ) {
+      const R = 6371; // Earth radius in km
+      const dLat = ((destLocation.latitude - originLocation.latitude) * Math.PI) / 180;
+      const dLon = ((destLocation.longitude - originLocation.longitude) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((originLocation.latitude * Math.PI) / 180) *
+          Math.cos((destLocation.latitude * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const straightKm = R * c;
+      const roadKm = Math.round(straightKm * 1.3); // Typical road winding factor in Chennai corridors
+      if (roadKm > 0) {
+        // Suggested fair passenger share range: ₹2.5 to ₹4.5 per km rounded to nearest 5
+        const minCost = Math.max(20, Math.round((roadKm * 2.5) / 5) * 5);
+        const maxCost = Math.max(35, Math.round((roadKm * 4.5) / 5) * 5);
+        return {
+          available: true,
+          roadKm,
+          minCost,
+          maxCost,
+        };
+      }
+    }
+    return { available: false, roadKm: 0, minCost: 0, maxCost: 0 };
+  }, [originLocation, destLocation]);
+
+  const quickRouteGuidance = useMemo(() => {
+    if (
+      selectedTemplate?.originLatitude != null &&
+      selectedTemplate?.originLongitude != null &&
+      selectedTemplate?.destinationLatitude != null &&
+      selectedTemplate?.destinationLongitude != null
+    ) {
+      const R = 6371;
+      const dLat = ((selectedTemplate.destinationLatitude - selectedTemplate.originLatitude) * Math.PI) / 180;
+      const dLon = ((selectedTemplate.destinationLongitude - selectedTemplate.originLongitude) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((selectedTemplate.originLatitude * Math.PI) / 180) *
+          Math.cos((selectedTemplate.destinationLatitude * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const roadKm = Math.round(R * c * 1.3);
+      if (roadKm > 0) {
+        const minCost = Math.max(20, Math.round((roadKm * 2.5) / 5) * 5);
+        const maxCost = Math.max(35, Math.round((roadKm * 4.5) / 5) * 5);
+        return { available: true, roadKm, minCost, maxCost };
+      }
+    }
+    return { available: false, roadKm: 0, minCost: 0, maxCost: 0 };
+  }, [selectedTemplate]);
+
   // React immediately to vehicle selection change or vehicle capacity change: clamp availableSeats
   useEffect(() => {
     if (availableSeats > effectiveMaxSeats) {
@@ -346,8 +408,8 @@ export const OfferRidePage: React.FC = () => {
     }
 
     const costNum = quickCost.trim() === '' ? 0 : Number(quickCost);
-    if (isNaN(costNum) || costNum < 0 || costNum > 250) {
-      setError('Cost contribution must be between ₹0 and ₹250 per seat.');
+    if (isNaN(costNum) || costNum < 0) {
+      setError('Cost contribution cannot be negative.');
       return;
     }
 
@@ -452,8 +514,8 @@ export const OfferRidePage: React.FC = () => {
     }
 
     const costNum = costPerSeat.trim() === '' ? 0 : Number(costPerSeat);
-    if (isNaN(costNum) || costNum < 0 || costNum > 250) {
-      setError('Cost contribution must be between ₹0 and ₹250 per seat (Cars-only non-commercial cap).');
+    if (isNaN(costNum) || costNum < 0) {
+      setError('Cost contribution cannot be negative.');
       return;
     }
 
@@ -1134,7 +1196,6 @@ export const OfferRidePage: React.FC = () => {
                       <input
                         type="number"
                         min={0}
-                        max={250}
                         value={quickCost}
                         onChange={(e) => setQuickCost(e.target.value)}
                         placeholder="50"
@@ -1149,6 +1210,24 @@ export const OfferRidePage: React.FC = () => {
                         }}
                         id="quick-cost-input"
                       />
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                        Fair fuel contribution (Driver sets final amount)
+                      </span>
+                      {quickRouteGuidance.available && (
+                        <div
+                          style={{
+                            marginTop: '6px',
+                            padding: '6px 8px',
+                            backgroundColor: '#f0fdf4',
+                            border: '1px solid #bbf7d0',
+                            borderRadius: '6px',
+                            fontSize: '0.7rem',
+                            color: '#166534',
+                          }}
+                        >
+                          <strong>Guidance:</strong> ~₹{quickRouteGuidance.minCost} – ₹{quickRouteGuidance.maxCost} (~{quickRouteGuidance.roadKm} km road route). Driver sets final rate.
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1375,7 +1454,6 @@ export const OfferRidePage: React.FC = () => {
               <input
                 type="number"
                 min={0}
-                max={250}
                 value={costPerSeat}
                 onChange={(e) => setCostPerSeat(e.target.value)}
                 placeholder="e.g. 50"
@@ -1391,8 +1469,41 @@ export const OfferRidePage: React.FC = () => {
                 id="offer-cost-input"
               />
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                Non-commercial cap: max ₹250
+                Fair fuel contribution (Driver sets final amount)
               </span>
+              {routeGuidance.available ? (
+                <div
+                  style={{
+                    marginTop: '6px',
+                    padding: '8px 10px',
+                    backgroundColor: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '6px',
+                    fontSize: '0.725rem',
+                    color: '#166534',
+                    lineHeight: '1.4',
+                  }}
+                  id="offer-cost-guidance-box"
+                >
+                  <strong>Suggested guidance:</strong> ~₹{routeGuidance.minCost} – ₹{routeGuidance.maxCost} based on ~{routeGuidance.roadKm} km estimated road distance. This is non-binding guidance to help split actual fuel expenses; you set the final contribution (not an official VIT rate).
+                </div>
+              ) : (
+                <div
+                  style={{
+                    marginTop: '6px',
+                    padding: '8px 10px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    fontSize: '0.725rem',
+                    color: '#64748b',
+                    lineHeight: '1.4',
+                  }}
+                  id="offer-cost-unavailable-box"
+                >
+                  Suggested estimate is unavailable without selected map coordinates. Please enter your fair fuel contribution.
+                </div>
+              )}
             </div>
           </div>
 

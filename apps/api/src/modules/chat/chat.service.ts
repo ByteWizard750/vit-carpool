@@ -70,8 +70,8 @@ export class ChatService {
         OR: [{ passengerId: user.id }, { driverId: user.id }],
       },
       include: {
-        passenger: { select: { id: true, fullName: true, audience: true } },
-        driver: { select: { id: true, fullName: true, audience: true } },
+        passenger: { select: { id: true, fullName: true, audience: true, avatarUrl: true } },
+        driver: { select: { id: true, fullName: true, audience: true, avatarUrl: true } },
         ride: {
           select: {
             id: true,
@@ -137,6 +137,7 @@ export class ChatService {
         otherParticipant: {
           id: otherUser.id,
           fullName: otherUser.fullName,
+          avatarUrl: otherUser.avatarUrl ?? null,
           audience: otherUser.audience,
           role: otherRole,
         },
@@ -242,8 +243,8 @@ export class ChatService {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
-        passenger: { select: { id: true, fullName: true, audience: true } },
-        driver: { select: { id: true, fullName: true, audience: true } },
+        passenger: { select: { id: true, fullName: true, audience: true, avatarUrl: true } },
+        driver: { select: { id: true, fullName: true, audience: true, avatarUrl: true } },
         ride: {
           select: {
             id: true,
@@ -272,19 +273,7 @@ export class ChatService {
       throw new ForbiddenException('You do not have access to this conversation.');
     }
 
-    // Mark any unread incoming messages as read
-    await this.prisma.message.updateMany({
-      where: {
-        conversationId,
-        senderId: { not: user.id },
-        readAt: null,
-      },
-      data: {
-        readAt: new Date(),
-      },
-    });
-
-    // Fetch messages in chronological order
+    // Fetch messages in chronological order first
     const rawMessages = await this.prisma.message.findMany({
       where: { conversationId },
       include: {
@@ -292,6 +281,29 @@ export class ChatService {
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    // Only issue a write lock to update readAt when there are actual unread incoming messages.
+    // This avoids redundant DB write updates on every client polling request.
+    const hasUnreadIncoming = rawMessages.some((m) => m.senderId !== user.id && m.readAt === null);
+    if (hasUnreadIncoming) {
+      const markTime = new Date();
+      await this.prisma.message.updateMany({
+        where: {
+          conversationId,
+          senderId: { not: user.id },
+          readAt: null,
+        },
+        data: {
+          readAt: markTime,
+        },
+      });
+
+      for (const m of rawMessages) {
+        if (m.senderId !== user.id && m.readAt === null) {
+          m.readAt = markTime;
+        }
+      }
+    }
 
     const isUserPassenger = conversation.passengerId === user.id;
     const otherUser = isUserPassenger ? conversation.driver : conversation.passenger;
@@ -334,6 +346,7 @@ export class ChatService {
       otherParticipant: {
         id: otherUser.id,
         fullName: otherUser.fullName,
+        avatarUrl: otherUser.avatarUrl ?? null,
         audience: otherUser.audience,
         role: otherRole,
       },

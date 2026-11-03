@@ -169,6 +169,8 @@ export type UpdateRideDto = z.infer<typeof UpdateRideSchema>;
 export const DriverRideResponseSchema = z.object({
   id: z.string().uuid(),
   driverId: z.string().uuid(),
+  driverName: z.string().optional(),
+  driverAvatarUrl: z.string().nullable().optional(),
   vehicleId: z.string().uuid(),
   audience: AudienceTypeSchema,
   origin: z.string(),
@@ -213,6 +215,7 @@ export const PublicRideSummarySchema = z.object({
   id: z.string().uuid(),
   driverId: z.string().uuid(),
   driverName: z.string(),
+  driverAvatarUrl: z.string().nullable().optional(),
   audience: AudienceTypeSchema,
   origin: z.string(),
   originAddress: z.string().nullable().optional(),

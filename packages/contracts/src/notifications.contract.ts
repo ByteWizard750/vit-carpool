@@ -44,6 +44,7 @@ export const NotificationsListResponseSchema = z.object({
     limit: z.number(),
     totalPages: z.number(),
   }),
+  unreadCount: z.number().optional(),
 });
 
 export type NotificationsListResponseDto = z.infer<typeof NotificationsListResponseSchema>;

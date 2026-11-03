@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -12,6 +12,9 @@ import {
   UserX,
   Loader2,
   Home,
+  Camera,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { PageShell } from '../components/layout/PageShell';
@@ -28,6 +31,76 @@ export const ProfilePage: React.FC = () => {
   const [blockedUsers, setBlockedUsers] = useState<BlockResponseDto[]>([]);
   const [loadingBlocks, setLoadingBlocks] = useState(false);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAvatarError('Only JPEG, PNG, or WebP images are allowed.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Image file size must be less than 5MB.');
+      return;
+    }
+
+    setAvatarUploading(true);
+    setAvatarError(null);
+    setAvatarSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/users/me/avatar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (res.ok) {
+        setAvatarSuccess('Profile photo updated successfully!');
+        await refreshProfile();
+        setTimeout(() => setAvatarSuccess(null), 3000);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setAvatarError(body.message || 'Failed to upload profile photo.');
+      }
+    } catch {
+      setAvatarError('Network error uploading profile photo.');
+    } finally {
+      setAvatarUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!token) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const res = await fetch('/users/me/avatar', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setAvatarSuccess('Profile photo removed.');
+        await refreshProfile();
+        setTimeout(() => setAvatarSuccess(null), 3000);
+      }
+    } catch {
+      setAvatarError('Network error removing photo.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const fetchBlockedUsers = React.useCallback(async () => {
     if (!token) return;
@@ -131,49 +204,169 @@ export const ProfilePage: React.FC = () => {
             borderBottom: '1px solid var(--border-light)',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
             gap: '16px',
           }}
         >
-          <div
-            style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '50%',
-              backgroundColor: isFaculty ? '#f3e8ff' : '#dbeafe',
-              color: isFaculty ? '#6b21a8' : '#1d4ed8',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '1.4rem',
-            }}
-          >
-            {user?.fullName?.charAt(0) || 'U'}
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                {user?.fullName}
-              </h2>
-              <span
+          <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+            {/* Avatar with Camera badge */}
+            <div style={{ position: 'relative' }}>
+              <div
+                id="profile-avatar-display"
                 style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  backgroundColor: isFaculty ? '#f3e8ff' : '#dcfce7',
-                  color: isFaculty ? '#6b21a8' : '#15803d',
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  backgroundColor: isFaculty ? '#f3e8ff' : '#dbeafe',
+                  color: isFaculty ? '#6b21a8' : '#1d4ed8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  fontSize: '1.5rem',
+                  overflow: 'hidden',
+                  border: '3px solid #ffffff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
                 }}
               >
-                {isFaculty ? 'Faculty Member' : 'Student Member'}
-              </span>
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  user?.fullName?.charAt(0) || 'U'
+                )}
+              </div>
+              <button
+                type="button"
+                id="btn-upload-avatar-badge"
+                title="Upload Profile Picture"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  backgroundColor: '#2563eb',
+                  color: 'white',
+                  border: '2px solid white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                }}
+              >
+                {avatarUploading ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Camera size={13} />
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                id="input-avatar-file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleAvatarChange}
+              />
             </div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              {user?.email}
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  {user?.fullName}
+                </h2>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    backgroundColor: isFaculty ? '#f3e8ff' : '#dcfce7',
+                    color: isFaculty ? '#6b21a8' : '#15803d',
+                  }}
+                >
+                  {isFaculty ? 'Faculty Member' : 'Student Member'}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {user?.email}
+              </div>
             </div>
           </div>
+
+          {/* Avatar Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              id="btn-change-avatar"
+              leftIcon={<Upload size={14} />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarUploading}
+            >
+              {user?.avatarUrl ? 'Change Photo' : 'Upload Photo'}
+            </Button>
+            {user?.avatarUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                id="btn-remove-avatar"
+                leftIcon={<Trash2 size={14} style={{ color: '#ef4444' }} />}
+                onClick={handleRemoveAvatar}
+                disabled={avatarUploading}
+              >
+                <span style={{ color: '#ef4444' }}>Remove</span>
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Avatar Status Banners */}
+        {avatarSuccess && (
+          <div
+            id="avatar-success-banner"
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#ecfdf5',
+              borderBottom: '1px solid #a7f3d0',
+              color: '#065f46',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>{avatarSuccess}</span>
+          </div>
+        )}
+        {avatarError && (
+          <div
+            id="avatar-error-banner"
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#fef2f2',
+              borderBottom: '1px solid #fecaca',
+              color: '#991b1b',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <AlertTriangle size={16} />
+            <span>{avatarError}</span>
+          </div>
+        )}
 
         {/* Profile Fields List */}
         <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>

@@ -8,7 +8,7 @@ export const SeparationBanner: React.FC = () => {
       <div className="container">
         <div className="section-header">
           <span className="section-tag">Campus Safety</span>
-          <h2 className="section-title">Independent Student and Faculty Circles</h2>
+          <h2 className="section-title">Independent Student and Faculty Communities</h2>
           <p className="section-subtitle">
             To ensure mutual comfort, appropriate peer communication, and campus trust,
             VIT Carpool maintains complete separation between student and faculty rides.
@@ -34,9 +34,9 @@ export const SeparationBanner: React.FC = () => {
                 >
                   <GraduationCap size={20} />
                 </div>
-                <h3 style={{ fontSize: '1.25rem' }}>Student Commuter Network</h3>
+                <h3 style={{ fontSize: '1.25rem' }}>Student Community</h3>
               </div>
-              <Badge variant="student">Student Circle</Badge>
+              <Badge variant="student">Student Community</Badge>
             </div>
 
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
@@ -62,7 +62,7 @@ export const SeparationBanner: React.FC = () => {
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Independent listings:</strong> Faculty listings and schedules remain separate,
+                  <strong>Independent listings:</strong> Faculty listings remain strictly separate,
                   giving students an authentic peer carpool experience.
                 </span>
               </li>
@@ -87,13 +87,13 @@ export const SeparationBanner: React.FC = () => {
                 >
                   <Briefcase size={20} />
                 </div>
-                <h3 style={{ fontSize: '1.25rem' }}>Faculty &amp; Staff Network</h3>
+                <h3 style={{ fontSize: '1.25rem' }}>Faculty Community</h3>
               </div>
-              <Badge variant="faculty">Faculty Circle</Badge>
+              <Badge variant="faculty">Faculty Community</Badge>
             </div>
 
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Dedicated for professors, academic researchers, and university staff commuting on regular
+              Dedicated for professors, academic researchers, and campus staff commuting on regular
               academic schedules and departmental timings.
             </p>
 
@@ -102,14 +102,14 @@ export const SeparationBanner: React.FC = () => {
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
                   <strong>Colleague-only rides:</strong> Faculty members share rides exclusively with
-                  other verified academic and administrative staff.
+                  other verified academic and campus staff.
                 </span>
               </li>
               <li className="feature-item">
                 <CheckCircle2 size={16} className="feature-icon-check" />
                 <span>
-                  <strong>Official credentials:</strong> Verified using official employee email addresses
-                  and campus department records.
+                  <strong>Institutional credentials:</strong> Access requires an active VIT institutional
+                  email address with automated OTP verification.
                 </span>
               </li>
               <li className="feature-item">
@@ -138,7 +138,7 @@ export const SeparationBanner: React.FC = () => {
         >
           <Lock size={18} style={{ color: 'var(--color-brand-700)', flexShrink: 0 }} />
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-            <strong>Automatic Audience Assignment:</strong> Your circle is automatically assigned based on your verified
+            <strong>Automatic Community Assignment:</strong> Your community is automatically assigned based on your verified
             institutional email domain (e.g. <code>@vitstudent.ac.in</code> vs <code>@vit.ac.in</code>) and cannot be modified manually.
           </p>
         </div>

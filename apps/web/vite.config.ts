@@ -38,6 +38,7 @@ export default defineConfig({
       '/moderation': apiProxy,
       '/admin': apiProxy,
       '/verification': apiProxy,
+      '/uploads': apiProxy,
       '/socket.io': {
         target: 'http://localhost:3000',
         ws: true,

@@ -473,13 +473,77 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Car size={13} /> Vehicle Details
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginTop: '4px', color: 'var(--text-primary)' }}>
-                {selectedRide.vehicle
-                  ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
-                  : 'Registered Car'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                {selectedRide.vehicle?.imageUrl && (
+                  <img
+                    src={selectedRide.vehicle.imageUrl}
+                    alt="Vehicle preview"
+                    style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                  />
+                )}
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                    {selectedRide.vehicle
+                      ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
+                      : 'Registered Car'}
+                  </div>
+                  {selectedRide.vehicle && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Capacity: {selectedRide.vehicle.capacity} seats
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Vehicle Appearance (Car Image) Banner */}
+          {selectedRide.vehicle?.imageUrl && (
+            <div
+              id="search-result-vehicle-photo-banner"
+              style={{
+                borderRadius: '10px',
+                overflow: 'hidden',
+                border: '1px solid var(--border-light, #e2e8f0)',
+                backgroundColor: '#f8fafc',
+                marginBottom: '4px',
+              }}
+            >
+              <div style={{ position: 'relative', width: '100%', height: '170px', backgroundColor: '#0f172a' }}>
+                <img
+                  src={selectedRide.vehicle.imageUrl}
+                  alt={`${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    left: '8px',
+                    right: '8px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                    backdropFilter: 'blur(6px)',
+                    color: '#ffffff',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <Car size={13} style={{ color: '#60a5fa' }} />
+                    <span>Vehicle Appearance &bull; This is how the car looks</span>
+                  </span>
+                  <span style={{ color: '#cbd5e1', fontSize: '10px' }}>
+                    {selectedRide.vehicle.color} {selectedRide.vehicle.make} {selectedRide.vehicle.model}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Driver & Community Badge */}
           <div
@@ -494,22 +558,37 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--color-brand-100)',
-                  color: 'var(--color-brand-700)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                }}
-              >
-                {selectedRide.driverName.charAt(0)}
-              </div>
+              {selectedRide.driverAvatarUrl ? (
+                <img
+                  src={selectedRide.driverAvatarUrl}
+                  alt={selectedRide.driverName}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                    border: '1px solid var(--border-light)',
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--color-brand-100)',
+                    color: 'var(--color-brand-700)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {selectedRide.driverName.charAt(0)}
+                </div>
+              )}
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-primary)' }}>
                   {selectedRide.driverName}

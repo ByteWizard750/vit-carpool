@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WebPushService } from './web-push.service';
 import {
   User,
   Notification,
@@ -33,7 +35,10 @@ export interface CreateNotificationParams {
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly webPushService?: WebPushService,
+  ) {}
 
   /**
    * Helper to format internal Notification to NotificationResponseDto
@@ -84,7 +89,20 @@ export class NotificationsService {
         },
       });
 
-      return this.toDto(notification);
+      const dto = this.toDto(notification);
+
+      // Decoupled Web Push delivery for real-time mobile/browser alerts
+      if (this.webPushService) {
+        this.webPushService
+          .sendPushNotification(params.recipientId, {
+            title: params.title,
+            body: params.message,
+            url: params.bookingId ? '/bookings' : '/notifications',
+          })
+          .catch((err) => this.logger.debug(`[WebPush] push delivery skipped/failed: ${err}`));
+      }
+
+      return dto;
     } catch (err: unknown) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         this.logger.debug(
@@ -138,20 +156,21 @@ export class NotificationsService {
         limit,
         totalPages,
       },
+      unreadCount,
     };
   }
 
   /**
    * Get unread notification count for the authenticated user.
    */
-  async getUnreadCount(user: User): Promise<{ count: number }> {
+  async getUnreadCount(user: User): Promise<{ count: number; unreadCount: number }> {
     const count = await this.prisma.notification.count({
       where: {
         recipientId: user.id,
         isRead: false,
       },
     });
-    return { count };
+    return { count, unreadCount: count };
   }
 
   /**

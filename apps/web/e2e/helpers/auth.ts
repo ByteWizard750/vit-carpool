@@ -36,7 +36,7 @@ export interface AuthUser {
   fullName: string;
   audience?: 'STUDENT' | 'FACULTY' | null;
   verificationStatus: string;
-  role: 'USER' | 'ADMIN';
+  role: 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPER_ADMIN';
 }
 
 /**
@@ -171,6 +171,53 @@ export async function loginAsAdmin(page: Page): Promise<{ token: string; user: A
   };
 
   const token = signRS256Token(adminAuthUserId, adminEmail);
+  await injectAuthSession(page, token, user);
+  return { token, user };
+}
+
+/**
+ * Authenticate as Super Administrator.
+ */
+export async function loginAsSuperAdmin(page: Page): Promise<{ token: string; user: AuthUser }> {
+  const adminEmail = 'admin.safety@vitstudent.ac.in';
+  const adminAuthUserId = 'ccc3627d-8f8a-47a1-a757-55ea32c00f92';
+  const adminId = '34aeec7c-33e1-49ad-97d5-d8541bbe315d';
+
+  const user: AuthUser = {
+    id: adminId,
+    email: adminEmail,
+    fullName: 'Campus Admin Safety Officer',
+    audience: 'STUDENT',
+    verificationStatus: 'VERIFIED',
+    role: 'SUPER_ADMIN',
+  };
+
+  const token = signRS256Token(adminAuthUserId, adminEmail);
+  await injectAuthSession(page, token, user);
+  return { token, user };
+}
+
+/**
+ * Authenticate as Moderator.
+ */
+export async function loginAsModerator(
+  page: Page,
+  options?: { email?: string; id?: string; name?: string }
+): Promise<{ token: string; user: AuthUser }> {
+  const modEmail = options?.email || 'moderator.ops@vitstudent.ac.in';
+  const modAuthUserId = '66666666-7777-8888-9999-000000000000';
+  const modId = options?.id || '11111111-2222-3333-4444-555555555555';
+
+  const user: AuthUser = {
+    id: modId,
+    email: modEmail,
+    fullName: options?.name || 'Campus Operations Moderator',
+    audience: 'STUDENT',
+    verificationStatus: 'VERIFIED',
+    role: 'MODERATOR',
+  };
+
+  const token = signRS256Token(modAuthUserId, modEmail);
   await injectAuthSession(page, token, user);
   return { token, user };
 }

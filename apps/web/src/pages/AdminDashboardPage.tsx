@@ -1,86 +1,60 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert,
+  ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
-  UserCheck,
   Search,
   Loader2,
   Car,
-  MessageSquare,
+  Calendar,
   RefreshCw,
-  User,
+  Users,
+  UserCheck,
+  Activity,
+  BarChart3,
+  HeartPulse,
+  Settings,
+  UserPlus,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { useAuth } from '../features/auth/AuthContext';
 import {
-  VerificationRequestStatus,
   ReportResponseDto,
   AdminUserSummaryDto,
+  AdminRideSummaryDto,
+  AdminBookingSummaryDto,
+  AdminOverviewStatsDto,
+  AdminAnalyticsDto,
+  AdminSystemHealthDto,
+  AdminUserItemDto,
+  AdminInvitationItemDto,
 } from '@vit-carpool/contracts';
 
-interface VerificationRequestItem {
-  id: string;
-  userId: string;
-  requestedAudience: 'STUDENT' | 'FACULTY';
-  institutionalEmail: string;
-  status: VerificationRequestStatus;
-  idCardDocumentPath?: string | null;
-  reviewNotes?: string | null;
-  reviewedAt?: string | null;
-  createdAt: string;
-  user: {
-    id: string;
-    email: string;
-    fullName: string;
-    verificationStatus: string;
-    audience: string | null;
-  };
-}
+type AdminTab =
+  | 'overview'
+  | 'users'
+  | 'rides'
+  | 'bookings'
+  | 'safety'
+  | 'verifications'
+  | 'audit'
+  | 'analytics'
+  | 'health'
+  | 'team'
+  | 'settings';
 
 export const AdminDashboardPage: React.FC = () => {
-  const { user, token } = useAuth();
-  const [activeTab, setActiveTab] = useState<'verifications' | 'reports' | 'users'>('verifications');
+  const { user, token, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
-  // ---------------------------------------------------------------------------
-  // Tab 1: Verification Requests State
-  // ---------------------------------------------------------------------------
-  const [verifications, setVerifications] = useState<VerificationRequestItem[]>([]);
-  const [verifFilter, setVerifFilter] = useState<string>('PENDING');
-  const [loadingVerif, setLoadingVerif] = useState(false);
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [selectedVerif, setSelectedVerif] = useState<VerificationRequestItem | null>(null);
-  const [reviewAction, setReviewAction] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
-  const [reviewNotes, setReviewNotes] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
+  // Permission checks based on user role
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdminOrSuper = user?.role === 'ADMIN' || isSuperAdmin;
 
-  // ---------------------------------------------------------------------------
-  // Tab 2: Incident Reports State
-  // ---------------------------------------------------------------------------
-  const [reports, setReports] = useState<ReportResponseDto[]>([]);
-  const [reportStatusFilter, setReportStatusFilter] = useState<string>('ALL');
-  const [reportCategoryFilter, setReportCategoryFilter] = useState<string>('ALL');
-  const [loadingReports, setLoadingReports] = useState(false);
-  const [resolveModalOpen, setResolveModalOpen] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<ReportResponseDto | null>(null);
-  const [resolveStatus, setResolveStatus] = useState<'RESOLVED' | 'DISMISSED'>('RESOLVED');
-  const [resolutionNotes, setResolutionNotes] = useState('');
-  const [submittingResolve, setSubmittingResolve] = useState(false);
-
-  // ---------------------------------------------------------------------------
-  // Tab 3: User Management State
-  // ---------------------------------------------------------------------------
-  const [users, setUsers] = useState<AdminUserSummaryDto[]>([]);
-  const [userSearchTerm, setUserSearchTerm] = useState('');
-  const [userStatusFilter, setUserStatusFilter] = useState<string>('ALL');
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<AdminUserSummaryDto | null>(null);
-  const [suspensionReason, setSuspensionReason] = useState('');
-  const [submittingSuspension, setSubmittingSuspension] = useState(false);
-
-  // Global action message
+  // Global feedback notification
   const [actionFeedback, setActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -88,54 +62,49 @@ export const AdminDashboardPage: React.FC = () => {
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setActionFeedback({ type, message });
-    setTimeout(() => setActionFeedback(null), 4000);
+    setTimeout(() => setActionFeedback(null), 5000);
   };
 
   // ---------------------------------------------------------------------------
-  // Fetch Functions
+  // Tab 1: Overview State
   // ---------------------------------------------------------------------------
-  const fetchVerifications = useCallback(async () => {
-    if (!token) return;
-    setLoadingVerif(true);
-    try {
-      const url =
-        verifFilter === 'ALL'
-          ? '/admin/verification-requests'
-          : `/admin/verification-requests?status=${verifFilter}`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVerifications(data);
-      }
-    } catch {
-      showFeedback('error', 'Failed to load verification requests.');
-    } finally {
-      setLoadingVerif(false);
-    }
-  }, [token, verifFilter]);
+  const [overviewStats, setOverviewStats] = useState<
+    (AdminOverviewStatsDto & { recentActivity: any[]; recentRegistrations: any[] }) | null
+  >(null);
+  const [loadingOverview, setLoadingOverview] = useState(false);
 
-  const fetchReports = useCallback(async () => {
+  const fetchOverview = useCallback(async () => {
     if (!token) return;
-    setLoadingReports(true);
+    setLoadingOverview(true);
     try {
-      const params = new URLSearchParams();
-      if (reportStatusFilter !== 'ALL') params.append('status', reportStatusFilter);
-      if (reportCategoryFilter !== 'ALL') params.append('category', reportCategoryFilter);
-      const res = await fetch(`/admin/reports?${params.toString()}`, {
+      const res = await fetch('/api/admin/overview', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        setReports(data.reports || []);
+        setOverviewStats(data);
       }
     } catch {
-      showFeedback('error', 'Failed to load safety reports.');
+      showFeedback('error', 'Failed to load operational overview metrics.');
     } finally {
-      setLoadingReports(false);
+      setLoadingOverview(false);
     }
-  }, [token, reportStatusFilter, reportCategoryFilter]);
+  }, [token]);
+
+  // ---------------------------------------------------------------------------
+  // Tab 2: Users Management State
+  // ---------------------------------------------------------------------------
+  const [users, setUsers] = useState<AdminUserSummaryDto[]>([]);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userStatusFilter, setUserStatusFilter] = useState('ALL');
+  const [userRoleFilter, setUserRoleFilter] = useState('ALL');
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUserSummaryDto | null>(null);
+  const [suspensionReason, setSuspensionReason] = useState('');
+  const [submittingSuspension, setSubmittingSuspension] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [moderationNoteText, setModerationNoteText] = useState('');
 
   const fetchUsers = useCallback(async () => {
     if (!token) return;
@@ -144,7 +113,10 @@ export const AdminDashboardPage: React.FC = () => {
       const params = new URLSearchParams();
       if (userSearchTerm.trim()) params.append('search', userSearchTerm.trim());
       if (userStatusFilter !== 'ALL') params.append('status', userStatusFilter);
-      const res = await fetch(`/admin/users?${params.toString()}`, {
+      if (userRoleFilter !== 'ALL') params.append('role', userRoleFilter);
+      params.append('limit', '50');
+
+      const res = await fetch(`/api/admin/users?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -152,473 +124,1653 @@ export const AdminDashboardPage: React.FC = () => {
         setUsers(data.users || []);
       }
     } catch {
-      showFeedback('error', 'Failed to search users.');
+      showFeedback('error', 'Failed to fetch users list.');
     } finally {
       setLoadingUsers(false);
     }
-  }, [token, userSearchTerm, userStatusFilter]);
+  }, [token, userSearchTerm, userStatusFilter, userRoleFilter]);
 
-  useEffect(() => {
-    if (activeTab === 'verifications') fetchVerifications();
-    if (activeTab === 'reports') fetchReports();
-    if (activeTab === 'users') fetchUsers();
-  }, [activeTab, fetchVerifications, fetchReports, fetchUsers]);
-
-  // ---------------------------------------------------------------------------
-  // Action Handlers
-  // ---------------------------------------------------------------------------
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !selectedVerif) return;
-    setSubmittingReview(true);
+  const handleSuspendUser = async () => {
+    if (!selectedUser || !suspensionReason.trim() || !token) return;
+    setSubmittingSuspension(true);
     try {
-      const res = await fetch(`/admin/verification-requests/${selectedVerif.id}/review`, {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}/suspend`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          status: reviewAction,
-          reviewNotes: reviewNotes.trim() || undefined,
-        }),
+        body: JSON.stringify({ reason: suspensionReason.trim() }),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        showFeedback('success', `User account ${selectedUser.email} has been suspended.`);
+        setSuspendModalOpen(false);
+        setSuspensionReason('');
+        fetchUsers();
+      } else {
         const err = await res.json();
-        throw new Error(err?.message || 'Review failed.');
+        showFeedback('error', err.message || 'Failed to suspend user.');
       }
-      showFeedback('success', `Verification request ${reviewAction.toLowerCase()} successfully.`);
-      setReviewModalOpen(false);
-      setReviewNotes('');
-      fetchVerifications();
-    } catch (err: any) {
-      showFeedback('error', err.message || 'Error resolving request.');
+    } catch {
+      showFeedback('error', 'Network error during account suspension.');
     } finally {
-      setSubmittingReview(false);
+      setSubmittingSuspension(false);
     }
   };
 
-  const handleInvestigateReport = async (reportId: string) => {
+  const handleReinstateUser = async (targetUser: AdminUserSummaryDto) => {
     if (!token) return;
+    if (!window.confirm(`Are you sure you want to reinstate account ${targetUser.email}?`)) return;
     try {
-      const res = await fetch(`/admin/reports/${reportId}/investigate`, {
+      const res = await fetch(`/api/admin/users/${targetUser.id}/reinstate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        showFeedback('success', 'Report marked as under investigation.');
-        fetchReports();
+        showFeedback('success', `User account ${targetUser.email} successfully reinstated.`);
+        fetchUsers();
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to reinstate user.');
       }
     } catch {
-      showFeedback('error', 'Failed to update report status.');
+      showFeedback('error', 'Network error during reinstatement.');
     }
   };
 
-  const handleResolveSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !selectedReport) return;
-    if (resolutionNotes.trim().length < 5) {
-      showFeedback('error', 'Resolution notes must be at least 5 characters.');
-      return;
-    }
-    setSubmittingResolve(true);
+  const handleAddModerationNote = async () => {
+    if (!selectedUser || !moderationNoteText.trim() || !token) return;
     try {
-      const res = await fetch(`/admin/reports/${selectedReport.id}/resolve`, {
+      const res = await fetch('/api/admin/notes', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          targetUserId: selectedUser.id,
+          content: moderationNoteText.trim(),
+        }),
+      });
+      if (res.ok) {
+        showFeedback('success', 'Internal moderation note saved.');
+        setNoteModalOpen(false);
+        setModerationNoteText('');
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to save note.');
+      }
+    } catch {
+      showFeedback('error', 'Network error saving moderation note.');
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Tab 3: Rides Oversight State
+  // ---------------------------------------------------------------------------
+  const [rides, setRides] = useState<AdminRideSummaryDto[]>([]);
+  const [rideStatusFilter, setRideStatusFilter] = useState('ALL');
+  const [rideSearchTerm, setRideSearchTerm] = useState('');
+  const [loadingRides, setLoadingRides] = useState(false);
+  const [cancelRideModalOpen, setCancelRideModalOpen] = useState(false);
+  const [selectedRide, setSelectedRide] = useState<AdminRideSummaryDto | null>(null);
+  const [cancelRideReason, setCancelRideReason] = useState('');
+  const [submittingCancelRide, setSubmittingCancelRide] = useState(false);
+
+  const fetchRides = useCallback(async () => {
+    if (!token) return;
+    setLoadingRides(true);
+    try {
+      const params = new URLSearchParams();
+      if (rideSearchTerm.trim()) params.append('search', rideSearchTerm.trim());
+      if (rideStatusFilter !== 'ALL') params.append('status', rideStatusFilter);
+      params.append('limit', '50');
+
+      const res = await fetch(`/api/admin/rides?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRides(data.rides || []);
+      }
+    } catch {
+      showFeedback('error', 'Failed to fetch rides.');
+    } finally {
+      setLoadingRides(false);
+    }
+  }, [token, rideSearchTerm, rideStatusFilter]);
+
+  const handleCancelRide = async () => {
+    if (!selectedRide || !cancelRideReason.trim() || !token) return;
+    setSubmittingCancelRide(true);
+    try {
+      const res = await fetch(`/api/admin/rides/${selectedRide.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: cancelRideReason.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showFeedback(
+          'success',
+          `Ride cancelled. ${data.cancelledBookingsCount || 0} active booking(s) cancelled and notified.`,
+        );
+        setCancelRideModalOpen(false);
+        setCancelRideReason('');
+        fetchRides();
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to cancel ride.');
+      }
+    } catch {
+      showFeedback('error', 'Network error during ride cancellation.');
+    } finally {
+      setSubmittingCancelRide(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Tab 4: Bookings Oversight State
+  // ---------------------------------------------------------------------------
+  const [bookings, setBookings] = useState<AdminBookingSummaryDto[]>([]);
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
+  const [bookingSearchTerm, setBookingSearchTerm] = useState('');
+  const [loadingBookings, setLoadingBookings] = useState(false);
+
+  const fetchBookings = useCallback(async () => {
+    if (!token) return;
+    setLoadingBookings(true);
+    try {
+      const params = new URLSearchParams();
+      if (bookingSearchTerm.trim()) params.append('search', bookingSearchTerm.trim());
+      if (bookingStatusFilter !== 'ALL') params.append('status', bookingStatusFilter);
+      params.append('limit', '50');
+
+      const res = await fetch(`/api/admin/bookings?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBookings(data.bookings || []);
+      }
+    } catch {
+      showFeedback('error', 'Failed to fetch platform bookings.');
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, [token, bookingSearchTerm, bookingStatusFilter]);
+
+  // ---------------------------------------------------------------------------
+  // Tab 5: Trust & Safety (Reports) State
+  // ---------------------------------------------------------------------------
+  const [reports, setReports] = useState<ReportResponseDto[]>([]);
+  const [reportStatusFilter, setReportStatusFilter] = useState('ALL');
+  const [reportCategoryFilter, setReportCategoryFilter] = useState('ALL');
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ReportResponseDto | null>(null);
+  const [resolveStatus, setResolveStatus] = useState<'RESOLVED' | 'DISMISSED'>('RESOLVED');
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [submittingResolve, setSubmittingResolve] = useState(false);
+
+  const fetchReports = useCallback(async () => {
+    if (!token) return;
+    setLoadingReports(true);
+    try {
+      const params = new URLSearchParams();
+      if (reportStatusFilter !== 'ALL') params.append('status', reportStatusFilter);
+      if (reportCategoryFilter !== 'ALL') params.append('category', reportCategoryFilter);
+      params.append('limit', '50');
+
+      const res = await fetch(`/api/admin/reports?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReports(data.reports || []);
+      }
+    } catch {
+      showFeedback('error', 'Failed to fetch incident reports queue.');
+    } finally {
+      setLoadingReports(false);
+    }
+  }, [token, reportStatusFilter, reportCategoryFilter]);
+
+  const handleInvestigateReport = async (reportId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/admin/reports/${reportId}/investigate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        showFeedback('success', 'Report marked as UNDER INVESTIGATION.');
+        fetchReports();
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to update report status.');
+      }
+    } catch {
+      showFeedback('error', 'Network error.');
+    }
+  };
+
+  const handleResolveReport = async () => {
+    if (!selectedReport || !resolutionNotes.trim() || !token) return;
+    setSubmittingResolve(true);
+    try {
+      const res = await fetch(`/api/admin/reports/${selectedReport.id}/resolve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           status: resolveStatus,
           resolutionNotes: resolutionNotes.trim(),
         }),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        showFeedback(
+          'success',
+          `Report marked as ${resolveStatus}. Audit record recorded.`,
+        );
+        setResolveModalOpen(false);
+        setResolutionNotes('');
+        fetchReports();
+      } else {
         const err = await res.json();
-        throw new Error(err?.message || 'Failed to resolve report.');
+        showFeedback('error', err.message || 'Failed to resolve report.');
       }
-      showFeedback('success', `Report successfully marked as ${resolveStatus.toLowerCase()}.`);
-      setResolveModalOpen(false);
-      setResolutionNotes('');
-      fetchReports();
-    } catch (err: any) {
-      showFeedback('error', err.message || 'Error resolving report.');
+    } catch {
+      showFeedback('error', 'Network error resolving report.');
     } finally {
       setSubmittingResolve(false);
     }
   };
 
-  const handleSuspendSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !selectedUser) return;
-    if (suspensionReason.trim().length < 5) {
-      showFeedback('error', 'Suspension reason must be at least 5 characters.');
-      return;
-    }
-    setSubmittingSuspension(true);
-    try {
-      const res = await fetch(`/admin/users/${selectedUser.id}/suspend`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reason: suspensionReason.trim(),
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err?.message || 'Suspension failed.');
-      }
-      showFeedback('success', `Account for ${selectedUser.fullName} has been suspended.`);
-      setSuspendModalOpen(false);
-      setSuspensionReason('');
-      fetchUsers();
-    } catch (err: any) {
-      showFeedback('error', err.message || 'Failed to suspend account.');
-    } finally {
-      setSubmittingSuspension(false);
-    }
-  };
+  // ---------------------------------------------------------------------------
+  // Tab 6: Audit Logs State
+  // ---------------------------------------------------------------------------
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditActionFilter, setAuditActionFilter] = useState('');
+  const [loadingAudit, setLoadingAudit] = useState(false);
 
-  const handleReinstate = async (targetUser: AdminUserSummaryDto) => {
+  const fetchAuditLogs = useCallback(async () => {
     if (!token) return;
-    if (!window.confirm(`Are you sure you want to reinstate access for ${targetUser.fullName}?`)) {
-      return;
-    }
+    setLoadingAudit(true);
     try {
-      const res = await fetch(`/admin/users/${targetUser.id}/reinstate`, {
-        method: 'POST',
+      const params = new URLSearchParams();
+      if (auditActionFilter.trim()) params.append('search', auditActionFilter.trim());
+      params.append('limit', '50');
+
+      const res = await fetch(`/api/admin/audit-logs?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err?.message || 'Reinstatement failed.');
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.logs || []);
       }
-      showFeedback('success', `Account for ${targetUser.fullName} has been reinstated.`);
-      fetchUsers();
-    } catch (err: any) {
-      showFeedback('error', err.message || 'Failed to reinstate account.');
+    } catch {
+      showFeedback('error', 'Failed to fetch audit log trail.');
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, [token, auditActionFilter]);
+
+  // ---------------------------------------------------------------------------
+  // Tab 7: Analytics State
+  // ---------------------------------------------------------------------------
+  const [analytics, setAnalytics] = useState<AdminAnalyticsDto | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  const fetchAnalytics = useCallback(async () => {
+    if (!token) return;
+    setLoadingAnalytics(true);
+    try {
+      const res = await fetch('/api/admin/analytics', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      }
+    } catch {
+      showFeedback('error', 'Failed to load operational analytics.');
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  }, [token]);
+
+  // ---------------------------------------------------------------------------
+  // Tab 8: System Health State
+  // ---------------------------------------------------------------------------
+  const [health, setHealth] = useState<AdminSystemHealthDto | null>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+
+  const fetchHealth = useCallback(async () => {
+    if (!token) return;
+    setLoadingHealth(true);
+    try {
+      const res = await fetch('/api/admin/health', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHealth(data);
+      }
+    } catch {
+      showFeedback('error', 'Failed to fetch system diagnostics.');
+    } finally {
+      setLoadingHealth(false);
+    }
+  }, [token]);
+
+  // ---------------------------------------------------------------------------
+  // Tab 9: Team & Admin Invitations (SUPER_ADMIN)
+  // ---------------------------------------------------------------------------
+  const [administrators, setAdministrators] = useState<AdminUserItemDto[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<AdminInvitationItemDto[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'MODERATOR' | 'ADMIN' | 'SUPER_ADMIN'>('MODERATOR');
+  const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null);
+
+  const fetchTeam = useCallback(async () => {
+    if (!token || !isSuperAdmin) return;
+    setLoadingTeam(true);
+    try {
+      const res = await fetch('/api/admin/administrators', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdministrators(data.administrators || []);
+        setPendingInvitations(data.pendingInvitations || []);
+      }
+    } catch {
+      showFeedback('error', 'Failed to fetch administrator team.');
+    } finally {
+      setLoadingTeam(false);
+    }
+  }, [token, isSuperAdmin]);
+
+  const handleInviteAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !token) return;
+    setSubmittingInvite(true);
+    try {
+      const res = await fetch('/api/admin/administrators/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), role: inviteRole }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const link = `${window.location.origin}/admin/login?invite=${data.inviteToken}`;
+        setGeneratedInviteLink(link);
+        showFeedback('success', `Single-use invitation generated for ${data.email}.`);
+        fetchTeam();
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to create invitation.');
+      }
+    } catch {
+      showFeedback('error', 'Network error.');
+    } finally {
+      setSubmittingInvite(false);
     }
   };
 
+  const handleRevokeAdmin = async (adminItem: AdminUserItemDto) => {
+    if (!token) return;
+    const reason = window.prompt(
+      `Revoke administrator privileges for ${adminItem.email}? Enter explicit justification (min 5 characters):`,
+    );
+    if (!reason || reason.trim().length < 5) {
+      if (reason !== null) alert('A justification of at least 5 characters is required.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/administrators/${adminItem.id}/revoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      if (res.ok) {
+        showFeedback('success', `Administrator privileges revoked for ${adminItem.email}.`);
+        fetchTeam();
+      } else {
+        const err = await res.json();
+        showFeedback('error', err.message || 'Failed to revoke administrator.');
+      }
+    } catch {
+      showFeedback('error', 'Network error.');
+    }
+  };
+
+  // Trigger data fetch on tab switch
+  useEffect(() => {
+    if (activeTab === 'overview') fetchOverview();
+    else if (activeTab === 'users' || activeTab === 'verifications') fetchUsers();
+    else if (activeTab === 'rides') fetchRides();
+    else if (activeTab === 'bookings') fetchBookings();
+    else if (activeTab === 'safety') fetchReports();
+    else if (activeTab === 'audit') fetchAuditLogs();
+    else if (activeTab === 'analytics') fetchAnalytics();
+    else if (activeTab === 'health') fetchHealth();
+    else if (activeTab === 'team' && isSuperAdmin) fetchTeam();
+  }, [
+    activeTab,
+    fetchOverview,
+    fetchUsers,
+    fetchRides,
+    fetchBookings,
+    fetchReports,
+    fetchAuditLogs,
+    fetchAnalytics,
+    fetchHealth,
+    fetchTeam,
+    isSuperAdmin,
+  ]);
+
   return (
-    <div className="container" style={{ padding: '36px 16px 80px', maxWidth: '1100px' }}>
-      {/* Header */}
-      <div
+    <div
+      style={{
+        display: 'flex',
+        minHeight: 'calc(100vh - 64px)',
+        backgroundColor: '#0f172a',
+        color: '#f8fafc',
+      }}
+    >
+      {/* ── Sidebar Navigation ──────────────────────────────────────────────── */}
+      <aside
         style={{
+          width: '260px',
+          backgroundColor: '#1e293b',
+          borderRight: '1px solid #334155',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: '28px',
-          flexWrap: 'wrap',
-          gap: '16px',
+          flexDirection: 'column',
+          flexShrink: 0,
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+        <div style={{ padding: '20px 18px', borderBottom: '1px solid #334155' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
+                width: '38px',
+                height: '38px',
                 borderRadius: '8px',
-                backgroundColor: '#fee2e2',
-                color: '#dc2626',
+                backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                border: '1px solid rgba(59, 130, 246, 0.4)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                color: '#60a5fa',
               }}
             >
-              <ShieldAlert size={22} />
+              <ShieldCheck size={22} />
             </div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              Campus Moderation & Trust Console
-            </h1>
+            <div>
+              <h1 style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ffffff', margin: 0 }}>
+                Campus Moderation &amp; Trust Console
+              </h1>
+              <div
+                style={{
+                  fontSize: '0.7rem',
+                  color:
+                    user?.role === 'SUPER_ADMIN'
+                      ? '#fbbf24'
+                      : user?.role === 'ADMIN'
+                        ? '#60a5fa'
+                        : '#34d399',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {user?.role} • Operations Centre
+              </div>
+            </div>
           </div>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Authorize institutional student/faculty verifications, resolve safety reports, and manage campus account standing.
-          </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (activeTab === 'verifications') fetchVerifications();
-            if (activeTab === 'reports') fetchReports();
-            if (activeTab === 'users') fetchUsers();
-          }}
-          leftIcon={<RefreshCw size={14} />}
-        >
-          Refresh Console
-        </Button>
-      </div>
+        <nav style={{ padding: '12px 10px', flex: 1, overflowY: 'auto' }}>
+          <div
+            style={{
+              fontSize: '0.675rem',
+              fontWeight: 700,
+              color: '#64748b',
+              padding: '6px 12px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Operations
+          </div>
+          {[
+            { id: 'overview', label: 'Overview', icon: <Activity size={18} /> },
+            { id: 'verifications', label: 'ID Verification Queue', icon: <UserCheck size={18} /> },
+            { id: 'safety', label: 'Incident & Safety Reports', icon: <ShieldAlert size={18} /> },
+            { id: 'users', label: 'User Management & Suspension', icon: <Users size={18} /> },
+            { id: 'rides', label: 'Rides Oversight', icon: <Car size={18} /> },
+            { id: 'bookings', label: 'Bookings Oversight', icon: <Calendar size={18} /> },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as AdminTab)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: activeTab === item.id ? '#2563eb' : 'transparent',
+                color: activeTab === item.id ? '#ffffff' : '#94a3b8',
+                fontWeight: activeTab === item.id ? 600 : 500,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                textAlign: 'left',
+                marginBottom: '2px',
+                transition: 'all 0.15s ease',
+              }}
+              id={`tab-admin-${item.id}`}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
 
-      {/* Action Feedback Banner */}
-      {actionFeedback && (
-        <div
-          style={{
-            padding: '12px 18px',
-            borderRadius: '10px',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            backgroundColor: actionFeedback.type === 'success' ? '#dcfce7' : '#fee2e2',
-            color: actionFeedback.type === 'success' ? '#166534' : '#991b1b',
-            border: `1px solid ${actionFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-            fontSize: '0.9rem',
-            fontWeight: 500,
-          }}
-        >
-          {actionFeedback.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-          <span>{actionFeedback.message}</span>
-        </div>
-      )}
-
-      {/* Console Tab Navigation */}
-      <div className="admin-console-tabs" role="tablist">
-        <button
-          onClick={() => setActiveTab('verifications')}
-          className={`admin-tab-btn ${activeTab === 'verifications' ? 'active' : ''}`}
-          id="admin-tab-verifications"
-          aria-label="ID Verification Queue"
-        >
-          <UserCheck size={18} />
-          <span className="admin-tab-label-full">ID Verification Queue</span>
-          <span className="admin-tab-label-short">Verifications</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('reports')}
-          className={`admin-tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
-          id="admin-tab-reports"
-          aria-label="Incident & Safety Reports"
-        >
-          <ShieldAlert size={18} />
-          <span className="admin-tab-label-full">Incident & Safety Reports</span>
-          <span className="admin-tab-label-short">Reports</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
-          id="admin-tab-users"
-          aria-label="User Management & Suspension"
-        >
-          <User size={18} />
-          <span className="admin-tab-label-full">User Management & Suspension</span>
-          <span className="admin-tab-label-short">Users</span>
-        </button>
-      </div>
-
-      {/* =====================================================================
-          TAB 1: ID VERIFICATION QUEUE
-          ===================================================================== */}
-      {activeTab === 'verifications' && (
-        <div>
-          {/* Filter Bar */}
-          <div className="admin-filter-bar">
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Status Filter:
-            </span>
-            <div className="admin-filter-pills">
-              {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((s) => (
+          {isAdminOrSuper && (
+            <>
+              <div
+                style={{
+                  fontSize: '0.675rem',
+                  fontWeight: 700,
+                  color: '#64748b',
+                  padding: '14px 12px 6px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Governance &amp; Audit
+              </div>
+              {[
+                { id: 'audit', label: 'Activity Logs', icon: <FileText size={18} /> },
+                { id: 'analytics', label: 'Operational Analytics', icon: <BarChart3 size={18} /> },
+                { id: 'health', label: 'System Health', icon: <HeartPulse size={18} /> },
+              ].map((item) => (
                 <button
-                  key={s}
-                  onClick={() => setVerifFilter(s)}
-                  className={`admin-filter-pill ${verifFilter === s ? 'active' : ''}`}
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as AdminTab)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: activeTab === item.id ? '#2563eb' : 'transparent',
+                    color: activeTab === item.id ? '#ffffff' : '#94a3b8',
+                    fontWeight: activeTab === item.id ? 600 : 500,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    marginBottom: '2px',
+                  }}
+                  id={`tab-admin-${item.id}`}
                 >
-                  {s}
+                  {item.icon}
+                  <span>{item.label}</span>
                 </button>
               ))}
-            </div>
-          </div>
+            </>
+          )}
 
-          {loadingVerif ? (
-            <div style={{ textAlign: 'center', padding: '60px 0' }}>
-              <Loader2 size={32} className="animate-spin" color="var(--color-brand-600)" />
-              <p style={{ color: 'var(--text-muted)', marginTop: '12px', fontSize: '0.9rem' }}>
-                Loading verification requests...
-              </p>
-            </div>
-          ) : verifications.length === 0 ? (
+          {isSuperAdmin && (
+            <>
+              <div
+                style={{
+                  fontSize: '0.675rem',
+                  fontWeight: 700,
+                  color: '#64748b',
+                  padding: '14px 12px 6px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Administration
+              </div>
+              {[
+                { id: 'team', label: 'Administrator Team', icon: <UserPlus size={18} /> },
+                { id: 'settings', label: 'Security & Policies', icon: <Settings size={18} /> },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as AdminTab)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: activeTab === item.id ? '#2563eb' : 'transparent',
+                    color: activeTab === item.id ? '#ffffff' : '#94a3b8',
+                    fontWeight: activeTab === item.id ? 600 : 500,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    marginBottom: '2px',
+                  }}
+                  id={`tab-admin-${item.id}`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </nav>
+
+        {/* User Footer Profile */}
+        <div style={{ padding: '16px 14px', borderTop: '1px solid #334155' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div
               style={{
-                textAlign: 'center',
-                padding: '60px 20px',
-                backgroundColor: '#ffffff',
-                borderRadius: '16px',
-                border: '1px solid var(--border-light)',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#f8fafc',
               }}
             >
-              <UserCheck size={44} color="#9ca3af" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-                No verification requests found
-              </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
-                The verification queue is clear for the selected filter.
-              </p>
+              {user?.fullName?.charAt(0) || 'A'}
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {verifications.map((v) => (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {user?.fullName}
+              </div>
+              <div
+                style={{
+                  fontSize: '0.7rem',
+                  color: '#94a3b8',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {user?.email}
+              </div>
+            </div>
+            <button
+              onClick={() => logout()}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ef4444',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                padding: '4px',
+              }}
+              title="Sign Out"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main Dashboard Workspace ────────────────────────────────────────── */}
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          overflowY: 'auto',
+          padding: '28px 32px',
+        }}
+      >
+        {/* Action feedback alert banner */}
+        {actionFeedback && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              backgroundColor:
+                actionFeedback.type === 'success'
+                  ? 'rgba(34, 197, 94, 0.15)'
+                  : 'rgba(239, 68, 68, 0.15)',
+              border: `1px solid ${
+                actionFeedback.type === 'success' ? '#22c55e' : '#ef4444'
+              }`,
+              color: actionFeedback.type === 'success' ? '#86efac' : '#fca5a5',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            {actionFeedback.type === 'success' ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <AlertCircle size={16} />
+            )}
+            <span>{actionFeedback.message}</span>
+          </div>
+        )}
+
+        {/* ── TAB 1: OVERVIEW ──────────────────────────────────────────────── */}
+        {activeTab === 'overview' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '24px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Operational Overview
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Database-backed platform metrics, recent registrations, and activity logs.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchOverview}
+                disabled={loadingOverview}
+                leftIcon={<RefreshCw size={14} className={loadingOverview ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {loadingOverview && !overviewStats ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
+                <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+                <span>Aggregating operational metrics...</span>
+              </div>
+            ) : overviewStats ? (
+              <div>
+                {/* Metric Cards Grid */}
                 <div
-                  key={v.id}
                   style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '14px',
-                    border: '1px solid var(--border-light)',
-                    padding: '20px 24px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                     gap: '16px',
+                    marginBottom: '28px',
                   }}
                 >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                        {v.user?.fullName || v.institutionalEmail}
-                      </h3>
-                      <span
+                  {[
+                    {
+                      label: 'Total Registered Users',
+                      value: overviewStats.totalUsers,
+                      sub: `${overviewStats.studentUsers} Students • ${overviewStats.facultyUsers} Faculty`,
+                      icon: <Users size={20} color="#60a5fa" />,
+                    },
+                    {
+                      label: 'Published Rides',
+                      value: overviewStats.totalRides,
+                      sub: `${overviewStats.activeRides} Active • ${overviewStats.completedRides} Completed`,
+                      icon: <Car size={20} color="#34d399" />,
+                    },
+                    {
+                      label: 'Bookings Requested',
+                      value: overviewStats.totalBookings,
+                      sub: `${overviewStats.confirmedBookings} Confirmed`,
+                      icon: <Calendar size={20} color="#a78bfa" />,
+                    },
+                    {
+                      label: 'Open Safety Reports',
+                      value: overviewStats.openReports,
+                      sub: `${overviewStats.suspendedUsers} Suspended Accounts`,
+                      icon: <ShieldAlert size={20} color="#f87171" />,
+                    },
+                  ].map((card, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '18px 20px',
+                        backgroundColor: '#1e293b',
+                        borderRadius: '12px',
+                        border: '1px solid #334155',
+                      }}
+                    >
+                      <div
                         style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          backgroundColor: v.requestedAudience === 'FACULTY' ? '#f3e8ff' : '#dbeafe',
-                          color: v.requestedAudience === 'FACULTY' ? '#6b21a8' : '#1d4ed8',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px',
                         }}
                       >
-                        {v.requestedAudience}
-                      </span>
-                      <span
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8' }}>
+                          {card.label}
+                        </span>
+                        {card.icon}
+                      </div>
+                      <div
                         style={{
-                          fontSize: '0.75rem',
+                          fontSize: '1.75rem',
                           fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          backgroundColor:
-                            v.status === 'APPROVED'
-                              ? '#dcfce7'
-                              : v.status === 'REJECTED'
-                              ? '#fee2e2'
-                              : '#fef3c7',
-                          color:
-                            v.status === 'APPROVED'
-                              ? '#166534'
-                              : v.status === 'REJECTED'
-                              ? '#991b1b'
-                              : '#854d0e',
+                          color: '#ffffff',
+                          marginBottom: '4px',
                         }}
                       >
-                        {v.status}
-                      </span>
+                        {card.value}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{card.sub}</div>
                     </div>
+                  ))}
+                </div>
 
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Institutional Email: <strong>{v.institutionalEmail}</strong>
-                    </div>
-
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Submitted: {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v.createdAt))}
-                      {v.reviewNotes && ` • Notes: ${v.reviewNotes}`}
+                {/* Split Panel: Recent Registrations & Recent Activity */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                    gap: '20px',
+                  }}
+                >
+                  {/* Recent Registrations */}
+                  <div
+                    style={{
+                      padding: '20px',
+                      backgroundColor: '#1e293b',
+                      borderRadius: '12px',
+                      border: '1px solid #334155',
+                    }}
+                  >
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '14px' }}>
+                      Recent Community Registrations
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {overviewStats.recentRegistrations.map((u) => (
+                        <div
+                          key={u.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            backgroundColor: '#0f172a',
+                            borderRadius: '8px',
+                            border: '1px solid #334155',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0' }}>
+                              {u.fullName}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{u.email}</div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '0.675rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor:
+                                u.audience === 'FACULTY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                              color: u.audience === 'FACULTY' ? '#c084fc' : '#93c5fd',
+                            }}
+                          >
+                            {u.audience || 'STUDENT'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  {v.status === 'PENDING' && (
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => {
-                          setSelectedVerif(v);
-                          setReviewAction('APPROVED');
-                          setReviewModalOpen(true);
-                        }}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => {
-                          setSelectedVerif(v);
-                          setReviewAction('REJECTED');
-                          setReviewModalOpen(true);
-                        }}
-                      >
-                        Reject
-                      </Button>
+                  {/* Recent Audit Activity */}
+                  <div
+                    style={{
+                      padding: '20px',
+                      backgroundColor: '#1e293b',
+                      borderRadius: '12px',
+                      border: '1px solid #334155',
+                    }}
+                  >
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '14px' }}>
+                      Recent Administrative Actions
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {overviewStats.recentActivity.map((a) => (
+                        <div
+                          key={a.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            backgroundColor: '#0f172a',
+                            borderRadius: '8px',
+                            border: '1px solid #334155',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0' }}>
+                              {a.action}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
+                              Target: {a.targetType} • {new Date(a.createdAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '0.675rem',
+                              fontWeight: 700,
+                              color: '#94a3b8',
+                            }}
+                          >
+                            {a.actorRole || 'SYSTEM'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            ) : null}
+          </div>
+        )}
 
-      {/* =====================================================================
-          TAB 2: INCIDENT & SAFETY REPORTS
-          ===================================================================== */}
-      {activeTab === 'reports' && (
-        <div>
-          {/* Filters */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center',
-              marginBottom: '20px',
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Report Status:
-              </span>
-              {['ALL', 'PENDING', 'INVESTIGATING', 'RESOLVED', 'DISMISSED'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setReportStatusFilter(st)}
+        {/* ── TAB 2: USERS DIRECTORY ────────────────────────────────────────── */}
+        {(activeTab === 'users' || activeTab === 'verifications') && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  {activeTab === 'verifications'
+                    ? 'ID Verification Queue & User Management'
+                    : 'User Directory & Moderation'}
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Search users, review verification statuses, inspect reports history, and manage suspensions.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchUsers}
+                disabled={loadingUsers}
+                leftIcon={<RefreshCw size={14} className={loadingUsers ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {/* Filter Controls */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                marginBottom: '20px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+                <input
+                  type="text"
+                  placeholder="Search user by name or email..."
+                  value={userSearchTerm}
+                  onChange={(e) => setUserSearchTerm(e.target.value)}
                   style={{
-                    padding: '6px 14px',
-                    borderRadius: '20px',
-                    border: '1px solid',
-                    borderColor: reportStatusFilter === st ? 'var(--color-brand-600)' : 'var(--border-light)',
-                    backgroundColor: reportStatusFilter === st ? 'var(--color-brand-50)' : '#ffffff',
-                    color: reportStatusFilter === st ? 'var(--color-brand-700)' : 'var(--text-secondary)',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
+                    width: '100%',
+                    padding: '10px 14px 10px 36px',
+                    borderRadius: '8px',
+                    border: '1px solid #334155',
+                    backgroundColor: '#1e293b',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                  }}
+                />
+                <Search
+                  size={16}
+                  style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }}
+                />
+              </div>
+
+              <select
+                value={userStatusFilter}
+                onChange={(e) => setUserStatusFilter(e.target.value)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="VERIFIED">Verified</option>
+                <option value="PENDING">Pending</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+
+              <select
+                value={userRoleFilter}
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              >
+                <option value="ALL">All Roles</option>
+                <option value="USER">User</option>
+                <option value="MODERATOR">Moderator</option>
+                <option value="ADMIN">Admin</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
+              </select>
+            </div>
+
+            {/* Users Table */}
+            <div
+              style={{
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                border: '1px solid #334155',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>USER</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>COHORT</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>STATUS</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ROLE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>REPORTS</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>JOINED</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingUsers ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                        Loading users...
+                      </td>
+                    </tr>
+                  ) : users.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        No users matching criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.875rem' }}>
+                            {u.fullName}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{u.email}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor:
+                                u.audience === 'FACULTY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                              color: u.audience === 'FACULTY' ? '#c084fc' : '#93c5fd',
+                            }}
+                          >
+                            {u.audience || 'STUDENT'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: u.isSuspended
+                                ? 'rgba(239, 68, 68, 0.2)'
+                                : u.verificationStatus === 'VERIFIED'
+                                  ? 'rgba(34, 197, 94, 0.2)'
+                                  : 'rgba(234, 179, 8, 0.2)',
+                              color: u.isSuspended
+                                ? '#f87171'
+                                : u.verificationStatus === 'VERIFIED'
+                                  ? '#4ade80'
+                                  : '#facc15',
+                            }}
+                          >
+                            {u.isSuspended ? 'SUSPENDED' : u.verificationStatus}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {u.role}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {u.reportsCount || 0}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {new Date(u.createdAt).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setNoteModalOpen(true);
+                              }}
+                            >
+                              Note
+                            </Button>
+                            {u.isSuspended ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReinstateUser(u)}
+                              >
+                                Reinstate
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(u);
+                                  setSuspendModalOpen(true);
+                                }}
+                              >
+                                Suspend
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: RIDES OVERSIGHT ─────────────────────────────────────────── */}
+        {activeTab === 'rides' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Platform Rides Oversight
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Monitor published commutes, driver vehicles, passenger bookings, and intervene when required.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchRides}
+                disabled={loadingRides}
+                leftIcon={<RefreshCw size={14} className={loadingRides ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Search by origin, destination, or driver..."
+                  value={rideSearchTerm}
+                  onChange={(e) => setRideSearchTerm(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px 10px 36px',
+                    borderRadius: '8px',
+                    border: '1px solid #334155',
+                    backgroundColor: '#1e293b',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                  }}
+                />
+                <Search
+                  size={16}
+                  style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }}
+                />
+              </div>
+
+              <select
+                value={rideStatusFilter}
+                onChange={(e) => setRideStatusFilter(e.target.value)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              >
+                <option value="ALL">All Ride Statuses</option>
+                <option value="SCHEDULED">Scheduled</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+
+            {/* Rides Table */}
+            <div
+              style={{
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                border: '1px solid #334155',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ROUTE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>DEPARTURE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>DRIVER</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>VEHICLE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>SEATS</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>STATUS</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingRides ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                        Loading rides...
+                      </td>
+                    </tr>
+                  ) : rides.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        No platform rides found.
+                      </td>
+                    </tr>
+                  ) : (
+                    rides.map((r) => (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.85rem' }}>
+                            {r.origin} &rarr; {r.destination}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            {r.bookingsCount} booking(s) • {r.reportsCount} report(s)
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {new Date(r.departureTime).toLocaleString('en-IN', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.825rem' }}>
+                            {r.driver.fullName}
+                          </div>
+                          <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{r.driver.email}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.registrationNumber})
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {r.availableSeats} / {r.totalSeats}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor:
+                                r.status === 'SCHEDULED'
+                                  ? 'rgba(59, 130, 246, 0.2)'
+                                  : r.status === 'COMPLETED'
+                                    ? 'rgba(34, 197, 94, 0.2)'
+                                    : 'rgba(239, 68, 68, 0.2)',
+                              color:
+                                r.status === 'SCHEDULED'
+                                  ? '#93c5fd'
+                                  : r.status === 'COMPLETED'
+                                    ? '#86efac'
+                                    : '#fca5a5',
+                            }}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {r.status === 'SCHEDULED' && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              id={`btn-cancel-ride-${r.id}`}
+                              onClick={() => {
+                                setSelectedRide(r);
+                                setCancelRideModalOpen(true);
+                              }}
+                            >
+                              Cancel Ride
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 4: BOOKINGS OVERSIGHT ──────────────────────────────────────── */}
+        {activeTab === 'bookings' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Bookings Oversight
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Cross-cohort passenger bookings, requested seats, and boarding verification states.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchBookings}
+                disabled={loadingBookings}
+                leftIcon={<RefreshCw size={14} className={loadingBookings ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Search by passenger or driver name..."
+                  value={bookingSearchTerm}
+                  onChange={(e) => setBookingSearchTerm(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px 10px 36px',
+                    borderRadius: '8px',
+                    border: '1px solid #334155',
+                    backgroundColor: '#1e293b',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                  }}
+                />
+                <Search
+                  size={16}
+                  style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }}
+                />
+              </div>
+
+              <select
+                value={bookingStatusFilter}
+                onChange={(e) => setBookingStatusFilter(e.target.value)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                }}
+              >
+                <option value="ALL">All Booking Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            {/* Bookings Table */}
+            <div
+              style={{
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                border: '1px solid #334155',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>PASSENGER</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>DRIVER</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ROUTE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>SEATS</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>BOOKING</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>BOARDING</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingBookings ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                        Loading bookings...
+                      </td>
+                    </tr>
+                  ) : bookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        No bookings matching criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    bookings.map((b) => (
+                      <tr key={b.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.85rem' }}>
+                            {b.passenger.fullName}
+                          </div>
+                          <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{b.passenger.email}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.85rem' }}>
+                            {b.driver.fullName}
+                          </div>
+                          <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{b.driver.email}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontSize: '0.825rem', color: '#cbd5e1' }}>
+                            {b.ride.origin} &rarr; {b.ride.destination}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.825rem', color: '#cbd5e1' }}>
+                          {b.requestedSeats} seat(s)
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor:
+                                b.status === 'CONFIRMED'
+                                  ? 'rgba(34, 197, 94, 0.2)'
+                                  : b.status === 'PENDING'
+                                    ? 'rgba(234, 179, 8, 0.2)'
+                                    : 'rgba(239, 68, 68, 0.2)',
+                              color:
+                                b.status === 'CONFIRMED'
+                                  ? '#4ade80'
+                                  : b.status === 'PENDING'
+                                    ? '#facc15'
+                                    : '#f87171',
+                            }}
+                          >
+                            {b.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {b.boardingStatus}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 5: TRUST & SAFETY (REPORTS) ───────────────────────────────── */}
+        {activeTab === 'safety' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Trust &amp; Safety Incident Triage
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Investigate, review evidence, assign moderators, and resolve filed safety reports.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchReports}
+                disabled={loadingReports}
+                leftIcon={<RefreshCw size={14} className={loadingReports ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#94a3b8' }}>
+                <span>Report Status:</span>
+                <select
+                  value={reportStatusFilter}
+                  onChange={(e) => setReportStatusFilter(e.target.value)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #334155',
+                    backgroundColor: '#1e293b',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    outline: 'none',
                   }}
                 >
-                  {st}
-                </button>
-              ))}
-            </div>
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="INVESTIGATING">Investigating</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="DISMISSED">Dismissed</option>
+                </select>
+              </label>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Category:
-              </span>
               <select
                 value={reportCategoryFilter}
                 onChange={(e) => setReportCategoryFilter(e.target.value)}
                 style={{
-                  padding: '6px 12px',
+                  padding: '10px 14px',
                   borderRadius: '8px',
-                  border: '1px solid var(--border-light)',
-                  backgroundColor: '#ffffff',
+                  border: '1px solid #334155',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
                   fontSize: '0.85rem',
-                  color: 'var(--text-primary)',
-                  fontWeight: 500,
+                  outline: 'none',
                 }}
               >
                 <option value="ALL">All Categories</option>
@@ -627,536 +1779,1067 @@ export const AdminDashboardPage: React.FC = () => {
                 <option value="NO_SHOW">No Show</option>
                 <option value="FRAUD">Fraud</option>
                 <option value="FARE_DISPUTE">Fare Dispute</option>
-                <option value="SPAM">Spam</option>
                 <option value="INAPPROPRIATE_BEHAVIOR">Inappropriate Behavior</option>
+                <option value="SPAM">Spam</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
-          </div>
 
-          {loadingReports ? (
-            <div style={{ textAlign: 'center', padding: '60px 0' }}>
-              <Loader2 size={32} className="animate-spin" color="var(--color-brand-600)" />
-              <p style={{ color: 'var(--text-muted)', marginTop: '12px', fontSize: '0.9rem' }}>
-                Loading incident reports...
-              </p>
-            </div>
-          ) : reports.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '60px 20px',
-                backgroundColor: '#ffffff',
-                borderRadius: '16px',
-                border: '1px solid var(--border-light)',
-              }}
-            >
-              <ShieldAlert size={44} color="#9ca3af" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-                No incident reports found
-              </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
-                No safety or policy complaints match the current filter.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {reports.map((r) => (
+            {/* Reports List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {loadingReports ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                  Loading incident reports queue...
+                </div>
+              ) : reports.length === 0 ? (
                 <div
-                  key={r.id}
                   style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '14px',
-                    border: '1px solid var(--border-light)',
-                    padding: '22px 24px',
+                    padding: '40px',
+                    textAlign: 'center',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                    color: '#94a3b8',
                   }}
                 >
+                  No open incident reports. Platform Trust &amp; Safety queue is clear.
+                </div>
+              ) : (
+                reports.map((r) => (
                   <div
+                    key={r.id}
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '14px',
-                      flexWrap: 'wrap',
-                      gap: '12px',
+                      padding: '18px 20px',
+                      backgroundColor: '#1e293b',
+                      borderRadius: '12px',
+                      border: '1px solid #334155',
                     }}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 800,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            backgroundColor:
-                              r.category === 'SAFETY_CONCERN' || r.category === 'HARASSMENT'
-                                ? '#fee2e2'
-                                : '#fef3c7',
-                            color:
-                              r.category === 'SAFETY_CONCERN' || r.category === 'HARASSMENT'
-                                ? '#991b1b'
-                                : '#854d0e',
-                          }}
-                        >
-                          {r.category.replace('_', ' ')}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            backgroundColor:
-                              r.status === 'RESOLVED'
-                                ? '#dcfce7'
-                                : r.status === 'INVESTIGATING'
-                                ? '#e0f2fe'
-                                : r.status === 'DISMISSED'
-                                ? '#f3f4f6'
-                                : '#fef3c7',
-                            color:
-                              r.status === 'RESOLVED'
-                                ? '#166534'
-                                : r.status === 'INVESTIGATING'
-                                ? '#0369a1'
-                                : r.status === 'DISMISSED'
-                                ? '#4b5563'
-                                : '#854d0e',
-                          }}
-                        >
-                          {r.status}
-                        </span>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          Filed: {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(r.createdAt))}
-                        </span>
-                      </div>
-
-                      <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                        Reported User: <strong>{r.reportedUser?.fullName || 'N/A'}</strong> ({r.reportedUser?.email})
-                        {r.reportedUser?.isSuspended && (
-                          <span style={{ marginLeft: '8px', fontSize: '0.75rem', color: '#dc2626', fontWeight: 700 }}>
-                            [SUSPENDED]
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
-                        Reporter: <strong>{r.reporter?.fullName}</strong> ({r.reporter?.email})
-                      </div>
-                    </div>
-
-                    {/* Report Resolution Controls */}
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {r.status === 'PENDING' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleInvestigateReport(r.id)}
-                        >
-                          Investigate
-                        </Button>
-                      )}
-                      {(r.status === 'PENDING' || r.status === 'INVESTIGATING') && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => {
-                              setSelectedReport(r);
-                              setResolveStatus('RESOLVED');
-                              setResolveModalOpen(true);
-                            }}
-                          >
-                            Resolve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedReport(r);
-                              setResolveStatus('DISMISSED');
-                              setResolveModalOpen(true);
-                            }}
-                          >
-                            Dismiss
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Description Box */}
-                  <div
-                    style={{
-                      padding: '12px 16px',
-                      backgroundColor: 'var(--bg-muted, #f8fafc)',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-light)',
-                      fontSize: '0.875rem',
-                      color: 'var(--text-primary)',
-                      lineHeight: 1.5,
-                      marginBottom: '12px',
-                    }}
-                  >
-                    <strong>Allegation:</strong> {r.description}
-                  </div>
-
-                  {/* Context snippet if ride or message */}
-                  {r.ride && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Car size={14} /> Linked Ride: {r.ride.origin} → {r.ride.destination} (Departed: {new Intl.DateTimeFormat('en-IN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(r.ride.departureTime))})
-                    </div>
-                  )}
-                  {r.message && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                      <MessageSquare size={14} /> Message snippet: "{r.message.content}"
-                    </div>
-                  )}
-                  {r.resolutionNotes && (
                     <div
                       style={{
-                        marginTop: '10px',
-                        padding: '8px 12px',
-                        backgroundColor: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        color: '#166534',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '10px',
                       }}
                     >
-                      <strong>Resolution Notes:</strong> {r.resolutionNotes}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* =====================================================================
-          TAB 3: USER MANAGEMENT & SUSPENSION
-          ===================================================================== */}
-      {activeTab === 'users' && (
-        <div>
-          {/* Search & Filter Bar */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center',
-              marginBottom: '20px',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
-              <input
-                type="text"
-                value={userSearchTerm}
-                onChange={(e) => setUserSearchTerm(e.target.value)}
-                placeholder="Search user by name or email..."
-                className="input"
-                style={{ width: '100%', paddingLeft: '36px' }}
-              />
-              <Search
-                size={18}
-                color="var(--text-muted)"
-                style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
-              />
-            </div>
-
-            <select
-              value={userStatusFilter}
-              onChange={(e) => setUserStatusFilter(e.target.value)}
-              className="input"
-              style={{ width: 'auto', minWidth: '150px' }}
-            >
-              <option value="ALL">All Accounts</option>
-              <option value="ACTIVE">Active Only</option>
-              <option value="SUSPENDED">Suspended Only</option>
-            </select>
-          </div>
-
-          {loadingUsers ? (
-            <div style={{ textAlign: 'center', padding: '60px 0' }}>
-              <Loader2 size={32} className="animate-spin" color="var(--color-brand-600)" />
-              <p style={{ color: 'var(--text-muted)', marginTop: '12px', fontSize: '0.9rem' }}>
-                Searching campus directory...
-              </p>
-            </div>
-          ) : users.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '60px 20px',
-                backgroundColor: '#ffffff',
-                borderRadius: '16px',
-                border: '1px solid var(--border-light)',
-              }}
-            >
-              <User size={44} color="#9ca3af" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
-                No users found
-              </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
-                Try adjusting your search criteria.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {users.map((u) => (
-                <div
-                  key={u.id}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '14px',
-                    border: '1px solid var(--border-light)',
-                    padding: '18px 22px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '16px',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                        {u.fullName}
-                      </h4>
-                      <span
-                        style={{
-                          fontSize: '0.725rem',
-                          fontWeight: 700,
-                          padding: '2px 7px',
-                          borderRadius: '4px',
-                          backgroundColor: u.role === 'ADMIN' ? '#fef3c7' : '#f1f5f9',
-                          color: u.role === 'ADMIN' ? '#b45309' : '#475569',
-                        }}
-                      >
-                        {u.role}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.725rem',
-                          fontWeight: 700,
-                          padding: '2px 7px',
-                          borderRadius: '4px',
-                          backgroundColor: u.isSuspended ? '#fee2e2' : '#dcfce7',
-                          color: u.isSuspended ? '#991b1b' : '#166534',
-                        }}
-                      >
-                        {u.isSuspended ? 'SUSPENDED' : 'ACTIVE'}
-                      </span>
-                      {u.reportsCount && u.reportsCount > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span
                           style={{
                             fontSize: '0.725rem',
                             fontWeight: 700,
-                            padding: '2px 7px',
+                            padding: '3px 8px',
                             borderRadius: '4px',
-                            backgroundColor: '#fee2e2',
-                            color: '#991b1b',
+                            backgroundColor:
+                              r.category === 'SAFETY_CONCERN' || r.category === 'HARASSMENT'
+                                ? 'rgba(239, 68, 68, 0.2)'
+                                : 'rgba(234, 179, 8, 0.2)',
+                            color:
+                              r.category === 'SAFETY_CONCERN' || r.category === 'HARASSMENT'
+                                ? '#f87171'
+                                : '#facc15',
                           }}
                         >
-                          {u.reportsCount} {u.reportsCount === 1 ? 'Report' : 'Reports'}
+                          {r.category.replace(/_/g, ' ')}
                         </span>
-                      ) : null}
-                    </div>
-
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      {u.email} {u.audience ? `• ${u.audience}` : ''} • Verification: {u.verificationStatus}
-                    </div>
-
-                    {u.isSuspended && u.suspensionReason && (
-                      <div style={{ fontSize: '0.8rem', color: '#b91c1c', marginTop: '4px' }}>
-                        <strong>Reason:</strong> {u.suspensionReason}
+                        <span
+                          style={{
+                            fontSize: '0.725rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            backgroundColor:
+                              r.status === 'PENDING'
+                                ? 'rgba(239, 68, 68, 0.15)'
+                                : r.status === 'INVESTIGATING'
+                                  ? 'rgba(59, 130, 246, 0.15)'
+                                  : 'rgba(34, 197, 94, 0.15)',
+                            color:
+                              r.status === 'PENDING'
+                                ? '#fca5a5'
+                                : r.status === 'INVESTIGATING'
+                                  ? '#93c5fd'
+                                  : '#86efac',
+                          }}
+                        >
+                          {r.status}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {new Date(r.createdAt).toLocaleString()}
+                      </span>
+                    </div>
 
-                  {/* Suspension & Actions */}
-                  <div>
-                    {u.id !== user?.id && (
-                      <>
-                        {u.isSuspended ? (
+                    <p style={{ fontSize: '0.9rem', color: '#e2e8f0', marginBottom: '12px', lineHeight: '1.5' }}>
+                      {r.description}
+                    </p>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '0.75rem',
+                        color: '#94a3b8',
+                        paddingTop: '10px',
+                        borderTop: '1px solid #334155',
+                      }}
+                    >
+                      <div>
+                        Reporter: <strong style={{ color: '#ffffff' }}>{r.reporter?.fullName}</strong> ({r.reporter?.email})
+                        {r.reportedUser && (
+                          <span style={{ marginLeft: '12px' }}>
+                            Reported:{' '}
+                            <strong style={{ color: '#f87171' }}>{r.reportedUser.fullName}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {r.status === 'PENDING' && (
                           <Button
+                            variant="outline"
                             size="sm"
-                            variant="primary"
-                            onClick={() => handleReinstate(u)}
+                            onClick={() => handleInvestigateReport(r.id)}
                           >
-                            Reinstate Account
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => {
-                              setSelectedUser(u);
-                              setSuspendModalOpen(true);
-                            }}
-                          >
-                            Suspend Account
+                            Investigate
                           </Button>
                         )}
-                      </>
-                    )}
+                        {(r.status === 'PENDING' || r.status === 'INVESTIGATING') && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedReport(r);
+                              setResolveModalOpen(true);
+                            }}
+                          >
+                            Resolve / Dismiss
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 6: AUDIT TRAIL ─────────────────────────────────────────────── */}
+        {activeTab === 'audit' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Durable Activity &amp; Audit Logs
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Append-only immutable record of administrative actions, suspensions, and privilege changes.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Filter by action or details..."
+                  value={auditActionFilter}
+                  onChange={(e) => setAuditActionFilter(e.target.value)}
+                  style={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    color: '#f8fafc',
+                    fontSize: '0.85rem',
+                    width: '240px',
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchAuditLogs}
+                  disabled={loadingAudit}
+                  leftIcon={<RefreshCw size={14} className={loadingAudit ? 'animate-spin' : ''} />}
+                >
+                  Filter / Refresh
+                </Button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                border: '1px solid #334155',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>TIMESTAMP</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ACTION</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ACTOR</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>TARGET</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>CHANGES</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingAudit ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                        Loading audit logs...
+                      </td>
+                    </tr>
+                  ) : auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        No audit records recorded.
+                      </td>
+                    </tr>
+                  ) : (
+                    auditLogs.map((l) => (
+                      <tr key={l.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {new Date(l.createdAt).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.725rem',
+                              fontWeight: 700,
+                              color: '#60a5fa',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {l.action}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {l.actorRole || 'SYSTEM'}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                          {l.targetType}:{l.targetId?.slice(0, 8)}...
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                          <pre
+                            style={{
+                              margin: 0,
+                              fontFamily: 'monospace',
+                              maxWidth: '300px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {JSON.stringify(l.changes)}
+                          </pre>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 7: OPERATIONAL ANALYTICS ─────────────────────────────────── */}
+        {activeTab === 'analytics' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Operational Analytics
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Cohort distribution, booking conversion rate, and 30-day publishing trends.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchAnalytics}
+                disabled={loadingAnalytics}
+                leftIcon={<RefreshCw size={14} className={loadingAnalytics ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {analytics ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div
+                  style={{
+                    padding: '24px',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                  }}
+                >
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '8px' }}>
+                    Campus Cohort Breakdown
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '16px' }}>
+                    Enforced boundary between student and faculty carpooling pools.
+                  </p>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <div style={{ flex: 1, padding: '16px', backgroundColor: '#0f172a', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Student Pool</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#60a5fa' }}>
+                        {analytics.cohortDistribution.students}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, padding: '16px', backgroundColor: '#0f172a', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Faculty Pool</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#c084fc' }}>
+                        {analytics.cohortDistribution.faculty}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: '24px',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                  }}
+                >
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '8px' }}>
+                    Booking Conversion Rate
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '16px' }}>
+                    Percentage of seat reservation requests approved and confirmed by drivers.
+                  </p>
+                  <div
+                    style={{
+                      fontSize: '2.5rem',
+                      fontWeight: 700,
+                      color: '#4ade80',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    {analytics.bookingConversionRate}%
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    Based on confirmed versus total requested bookings across both cohorts.
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* ── TAB 8: SYSTEM HEALTH ─────────────────────────────────────────── */}
+        {activeTab === 'health' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Platform System Health
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Live diagnostics across database, email transport, storage, and WebSockets.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchHealth}
+                disabled={loadingHealth}
+                leftIcon={<RefreshCw size={14} className={loadingHealth ? 'animate-spin' : ''} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {health ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div
+                  style={{
+                    padding: '18px 20px',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>OVERALL PLATFORM STATUS</div>
+                    <div
+                      style={{
+                        fontSize: '1.25rem',
+                        fontWeight: 700,
+                        color: health.overallStatus === 'HEALTHY' ? '#4ade80' : '#facc15',
+                      }}
+                    >
+                      {health.overallStatus}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>System Uptime</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff' }}>
+                      {Math.floor(health.uptimeSeconds / 60)} minutes
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  {Object.entries(health.components).map(([key, comp]) => (
+                    <div
+                      key={key}
+                      style={{
+                        padding: '16px 18px',
+                        backgroundColor: '#1e293b',
+                        borderRadius: '12px',
+                        border: '1px solid #334155',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <strong style={{ textTransform: 'capitalize', color: '#ffffff' }}>
+                          {key.replace(/([A-Z])/g, ' $1')}
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor:
+                              comp.status === 'HEALTHY'
+                                ? 'rgba(34, 197, 94, 0.2)'
+                                : 'rgba(234, 179, 8, 0.2)',
+                            color: comp.status === 'HEALTHY' ? '#4ade80' : '#facc15',
+                          }}
+                        >
+                          {comp.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                        {comp.message}
+                      </div>
+                      {comp.latencyMs !== undefined && (
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          Latency: {comp.latencyMs}ms
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* ── TAB 9: ADMINISTRATOR TEAM (SUPER_ADMIN ONLY) ────────────────── */}
+        {activeTab === 'team' && isSuperAdmin && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                  Administrator Team &amp; Invitations
+                </h1>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Provision single-use invitations, review active staff roles, and manage revocations.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setInviteModalOpen(true);
+                    setGeneratedInviteLink(null);
+                  }}
+                  leftIcon={<UserPlus size={14} />}
+                  id="btn-invite-admin"
+                >
+                  Invite Administrator
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchTeam}
+                  disabled={loadingTeam}
+                  leftIcon={<RefreshCw size={14} className={loadingTeam ? 'animate-spin' : ''} />}
+                >
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {/* Administrators Table */}
+            <div
+              style={{
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                border: '1px solid #334155',
+                overflow: 'hidden',
+                marginBottom: '28px',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>STAFF MEMBER</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ROLE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>LAST ACTIVE</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>CREATED</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {administrators.map((a) => (
+                    <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.85rem' }}>
+                          {a.fullName}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{a.email}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor:
+                              a.role === 'SUPER_ADMIN'
+                                ? 'rgba(251, 191, 36, 0.2)'
+                                : a.role === 'ADMIN'
+                                  ? 'rgba(59, 130, 246, 0.2)'
+                                  : 'rgba(52, 211, 153, 0.2)',
+                            color:
+                              a.role === 'SUPER_ADMIN'
+                                ? '#fbbf24'
+                                : a.role === 'ADMIN'
+                                  ? '#60a5fa'
+                                  : '#34d399',
+                          }}
+                        >
+                          {a.role}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                        {a.lastActiveAt ? new Date(a.lastActiveAt).toLocaleString() : 'Never'}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                        {new Date(a.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {a.id !== user?.id && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleRevokeAdmin(a)}
+                          >
+                            Revoke Access
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pending Invitations Table */}
+            {pendingInvitations.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '12px' }}>
+                  Pending Single-Use Invitations ({pendingInvitations.length})
+                </h3>
+                <div
+                  style={{
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
+                        <th style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>INVITED EMAIL</th>
+                        <th style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ASSIGNED ROLE</th>
+                        <th style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>EXPIRES IN</th>
+                        <th style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>INVITED BY</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingInvitations.map((inv) => (
+                        <tr key={inv.id} style={{ borderBottom: '1px solid #334155' }}>
+                          <td style={{ padding: '10px 16px', fontSize: '0.85rem', color: '#ffffff' }}>
+                            {inv.email}
+                          </td>
+                          <td style={{ padding: '10px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                            {inv.role}
+                          </td>
+                          <td style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#facc15' }}>
+                            {new Date(inv.expiresAt).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            {inv.inviter?.fullName}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 10: SETTINGS & POLICIES ───────────────────────────────────── */}
+        {activeTab === 'settings' && isSuperAdmin && (
+          <div>
+            <div style={{ marginBottom: '20px' }}>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
+                Platform Security Policies &amp; Settings
+              </h1>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                Enforced authentication parameters and Trust &amp; Safety configurations.
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                maxWidth: '680px',
+              }}
+            >
+              {[
+                {
+                  title: 'Two-Factor Authentication (MFA)',
+                  status: 'Enforced',
+                  desc: 'Mandatory 6-digit cryptographic challenge required for all administrative accounts.',
+                },
+                {
+                  title: 'Administrative Session Expiry',
+                  status: 'Active (7 Days)',
+                  desc: 'Tokens expire after 7 days and can be immediately revoked by demoting or suspending an administrator.',
+                },
+                {
+                  title: 'Single-Use Invitations',
+                  status: 'Active (48h TTL)',
+                  desc: 'All admin invitations expire in 48 hours and cannot be accepted more than once.',
+                },
+                {
+                  title: 'Audit Logging Invariance',
+                  status: 'Append-Only',
+                  desc: 'Audit logs cannot be updated or deleted via application APIs.',
+                },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '18px 20px',
+                    backgroundColor: '#1e293b',
+                    borderRadius: '12px',
+                    border: '1px solid #334155',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.9rem' }}>
+                      {item.title}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                      {item.desc}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.725rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                      color: '#4ade80',
+                    }}
+                  >
+                    {item.status}
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </main>
 
-      {/* =====================================================================
-          MODAL: Verification Review
-          ===================================================================== */}
-      {selectedVerif && (
-        <Modal
-          isOpen={reviewModalOpen}
-          onClose={() => setReviewModalOpen(false)}
-          title={`${reviewAction === 'APPROVED' ? 'Approve' : 'Reject'} Verification Request`}
-          maxWidth="480px"
-        >
-          <form onSubmit={handleReviewSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-              You are about to <strong>{reviewAction.toLowerCase()}</strong> the campus verification for{' '}
-              <strong>{selectedVerif.user?.fullName}</strong> ({selectedVerif.institutionalEmail}) as a{' '}
-              <strong>{selectedVerif.requestedAudience}</strong>.
-            </p>
+      {/* ── Suspend User Modal ──────────────────────────────────────────────── */}
+      <Modal
+        isOpen={suspendModalOpen}
+        onClose={() => setSuspendModalOpen(false)}
+        title="Suspend User Account"
+      >
+        <div style={{ padding: '8px 0' }}>
+          <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px' }}>
+            Suspending <strong>{selectedUser?.fullName}</strong> ({selectedUser?.email}) will immediately
+            lock their ability to publish rides, book seats, or send messages.
+          </p>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Review Notes (Optional feedback recorded in audit log)
-              </label>
-              <textarea
-                value={reviewNotes}
-                onChange={(e) => setReviewNotes(e.target.value)}
-                placeholder="e.g. Campus ID matches registrar records..."
-                rows={3}
-                className="input"
-                style={{ width: '100%', resize: 'vertical' }}
-              />
-            </div>
+          <label
+            htmlFor="suspension-reason"
+            style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}
+          >
+            Mandatory Suspension Justification (min 5 chars)
+          </label>
+          <textarea
+            id="suspension-reason"
+            rows={3}
+            value={suspensionReason}
+            onChange={(e) => setSuspensionReason(e.target.value)}
+            placeholder="e.g. Repeated safety complaints and non-compliance with Trust Charter."
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              marginBottom: '16px',
+            }}
+          />
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <Button type="button" variant="ghost" onClick={() => setReviewModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant={reviewAction === 'APPROVED' ? 'primary' : 'danger'}
-                disabled={submittingReview}
-              >
-                {submittingReview ? <Loader2 size={16} className="animate-spin" /> : `Confirm ${reviewAction}`}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* =====================================================================
-          MODAL: Resolve Report
-          ===================================================================== */}
-      {selectedReport && (
-        <Modal
-          isOpen={resolveModalOpen}
-          onClose={() => setResolveModalOpen(false)}
-          title={`${resolveStatus === 'RESOLVED' ? 'Resolve' : 'Dismiss'} Safety Report`}
-          maxWidth="500px"
-        >
-          <form onSubmit={handleResolveSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-              Record administrative resolution notes for the <strong>{selectedReport.category}</strong> report filed against{' '}
-              <strong>{selectedReport.reportedUser?.fullName || 'the user'}</strong>.
-            </p>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Resolution Notes (Required for audit, min 5 characters)
-              </label>
-              <textarea
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-                placeholder="e.g. Investigated chat logs, warned the member regarding fare guidelines, resolved."
-                rows={4}
-                className="input"
-                style={{ width: '100%', resize: 'vertical' }}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <Button type="button" variant="ghost" onClick={() => setResolveModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant={resolveStatus === 'RESOLVED' ? 'primary' : 'ghost'}
-                disabled={submittingResolve || resolutionNotes.trim().length < 5}
-              >
-                {submittingResolve ? <Loader2 size={16} className="animate-spin" /> : `Confirm ${resolveStatus}`}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* =====================================================================
-          MODAL: Suspend Account
-          ===================================================================== */}
-      {selectedUser && (
-        <Modal
-          isOpen={suspendModalOpen}
-          onClose={() => setSuspendModalOpen(false)}
-          title={`Suspend Account: ${selectedUser.fullName}`}
-          maxWidth="480px"
-        >
-          <form onSubmit={handleSuspendSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div
-              style={{
-                padding: '12px 16px',
-                backgroundColor: '#fee2e2',
-                borderRadius: '8px',
-                border: '1px solid #fecaca',
-                fontSize: '0.85rem',
-                color: '#991b1b',
-              }}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button variant="outline" size="md" onClick={() => setSuspendModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              id="confirm-suspend-btn"
+              onClick={handleSuspendUser}
+              disabled={submittingSuspension || suspensionReason.trim().length < 5}
+              leftIcon={submittingSuspension ? <Loader2 size={16} className="animate-spin" /> : undefined}
             >
-              <strong>Immediate Suspension:</strong> The user will be immediately locked out of ride publication, seat booking, messaging, and alert notifications. Existing active tokens will be rejected.
-            </div>
+              Confirm Suspension
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
+      {/* ── Cancel Ride Modal ──────────────────────────────────────────────── */}
+      <Modal
+        isOpen={cancelRideModalOpen}
+        onClose={() => setCancelRideModalOpen(false)}
+        title="Administratively Cancel Ride"
+      >
+        <div style={{ padding: '8px 0' }}>
+          <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px' }}>
+            Cancelling this ride from <strong>{selectedRide?.origin}</strong> to{' '}
+            <strong>{selectedRide?.destination}</strong> will cancel all active bookings and notify the driver
+            and all booked passengers.
+          </p>
+
+          <label
+            htmlFor="cancel-ride-reason"
+            style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}
+          >
+            Mandatory Cancellation Reason (min 5 chars)
+          </label>
+          <textarea
+            id="cancel-ride-reason"
+            rows={3}
+            value={cancelRideReason}
+            onChange={(e) => setCancelRideReason(e.target.value)}
+            placeholder="e.g. Unregistered vehicle reported or driver unavailable."
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              marginBottom: '16px',
+            }}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button variant="outline" size="md" onClick={() => setCancelRideModalOpen(false)}>
+              Back
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              id="confirm-cancel-ride-btn"
+              onClick={handleCancelRide}
+              disabled={submittingCancelRide || cancelRideReason.trim().length < 5}
+              leftIcon={submittingCancelRide ? <Loader2 size={16} className="animate-spin" /> : undefined}
+            >
+              Confirm Cancellation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Resolve Report Modal ────────────────────────────────────────────── */}
+      <Modal
+        isOpen={resolveModalOpen}
+        onClose={() => setResolveModalOpen(false)}
+        title="Finalize Incident Report"
+      >
+        <div style={{ padding: '8px 0' }}>
+          <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px' }}>
+            Provide conclusive investigation notes before resolving or dismissing this report.
+          </p>
+
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+            <Button
+              variant={resolveStatus === 'RESOLVED' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setResolveStatus('RESOLVED')}
+            >
+              Action Taken (RESOLVED)
+            </Button>
+            <Button
+              variant={resolveStatus === 'DISMISSED' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setResolveStatus('DISMISSED')}
+            >
+              Invalid / Non-actionable (DISMISSED)
+            </Button>
+          </div>
+
+          <label
+            htmlFor="resolution-notes"
+            style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}
+          >
+            Resolution Notes (min 5 chars)
+          </label>
+          <textarea
+            id="resolution-notes"
+            rows={3}
+            value={resolutionNotes}
+            onChange={(e) => setResolutionNotes(e.target.value)}
+            placeholder="e.g. Spoke to both participants. Formal warning issued to reported user."
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              marginBottom: '16px',
+            }}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button variant="outline" size="md" onClick={() => setResolveModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleResolveReport}
+              disabled={submittingResolve || resolutionNotes.trim().length < 5}
+              leftIcon={submittingResolve ? <Loader2 size={16} className="animate-spin" /> : undefined}
+            >
+              Submit Resolution
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Invite Administrator Modal (SUPER_ADMIN) ───────────────────────── */}
+      <Modal
+        isOpen={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        title="Invite Platform Administrator"
+      >
+        <form onSubmit={handleInviteAdmin} style={{ padding: '8px 0' }}>
+          {generatedInviteLink ? (
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Reason for Suspension (Required, min 5 characters)
-              </label>
-              <textarea
-                value={suspensionReason}
-                onChange={(e) => setSuspensionReason(e.target.value)}
-                placeholder="e.g. Multiple confirmed reckless driving reports, violation of student carpool charter."
-                rows={3}
-                className="input"
-                style={{ width: '100%', resize: 'vertical' }}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <Button type="button" variant="ghost" onClick={() => setSuspendModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="danger"
-                disabled={submittingSuspension || suspensionReason.trim().length < 5}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid #22c55e',
+                  borderRadius: '8px',
+                  color: '#15803d',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px',
+                }}
               >
-                {submittingSuspension ? <Loader2 size={16} className="animate-spin" /> : 'Confirm Suspension'}
-              </Button>
+                Single-use invitation link created! Copy and securely share it with the administrator:
+              </div>
+              <input
+                type="text"
+                readOnly
+                value={generatedInviteLink}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#f8fafc',
+                  fontSize: '0.8rem',
+                  fontFamily: 'monospace',
+                  marginBottom: '16px',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button variant="primary" size="md" onClick={() => setInviteModalOpen(false)}>
+                  Done
+                </Button>
+              </div>
             </div>
-          </form>
-        </Modal>
-      )}
+          ) : (
+            <div>
+              <div style={{ marginBottom: '14px' }}>
+                <label
+                  htmlFor="invite-admin-email"
+                  style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}
+                >
+                  Administrator Institutional Email
+                </label>
+                <input
+                  id="invite-admin-email"
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="prof.ramanathan@vit.ac.in"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '18px' }}>
+                <label
+                  htmlFor="invite-admin-role"
+                  style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}
+                >
+                  Assigned Administrative Role
+                </label>
+                <select
+                  id="invite-admin-role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="MODERATOR">MODERATOR (Review verifications, reports, warnings)</option>
+                  <option value="ADMIN">ADMIN (Full operations, suspensions, ride restrictions)</option>
+                  <option value="SUPER_ADMIN">SUPER_ADMIN (Full governance, invitations, team management)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <Button variant="outline" size="md" onClick={() => setInviteModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  disabled={submittingInvite || !inviteEmail.trim()}
+                  leftIcon={submittingInvite ? <Loader2 size={16} className="animate-spin" /> : undefined}
+                >
+                  Generate Invitation
+                </Button>
+              </div>
+            </div>
+          )}
+        </form>
+      </Modal>
+
+      {/* ── Internal Moderation Note Modal ──────────────────────────────────── */}
+      <Modal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        title="Add Internal Moderation Note"
+      >
+        <div style={{ padding: '8px 0' }}>
+          <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px' }}>
+            Internal notes are only visible to authorized administrators and moderators. They are never exposed
+            to students or faculty.
+          </p>
+
+          <textarea
+            rows={4}
+            value={moderationNoteText}
+            onChange={(e) => setModerationNoteText(e.target.value)}
+            placeholder="Document phone contact, warning context, or campus safety review notes..."
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              marginBottom: '16px',
+            }}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button variant="outline" size="md" onClick={() => setNoteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleAddModerationNote}
+              disabled={moderationNoteText.trim().length < 3}
+            >
+              Save Note
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

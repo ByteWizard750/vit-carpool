@@ -85,22 +85,35 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
           transition: 'all var(--transition-fast)',
         }}
       >
-        <div
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--brand-subtle, #eef3ff)',
-            color: 'var(--brand-blue, #2340b8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '12px',
-            fontWeight: 700,
-          }}
-        >
-          {initials}
-        </div>
+        {user.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt={user.fullName}
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--brand-subtle, #eef3ff)',
+              color: 'var(--brand-blue, #2340b8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            {initials}
+          </div>
+        )}
         <span
           style={{
             fontSize: '13px',
@@ -143,28 +156,61 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
               marginBottom: '4px',
             }}
           >
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                lineHeight: 1.2,
-              }}
-            >
-              {user.fullName}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.fullName}
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--brand-subtle, #eef3ff)',
+                    color: 'var(--brand-blue, #2340b8)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {initials}
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.2,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {user.fullName}
+                </div>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--text-secondary)',
+                    marginTop: '2px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {user.email}
+                </div>
+              </div>
             </div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                marginTop: '2px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {user.email}
-            </div>
+
             <div
               style={{
                 marginTop: '6px',

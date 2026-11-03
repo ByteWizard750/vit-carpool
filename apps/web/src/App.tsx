@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ScrollToTop } from './components/common/ScrollToTop';
 
 // Pages
 import { LandingPage } from './pages/LandingPage';
@@ -20,17 +21,20 @@ import { RideAlertsPage } from './pages/RideAlertsPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { SafetyPage } from './pages/SafetyPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { AdminLoginPage } from './pages/AdminLoginPage';
 import { RideTrackingPage } from './pages/RideTrackingPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route element={<AppLayout />}>
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/safety" element={<SafetyPage />} />
           <Route path="/rides" element={<RidesPage />} />

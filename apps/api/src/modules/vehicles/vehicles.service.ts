@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { Prisma, User, Vehicle } from '@vit-carpool/db';
 import {
   CreateVehicleDto,
@@ -20,6 +21,7 @@ export class VehiclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
+    private readonly uploads: UploadsService,
   ) {}
 
   /**
@@ -34,6 +36,7 @@ export class VehiclesService {
       color: vehicle.color,
       registrationNumber: vehicle.registrationNumber,
       capacity: vehicle.capacity,
+      imageUrl: vehicle.imageUrl ?? null,
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
     };
@@ -70,6 +73,7 @@ export class VehiclesService {
             color: dto.color.trim(),
             registrationNumber: normalizedRegNo,
             capacity: dto.capacity,
+            imageUrl: dto.imageUrl ? dto.imageUrl.trim() : null,
           },
         });
 
@@ -86,6 +90,7 @@ export class VehiclesService {
               color: vehicle.color,
               registrationNumber: vehicle.registrationNumber,
               capacity: vehicle.capacity,
+              imageUrl: vehicle.imageUrl,
             },
           },
           tx,
@@ -168,6 +173,7 @@ export class VehiclesService {
     if (dto.model !== undefined) dataToUpdate.model = dto.model.trim();
     if (dto.color !== undefined) dataToUpdate.color = dto.color.trim();
     if (dto.capacity !== undefined) dataToUpdate.capacity = dto.capacity;
+    if (dto.imageUrl !== undefined) dataToUpdate.imageUrl = dto.imageUrl ? dto.imageUrl.trim() : null;
 
     if (dto.registrationNumber !== undefined) {
       const normalizedRegNo = dto.registrationNumber.trim().toUpperCase().replace(/[\s-]/g, '');
@@ -284,5 +290,75 @@ export class VehiclesService {
       success: true,
       message: 'Vehicle successfully removed from your registered vehicles.',
     };
+  }
+
+  /**
+   * Upload and set vehicle image.
+   */
+  async updateVehicleImage(
+    user: User,
+    vehicleId: string,
+    file: Express.Multer.File,
+  ): Promise<VehicleResponseDto> {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, userId: user.id, deletedAt: null },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found or you do not have permission to modify it.');
+    }
+
+    const imageUrl = await this.uploads.saveImage('vehicles', file);
+
+    if (vehicle.imageUrl) {
+      await this.uploads.deleteImage(vehicle.imageUrl);
+    }
+
+    const updated = await this.prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: { imageUrl },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'VEHICLE_IMAGE_UPDATED',
+      targetType: 'VEHICLE',
+      targetId: vehicleId,
+      changes: { imageUrl },
+    });
+
+    return this.toDto(updated);
+  }
+
+  /**
+   * Remove vehicle image.
+   */
+  async deleteVehicleImage(user: User, vehicleId: string): Promise<VehicleResponseDto> {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, userId: user.id, deletedAt: null },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found or you do not have permission to modify it.');
+    }
+
+    if (vehicle.imageUrl) {
+      await this.uploads.deleteImage(vehicle.imageUrl);
+    }
+
+    const updated = await this.prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: { imageUrl: null },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'VEHICLE_IMAGE_REMOVED',
+      targetType: 'VEHICLE',
+      targetId: vehicleId,
+      changes: { imageUrl: null },
+    });
+
+    return this.toDto(updated);
   }
 }

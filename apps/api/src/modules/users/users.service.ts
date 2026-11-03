@@ -7,12 +7,17 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
 import { EmailClassifierService } from '../verification/email-classifier.service';
+import { UploadsService } from '../uploads/uploads.service';
 import {
   User,
   UserRole,
   VerificationStatus,
   VerificationMethod,
 } from '@vit-carpool/db';
+import {
+  UserProfileResponseDto,
+  UpdateUserProfileDto,
+} from '@vit-carpool/contracts';
 
 export interface CreateUserInput {
   authUserId: string;
@@ -29,6 +34,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly classifier: EmailClassifierService,
+    private readonly uploads: UploadsService,
   ) {}
 
   /**
@@ -181,5 +187,94 @@ export class UsersService {
 
       return updated;
     });
+  }
+
+  mapToUserProfileDto(user: User): UserProfileResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
+      avatarUrl: user.avatarUrl ?? null,
+      audience: user.audience,
+      verificationStatus: user.verificationStatus,
+      verificationMethod: user.verificationMethod,
+      verifiedAt: user.verifiedAt ? user.verifiedAt.toISOString() : null,
+      role: user.role,
+      isSuspended: user.isSuspended,
+      suspensionReason: user.suspensionReason,
+      suspendedAt: user.suspendedAt ? user.suspendedAt.toISOString() : null,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
+  }
+
+  async updateProfile(user: User, dto: UpdateUserProfileDto): Promise<UserProfileResponseDto> {
+    const dataToUpdate: any = {};
+    if (dto.fullName !== undefined) dataToUpdate.fullName = dto.fullName.trim();
+    if (dto.phoneNumber !== undefined) dataToUpdate.phoneNumber = dto.phoneNumber ? dto.phoneNumber.trim() : null;
+    if (dto.avatarUrl !== undefined) dataToUpdate.avatarUrl = dto.avatarUrl ? dto.avatarUrl.trim() : null;
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: dataToUpdate,
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'USER_PROFILE_UPDATED',
+      targetType: 'USER',
+      targetId: user.id,
+      changes: dto as any,
+    });
+
+    return this.mapToUserProfileDto(updated);
+  }
+
+  async updateAvatar(user: User, file: Express.Multer.File): Promise<UserProfileResponseDto> {
+    const avatarUrl = await this.uploads.saveImage('avatars', file);
+
+    if (user.avatarUrl) {
+      await this.uploads.deleteImage(user.avatarUrl);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { avatarUrl },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'USER_AVATAR_UPDATED',
+      targetType: 'USER',
+      targetId: user.id,
+      changes: { avatarUrl },
+    });
+
+    return this.mapToUserProfileDto(updated);
+  }
+
+  async deleteAvatar(user: User): Promise<UserProfileResponseDto> {
+    if (user.avatarUrl) {
+      await this.uploads.deleteImage(user.avatarUrl);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { avatarUrl: null },
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'USER_AVATAR_REMOVED',
+      targetType: 'USER',
+      targetId: user.id,
+      changes: { avatarUrl: null },
+    });
+
+    return this.mapToUserProfileDto(updated);
   }
 }

@@ -54,7 +54,7 @@ test.describe('Milestone 16: Recurring Commutes, Alerts & Notifications', () => 
     await loginAsStudentDriver(page);
     await page.goto('/notifications');
 
-    await expect(page.getByRole('heading', { name: /^Notifications/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^(Notifications|Updates)/i })).toBeVisible();
 
     // Filter toggles exist
     await expect(page.locator('#filter-all-btn')).toBeVisible();

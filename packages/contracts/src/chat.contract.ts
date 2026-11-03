@@ -27,6 +27,7 @@ export const MessageResponseSchema = z.object({
   conversationId: z.string().uuid(),
   senderId: z.string().uuid(),
   senderName: z.string(),
+  senderAvatarUrl: z.string().nullable().optional(),
   content: z.string(),
   readAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -41,6 +42,7 @@ export type MessageResponseDto = z.infer<typeof MessageResponseSchema>;
 export const ConversationParticipantSchema = z.object({
   id: z.string().uuid(),
   fullName: z.string(),
+  avatarUrl: z.string().nullable().optional(),
   audience: AudienceTypeSchema.nullable().optional(),
   role: z.enum(['DRIVER', 'PASSENGER']),
 });

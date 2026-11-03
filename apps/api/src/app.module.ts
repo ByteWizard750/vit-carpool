@@ -19,6 +19,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TrackingModule } from './modules/tracking/tracking.module';
     }),
     PrismaModule,
     AuditModule,
+    UploadsModule,
     UsersModule,
 
     VerificationModule,

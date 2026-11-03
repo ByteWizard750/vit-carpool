@@ -12,10 +12,16 @@ export class AdminGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user as User | undefined;
 
-    if (!user || user.role !== UserRole.ADMIN) {
+    const adminRoles: UserRole[] = [
+      UserRole.MODERATOR,
+      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
+    ];
+
+    if (!user || !adminRoles.includes(user.role)) {
       throw new ForbiddenException({
         error: 'ADMIN_PRIVILEGES_REQUIRED',
-        message: 'This administrative operation requires an authorized ADMIN account.',
+        message: 'This administrative operation requires an authorized staff account.',
       });
     }
 

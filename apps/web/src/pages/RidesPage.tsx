@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import {
   Search,
   MapPin,
@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   RotateCcw,
   Clock,
-  ArrowRight,
   Ticket,
   Lock,
   Loader2,
@@ -23,6 +22,8 @@ import {
   Compass,
   ArrowUpDown,
   Star,
+  Share2,
+  X,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -83,9 +84,27 @@ export const RidesPage: React.FC = () => {
     const so = searchParams.get('sortOrder');
     return so === 'desc' ? 'desc' : 'asc';
   });
-  const [showMoreFilters, setShowMoreFilters] = useState<boolean>(() => {
-    return Boolean(searchParams.get('maxCost') || (searchParams.get('radiusKm') && searchParams.get('radiusKm') !== '3') || (searchParams.get('sortBy') && searchParams.get('sortBy') !== 'departureTime'));
-  });
+
+  // Dedicated Filter & Refine Modal state
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+
+  // Date helpers for quick filter chips
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getTomorrowStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // API State
   const [rides, setRides] = useState<PublicRideSummaryDto[]>([]);
@@ -109,10 +128,66 @@ export const RidesPage: React.FC = () => {
     setBookingError(null);
   }, [selectedRide]);
 
-  const activeExtraFiltersCount =
+  const location = useLocation();
+  const targetRideId = searchParams.get('rideId');
+  const [sharedRideError, setSharedRideError] = useState<string | null>(null);
+
+  // Auto-fetch and open shared ride if rideId parameter is present
+  useEffect(() => {
+    if (!targetRideId || !token) return;
+
+    let isMounted = true;
+    fetch(`/api/rides/${targetRideId}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Ride unavailable');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) {
+          setSelectedRide(data);
+          setSharedRideError(null);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSharedRideError(
+            'This shared ride is no longer available, was cancelled, or is not accessible to your campus community.',
+          );
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetRideId, token]);
+
+  const handleShareWhatsApp = (ride: PublicRideSummaryDto, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const dateStr = new Date(ride.departureTime).toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+    const timeStr = new Date(ride.departureTime).toLocaleTimeString('en-IN', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    const shareUrl = `${window.location.origin}/rides?rideId=${ride.id}`;
+    const text = `VIT Carpool: ${ride.origin} → ${ride.destination}\n📅 ${dateStr} at ${timeStr}\n🔗 View & book: ${shareUrl}\n(Requires verified VIT login)`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const totalActiveFiltersCount =
+    (date ? 1 : 0) +
+    (seats > 1 ? 1 : 0) +
     (maxCost ? 1 : 0) +
     (radiusKm !== 3 ? 1 : 0) +
-    (sortBy !== 'departureTime' ? 1 : 0);
+    (sortBy !== 'departureTime' || sortOrder !== 'asc' ? 1 : 0);
 
   const formatDeparture = (iso: string) => {
     try {
@@ -131,33 +206,58 @@ export const RidesPage: React.FC = () => {
   };
 
   const executeSearch = useCallback(
-    async (pageToFetch = 1) => {
+    async (
+      pageToFetch = 1,
+      overrides?: {
+        origin?: string;
+        destination?: string;
+        originLoc?: LocationSuggestionDto | null;
+        destLoc?: LocationSuggestionDto | null;
+        date?: string;
+        seats?: number;
+        maxCost?: string;
+        radiusKm?: number;
+        sortBy?: 'departureTime' | 'cost' | 'seats';
+        sortOrder?: 'asc' | 'desc';
+      },
+    ) => {
       if (!token) return;
+
+      const curOrigin = overrides?.origin !== undefined ? overrides.origin : origin;
+      const curDest = overrides?.destination !== undefined ? overrides.destination : destination;
+      const curOriginLoc = overrides?.originLoc !== undefined ? overrides.originLoc : originLocation;
+      const curDestLoc = overrides?.destLoc !== undefined ? overrides.destLoc : destLocation;
+      const curDate = overrides?.date !== undefined ? overrides.date : date;
+      const curSeats = overrides?.seats !== undefined ? overrides.seats : seats;
+      const curMaxCost = overrides?.maxCost !== undefined ? overrides.maxCost : maxCost;
+      const curRadiusKm = overrides?.radiusKm !== undefined ? overrides.radiusKm : radiusKm;
+      const curSortBy = overrides?.sortBy !== undefined ? overrides.sortBy : sortBy;
+      const curSortOrder = overrides?.sortOrder !== undefined ? overrides.sortOrder : sortOrder;
 
       setLoading(true);
       setError(null);
 
       try {
         const queryParams = new URLSearchParams();
-        if (origin.trim()) queryParams.set('origin', origin.trim());
-        if (destination.trim()) queryParams.set('destination', destination.trim());
-        if (originLocation?.latitude !== undefined && originLocation?.longitude !== undefined) {
-          queryParams.set('originLat', originLocation.latitude.toString());
-          queryParams.set('originLon', originLocation.longitude.toString());
-          if (radiusKm) queryParams.set('radiusKm', radiusKm.toString());
+        if (curOrigin.trim()) queryParams.set('origin', curOrigin.trim());
+        if (curDest.trim()) queryParams.set('destination', curDest.trim());
+        if (curOriginLoc?.latitude !== undefined && curOriginLoc?.longitude !== undefined) {
+          queryParams.set('originLat', curOriginLoc.latitude.toString());
+          queryParams.set('originLon', curOriginLoc.longitude.toString());
+          if (curRadiusKm) queryParams.set('radiusKm', curRadiusKm.toString());
         }
-        if (destLocation?.latitude !== undefined && destLocation?.longitude !== undefined) {
-          queryParams.set('destLat', destLocation.latitude.toString());
-          queryParams.set('destLon', destLocation.longitude.toString());
-          if (radiusKm) queryParams.set('radiusKm', radiusKm.toString());
+        if (curDestLoc?.latitude !== undefined && curDestLoc?.longitude !== undefined) {
+          queryParams.set('destLat', curDestLoc.latitude.toString());
+          queryParams.set('destLon', curDestLoc.longitude.toString());
+          if (curRadiusKm) queryParams.set('radiusKm', curRadiusKm.toString());
         }
-        if (date.trim()) queryParams.set('departureDate', date.trim());
-        if (seats > 1) queryParams.set('minSeats', seats.toString());
-        if (maxCost.trim() && !isNaN(Number(maxCost))) {
-          queryParams.set('maxCost', Math.max(0, parseInt(maxCost, 10)).toString());
+        if (curDate.trim()) queryParams.set('departureDate', curDate.trim());
+        if (curSeats > 1) queryParams.set('minSeats', curSeats.toString());
+        if (curMaxCost.trim() && !isNaN(Number(curMaxCost))) {
+          queryParams.set('maxCost', Math.max(0, parseInt(curMaxCost, 10)).toString());
         }
-        queryParams.set('sortBy', sortBy);
-        queryParams.set('sortOrder', sortOrder);
+        queryParams.set('sortBy', curSortBy);
+        queryParams.set('sortOrder', curSortOrder);
         queryParams.set('page', pageToFetch.toString());
         queryParams.set('limit', '8');
 
@@ -187,6 +287,70 @@ export const RidesPage: React.FC = () => {
     },
     [token, origin, destination, originLocation, destLocation, date, seats, maxCost, radiusKm, sortBy, sortOrder],
   );
+
+  // Unified helper to apply sort/filter updates, sync URL query params, and execute search immediately
+  const applyFilterUpdates = (updates: {
+    origin?: string;
+    destination?: string;
+    date?: string;
+    seats?: number;
+    maxCost?: string;
+    radiusKm?: number;
+    sortBy?: 'departureTime' | 'cost' | 'seats';
+    sortOrder?: 'asc' | 'desc';
+    originLocation?: LocationSuggestionDto | null;
+    destLocation?: LocationSuggestionDto | null;
+  }) => {
+    const nextOrigin = updates.origin !== undefined ? updates.origin : origin;
+    const nextDestination = updates.destination !== undefined ? updates.destination : destination;
+    const nextDate = updates.date !== undefined ? updates.date : date;
+    const nextSeats = updates.seats !== undefined ? updates.seats : seats;
+    const nextMaxCost = updates.maxCost !== undefined ? updates.maxCost : maxCost;
+    const nextRadiusKm = updates.radiusKm !== undefined ? updates.radiusKm : radiusKm;
+    const nextSortBy = updates.sortBy !== undefined ? updates.sortBy : sortBy;
+    const nextSortOrder = updates.sortOrder !== undefined ? updates.sortOrder : sortOrder;
+    const nextOriginLoc = updates.originLocation !== undefined ? updates.originLocation : originLocation;
+    const nextDestLoc = updates.destLocation !== undefined ? updates.destLocation : destLocation;
+
+    if (updates.origin !== undefined) setOrigin(updates.origin);
+    if (updates.destination !== undefined) setDestination(updates.destination);
+    if (updates.date !== undefined) setDate(updates.date);
+    if (updates.seats !== undefined) setSeats(updates.seats);
+    if (updates.maxCost !== undefined) setMaxCost(updates.maxCost);
+    if (updates.radiusKm !== undefined) setRadiusKm(updates.radiusKm);
+    if (updates.sortBy !== undefined) setSortBy(updates.sortBy);
+    if (updates.sortOrder !== undefined) setSortOrder(updates.sortOrder);
+    if (updates.originLocation !== undefined) setOriginLocation(updates.originLocation);
+    if (updates.destLocation !== undefined) setDestLocation(updates.destLocation);
+
+    const nextParams = new URLSearchParams();
+    if (nextOrigin) nextParams.set('origin', nextOrigin);
+    if (nextDestination) nextParams.set('destination', nextDestination);
+    if (nextDate) nextParams.set('date', nextDate);
+    if (nextSeats > 1) nextParams.set('seats', nextSeats.toString());
+    if (nextMaxCost) nextParams.set('maxCost', nextMaxCost);
+    if (nextRadiusKm && nextRadiusKm !== 3) nextParams.set('radiusKm', nextRadiusKm.toString());
+    if (nextSortBy !== 'departureTime') nextParams.set('sortBy', nextSortBy);
+    if (nextSortOrder !== 'asc') nextParams.set('sortOrder', nextSortOrder);
+    if (nextOriginLoc?.latitude) nextParams.set('originLat', nextOriginLoc.latitude.toString());
+    if (nextOriginLoc?.longitude) nextParams.set('originLon', nextOriginLoc.longitude.toString());
+    if (nextDestLoc?.latitude) nextParams.set('destLat', nextDestLoc.latitude.toString());
+    if (nextDestLoc?.longitude) nextParams.set('destLon', nextDestLoc.longitude.toString());
+    setSearchParams(nextParams);
+
+    executeSearch(1, {
+      origin: nextOrigin,
+      destination: nextDestination,
+      originLoc: nextOriginLoc,
+      destLoc: nextDestLoc,
+      date: nextDate,
+      seats: nextSeats,
+      maxCost: nextMaxCost,
+      radiusKm: nextRadiusKm,
+      sortBy: nextSortBy,
+      sortOrder: nextSortOrder,
+    });
+  };
 
   // Sync to URL and execute search when authenticated
   useEffect(() => {
@@ -283,6 +447,20 @@ export const RidesPage: React.FC = () => {
         }
       />
 
+      {/* Sleek Segmented Switcher: Find a Ride vs Offer a Ride */}
+      <div className="commute-mode-segmented-bar" id="ride-mode-switcher-banner">
+        <div className="commute-mode-segment active" aria-current="page">
+          <Search size={15} />
+          <span>Find a Ride</span>
+        </div>
+        <Link to="/offer-ride" className="commute-mode-segment" id="btn-switch-to-offer-ride">
+          <Car size={15} style={{ color: '#16a34a' }} />
+          <span>Offer a Ride</span>
+          <span className="commute-mode-badge">Host</span>
+          <span className="sr-only">Have empty seats in your car?</span>
+        </Link>
+      </div>
+
       {/* Search & Filter Card */}
       <form
         onSubmit={handleFilterSubmit}
@@ -324,291 +502,276 @@ export const RidesPage: React.FC = () => {
             />
           </div>
 
-          {/* Date Picker */}
-          <div>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-              <Calendar size={14} style={{ color: 'var(--color-brand-600)' }} /> Travel date
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              style={{
-                width: '100%',
-                height: '42px',
-                padding: '9px 12px',
-                fontSize: '0.875rem',
-                borderRadius: '8px',
-                border: '1px solid var(--border-medium)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              id="rides-filter-date"
-            />
-          </div>
-
-          {/* Min Seats */}
-          <div>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-              <Users size={14} style={{ color: 'var(--color-brand-600)' }} /> Seats needed
-            </label>
-            <select
-              value={seats}
-              onChange={(e) => setSeats(Number(e.target.value))}
-              style={{
-                width: '100%',
-                height: '42px',
-                padding: '9px 12px',
-                fontSize: '0.875rem',
-                borderRadius: '8px',
-                border: '1px solid var(--border-medium)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              id="rides-filter-seats"
-            >
-              <option value={1}>1 Seat</option>
-              <option value={2}>2 Seats</option>
-              <option value={3}>3 Seats</option>
-              <option value={4}>4 Seats</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Expandable Advanced Filters Row (Milestone 5.2) */}
-        {showMoreFilters && (
-          <div className="rides-advanced-filters-grid">
-            {/* Max Fuel Contribution Filter */}
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                <IndianRupee size={12} style={{ color: 'var(--color-brand-600)' }} /> MAX FUEL SHARE (₹)
+          {/* Travel Date & Seats Needed in a Responsive Pair Group */}
+          <div className="rides-filter-date-seats-group">
+            {/* Date Picker */}
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <Calendar size={14} style={{ color: 'var(--color-brand-600)' }} /> Travel date
               </label>
               <input
-                type="number"
-                min={0}
-                max={1000}
-                step={5}
-                placeholder="e.g. 70"
-                value={maxCost}
-                onChange={(e) => setMaxCost(e.target.value)}
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
                 style={{
                   width: '100%',
-                  height: '38px',
-                  padding: '7px 10px',
-                  fontSize: '0.85rem',
-                  borderRadius: '6px',
+                  height: '42px',
+                  padding: '9px 12px',
+                  fontSize: '0.875rem',
+                  borderRadius: '8px',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: '#ffffff',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   boxSizing: 'border-box',
                 }}
-                id="rides-filter-max-cost"
+                id="rides-filter-date"
               />
             </div>
 
-            {/* Geographic Search Radius */}
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                <Compass size={12} style={{ color: 'var(--color-brand-600)' }} /> SEARCH RADIUS
+            {/* Min Seats */}
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <Users size={14} style={{ color: 'var(--color-brand-600)' }} /> Seats needed
               </label>
               <select
-                value={radiusKm}
-                onChange={(e) => setRadiusKm(Number(e.target.value))}
+                value={seats}
+                onChange={(e) => setSeats(Number(e.target.value))}
                 style={{
                   width: '100%',
-                  height: '38px',
-                  padding: '7px 10px',
-                  fontSize: '0.85rem',
-                  borderRadius: '6px',
+                  height: '42px',
+                  padding: '9px 12px',
+                  fontSize: '0.875rem',
+                  borderRadius: '8px',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: '#ffffff',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   boxSizing: 'border-box',
                 }}
-                id="rides-filter-radius"
+                id="rides-filter-seats"
               >
-                <option value={3}>3 km (Standard Corridor)</option>
-                <option value={5}>5 km (Wider Proximity)</option>
-                <option value={10}>10 km (Extended Hub)</option>
-                <option value={20}>20 km (Chennai Metro Range)</option>
-              </select>
-            </div>
-
-            {/* Sort Order */}
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                <ArrowUpDown size={12} style={{ color: 'var(--color-brand-600)' }} /> SORT RESULTS BY
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  padding: '7px 10px',
-                  fontSize: '0.85rem',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-medium)',
-                  backgroundColor: '#ffffff',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-                id="rides-filter-sort-by"
-              >
-                <option value="departureTime">Departure Time (Earliest First)</option>
-                <option value="cost">Fuel Cost (Lowest First)</option>
-                <option value="seats">Available Seats (Most First)</option>
-              </select>
-            </div>
-
-            {/* Direction */}
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                ORDER DIRECTION
-              </label>
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                style={{
-                  width: '100%',
-                  height: '38px',
-                  padding: '7px 10px',
-                  fontSize: '0.85rem',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-medium)',
-                  backgroundColor: '#ffffff',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-                id="rides-filter-sort-order"
-              >
-                <option value="asc">Ascending (Default)</option>
-                <option value="desc">Descending</option>
+                <option value={1}>1 Seat</option>
+                <option value={2}>2 Seats</option>
+                <option value={3}>3 Seats</option>
+                <option value={4}>4 Seats</option>
               </select>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Buttons Row */}
+        {/* Search Form Action Controls */}
         <div className="rides-filter-actions">
-          <button
-            type="button"
-            onClick={() => setShowMoreFilters((p) => !p)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: showMoreFilters ? 'var(--color-brand-50, #eff6ff)' : 'none',
-              border: '1px solid ' + (showMoreFilters ? 'var(--color-brand-300, #93c5fd)' : 'var(--border-light, #e2e8f0)'),
-              padding: '8px 14px',
-              borderRadius: '6px',
-              color: showMoreFilters ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary, #475569)',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              fontWeight: 600,
-              minHeight: '40px',
-              justifyContent: 'center',
-            }}
-            id="rides-toggle-more-filters"
-          >
-            <SlidersHorizontal size={14} />
-            <span>{showMoreFilters ? 'Hide Extra Filters' : 'More Filters'}</span>
-            {activeExtraFiltersCount > 0 && (
-              <span
-                style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  backgroundColor: 'var(--color-brand-600, #2563eb)',
-                  color: '#ffffff',
-                  borderRadius: '9999px',
-                  padding: '1px 6px',
-                  marginLeft: '2px',
-                }}
-              >
-                {activeExtraFiltersCount}
-              </span>
-            )}
-          </button>
-
-          <div className="rides-filter-action-group">
+          <div className="rides-filter-secondary-actions">
             <button
               type="button"
               onClick={handleClearFilters}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                background: 'none',
-                border: '1px solid var(--border-light)',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                color: 'var(--text-muted)',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                fontWeight: 600,
-                minHeight: '40px',
-              }}
+              className="rides-filter-reset-btn"
               id="rides-clear-filters-btn"
             >
-              <RotateCcw size={13} /> Reset Filters
+              <RotateCcw size={14} />
+              <span>Reset</span>
             </button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              disabled={loading}
-              leftIcon={<Search size={15} />}
-              id="rides-filter-submit"
-              style={{ minHeight: '40px' }}
+
+            <button
+              type="button"
+              onClick={() => setFilterModalOpen(true)}
+              className={`rides-filter-btn-trigger ${totalActiveFiltersCount > 0 ? 'active' : ''}`}
+              id="rides-toggle-more-filters"
+              title="Open full filter settings dialog"
             >
-              {loading ? 'Searching...' : 'Search Rides'}
-            </Button>
+              <SlidersHorizontal size={14} />
+              <span>Filters</span>
+              {totalActiveFiltersCount > 0 && (
+                <span className="rides-filter-count-badge">
+                  {totalActiveFiltersCount}
+                </span>
+              )}
+            </button>
           </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            disabled={loading}
+            leftIcon={<Search size={15} />}
+            id="rides-filter-submit"
+            className="rides-filter-submit-btn"
+          >
+            {loading ? 'Searching...' : 'Search Rides'}
+          </Button>
         </div>
       </form>
 
-      {/* Institutional Gate Notice for Unauthenticated / Pending Users */}
-      {!user && (
-        <div
-          style={{
-            padding: '24px',
-            backgroundColor: '#ffffff',
-            borderRadius: '12px',
-            border: '1px solid var(--border-light)',
-            textAlign: 'center',
-            marginBottom: '32px',
-          }}
-        >
-          <ShieldCheck size={40} style={{ color: 'var(--color-brand-600)', margin: '0 auto 12px' }} />
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 8px' }}>
-            Institutional Sign-In Required
-          </h3>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 20px' }}>
-            Ride discovery and seat booking are strictly restricted to verified VIT Chennai students and faculty to uphold campus trust and cohort safety.
-          </p>
-          <Link to="/auth">
-            <Button variant="primary" size="md" rightIcon={<ArrowRight size={15} />}>
-              Sign In with VIT Email
-            </Button>
-          </Link>
-        </div>
-      )}
-
-      {/* Results Header */}
+      {/* Results Header with Dynamic Sort & Filter Controls */}
       {user && (
-        <div className="rides-results-header">
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-            Showing <strong>{rides.length}</strong> {rides.length === 1 ? 'ride' : 'rides'}
-            {totalCount > rides.length && ` of ${totalCount}`} for verified {user.audience} cohort
+        <div className="rides-sort-filter-bar">
+          <div className="rides-sort-filter-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '0.925rem', color: 'var(--text-secondary)' }}>
+                Showing <strong>{rides.length}</strong> {rides.length === 1 ? 'ride' : 'rides'}
+                {totalCount > rides.length && ` of ${totalCount}`}
+              </div>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: '#15803d',
+                  backgroundColor: '#dcfce7',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Verified {user.audience} Network
+              </span>
+            </div>
+
+            <div className="rides-sort-filter-controls">
+              {/* Sort By Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ArrowUpDown size={14} style={{ color: 'var(--color-brand-600)' }} />
+                <select
+                  value={`${sortBy}:${sortOrder}`}
+                  onChange={(e) => {
+                    const [f, o] = e.target.value.split(':') as ['departureTime' | 'cost' | 'seats', 'asc' | 'desc'];
+                    applyFilterUpdates({ sortBy: f, sortOrder: o });
+                  }}
+                  className="rides-sort-select"
+                  id="rides-quick-sort-select"
+                  aria-label="Sort rides by"
+                >
+                  <option value="departureTime:asc">Departure: Earliest First</option>
+                  <option value="departureTime:desc">Departure: Latest First</option>
+                  <option value="cost:asc">Fuel Share: Lowest First</option>
+                  <option value="seats:desc">Seats: Most Available</option>
+                </select>
+              </div>
+
+              {/* Advanced Filter Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setFilterModalOpen(true)}
+                className={`rides-filter-modal-btn ${totalActiveFiltersCount > 0 ? 'has-active' : ''}`}
+                id="btn-open-filter-modal"
+                title="Open detailed filters dialog"
+              >
+                <SlidersHorizontal size={14} />
+                <span>Filters</span>
+                {totalActiveFiltersCount > 0 && (
+                  <span className="rides-filter-badge" id="badge-active-filters-count">
+                    {totalActiveFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-            Isolated {user.audience} Network
-          </span>
+
+          {/* Interactive Quick Filter Chips Row */}
+          <div className="rides-quick-chips-row" id="rides-quick-chips-row">
+            {/* Quick Sort: Earliest */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ sortBy: 'departureTime', sortOrder: 'asc' })}
+              className={`rides-quick-chip ${sortBy === 'departureTime' && sortOrder === 'asc' ? 'active' : ''}`}
+              id="chip-sort-earliest"
+            >
+              <Clock size={12} />
+              <span>Earliest</span>
+            </button>
+
+            {/* Quick Sort: Lowest Fuel Cost */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ sortBy: 'cost', sortOrder: 'asc' })}
+              className={`rides-quick-chip ${sortBy === 'cost' && sortOrder === 'asc' ? 'active' : ''}`}
+              id="chip-sort-lowest-cost"
+            >
+              <IndianRupee size={12} />
+              <span>Lowest Cost</span>
+            </button>
+
+            {/* Quick Sort: Most Seats */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ sortBy: 'seats', sortOrder: 'desc' })}
+              className={`rides-quick-chip ${sortBy === 'seats' && sortOrder === 'desc' ? 'active' : ''}`}
+              id="chip-sort-most-seats"
+            >
+              <Users size={12} />
+              <span>Most Seats</span>
+            </button>
+
+            {/* Quick Filter: Today */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ date: date === getTodayStr() ? '' : getTodayStr() })}
+              className={`rides-quick-chip ${date === getTodayStr() ? 'active' : ''}`}
+              id="chip-filter-today"
+            >
+              <Calendar size={12} />
+              <span>Today</span>
+            </button>
+
+            {/* Quick Filter: Tomorrow */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ date: date === getTomorrowStr() ? '' : getTomorrowStr() })}
+              className={`rides-quick-chip ${date === getTomorrowStr() ? 'active' : ''}`}
+              id="chip-filter-tomorrow"
+            >
+              <Calendar size={12} />
+              <span>Tomorrow</span>
+            </button>
+
+            {/* Quick Filter: Max ₹50 */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ maxCost: maxCost === '50' ? '' : '50' })}
+              className={`rides-quick-chip ${maxCost === '50' ? 'active' : ''}`}
+              id="chip-filter-cost-50"
+            >
+              <IndianRupee size={12} />
+              <span>≤ ₹50</span>
+            </button>
+
+            {/* Quick Filter: Max ₹100 */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ maxCost: maxCost === '100' ? '' : '100' })}
+              className={`rides-quick-chip ${maxCost === '100' ? 'active' : ''}`}
+              id="chip-filter-cost-100"
+            >
+              <IndianRupee size={12} />
+              <span>≤ ₹100</span>
+            </button>
+
+            {/* Quick Filter: 2+ Seats */}
+            <button
+              type="button"
+              onClick={() => applyFilterUpdates({ seats: seats === 2 ? 1 : 2 })}
+              className={`rides-quick-chip ${seats === 2 ? 'active' : ''}`}
+              id="chip-filter-seats-2"
+            >
+              <Users size={12} />
+              <span>2+ Seats</span>
+            </button>
+
+            {/* Reset All Quick Chip (if filters active) */}
+            {totalActiveFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="rides-quick-chip rides-quick-chip-clear"
+                id="chip-filter-clear-all"
+                title="Reset all search filters and sorts"
+              >
+                <X size={12} />
+                <span>Reset ({totalActiveFiltersCount})</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -638,6 +801,68 @@ export const RidesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Shared Ride Inaccessible Alert */}
+      {sharedRideError && (
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px 16px',
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            color: '#991b1b',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+          id="shared-ride-error-banner"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={16} />
+            <span>{sharedRideError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSharedRideError(null)}
+            style={{ background: 'none', border: 'none', color: '#991b1b', cursor: 'pointer', fontWeight: 700 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Logged-Out Campus Community Prompt */}
+      {!user && (
+        <div
+          style={{
+            padding: '48px 24px',
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid var(--border-light)',
+            textAlign: 'center',
+            maxWidth: '600px',
+            margin: '24px auto',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+          id="logged-out-signin-banner"
+        >
+          <ShieldCheck size={44} style={{ color: 'var(--color-brand-600)', margin: '0 auto 16px' }} />
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>
+            Sign In with Your VIT Email to View Active Rides
+          </h3>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+            To safeguard community privacy and enforce separate student and faculty communities, departure times
+            and seat availability are visible exclusively to authenticated campus members.
+          </p>
+          <Link to={`/auth?redirect=${encodeURIComponent(location.pathname + location.search)}`}>
+            <Button variant="primary" size="lg" leftIcon={<ShieldCheck size={18} />} id="btn-prompt-signin">
+              Sign In to View &amp; Book Rides
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* Rides List Grid */}
       {user && (
         <>
@@ -661,10 +886,15 @@ export const RidesPage: React.FC = () => {
               <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: '440px', margin: '0 auto 20px' }}>
                 There are currently no active driver rides matching your corridor filters. Try expanding your search radius, adjusting departure dates, or clear filters.
               </p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <Button variant="outline" size="sm" onClick={handleClearFilters}>
                   Clear Filters
                 </Button>
+                <Link to="/ride-alerts">
+                  <Button variant="outline" size="sm">
+                    Get Notified (Create Alert)
+                  </Button>
+                </Link>
                 <Link to="/offer-ride">
                   <Button variant="primary" size="sm">
                     Be the First to Offer This Ride
@@ -717,33 +947,86 @@ export const RidesPage: React.FC = () => {
                       </div>
 
                       {/* Safe Vehicle Information (Milestone 5.2 requirement) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        <Car size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
-                        <span style={{ fontWeight: 500 }}>
-                          {ride.vehicle ? `${ride.vehicle.color} ${ride.vehicle.make} ${ride.vehicle.model}` : 'Campus Registered Car'}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                          {ride.vehicle?.imageUrl ? (
+                            <img
+                              src={ride.vehicle.imageUrl}
+                              alt="Car"
+                              style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                            />
+                          ) : (
+                            <Car size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+                          )}
+                          <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ride.vehicle ? `${ride.vehicle.color} ${ride.vehicle.make} ${ride.vehicle.model}` : 'Campus Registered Car'}
+                          </span>
+                        </div>
+                        {ride.vehicle?.imageUrl && (
+                          <span
+                            style={{
+                              fontSize: '0.675rem',
+                              fontWeight: 600,
+                              color: '#1d4ed8',
+                              backgroundColor: '#eff6ff',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            Photo Attached
+                          </span>
+                        )}
                       </div>
 
                       {/* Driver & Available Seats Summary */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                          {ride.driverAvatarUrl ? (
+                            <img
+                              src={ride.driverAvatarUrl}
+                              alt={ride.driverName}
+                              style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                flexShrink: 0,
+                                border: '1px solid var(--border-light)',
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '50%',
+                                backgroundColor: isDriver ? '#dbeafe' : 'var(--color-brand-100)',
+                                color: isDriver ? '#1e40af' : 'var(--color-brand-700)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {ride.driverName.charAt(0)}
+                            </div>
+                          )}
+                          <span
                             style={{
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '50%',
-                              backgroundColor: isDriver ? '#dbeafe' : 'var(--color-brand-100)',
-                              color: isDriver ? '#1e40af' : 'var(--color-brand-700)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '125px',
                             }}
+                            title={ride.driverName}
                           >
-                            {ride.driverName.charAt(0)}
-                          </div>
-                          <span style={{ fontWeight: 600 }}>{ride.driverName}</span>
+                            {ride.driverName}
+                          </span>
                           {ride.driverRating && ride.driverRating.count > 0 ? (
                             <span
                               style={{
@@ -752,15 +1035,20 @@ export const RidesPage: React.FC = () => {
                                 gap: '3px',
                                 fontSize: '0.725rem',
                                 fontWeight: 700,
-                                color: '#b45309',
-                                backgroundColor: '#fef3c7',
+                                color: '#854d0e',
+                                backgroundColor: '#fefce8',
+                                border: '1px solid #fef08a',
                                 padding: '1px 6px',
-                                borderRadius: '4px',
+                                borderRadius: '6px',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
                               }}
                               id={`ride-rating-${ride.id}`}
+                              title={`${ride.driverRating.average?.toFixed(1)} out of 5 stars from ${ride.driverRating.count} reviews`}
                             >
-                              <Star size={11} style={{ fill: '#eab308', color: '#eab308' }} />
-                              <span>{ride.driverRating.average?.toFixed(1)}/5 ({ride.driverRating.count})</span>
+                              <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />
+                              <span>{ride.driverRating.average?.toFixed(1)}</span>
+                              <span style={{ color: '#a16207', fontWeight: 500, fontSize: '0.675rem' }}>({ride.driverRating.count})</span>
                             </span>
                           ) : (
                             <span
@@ -771,32 +1059,61 @@ export const RidesPage: React.FC = () => {
                                 backgroundColor: '#f1f5f9',
                                 padding: '1px 5px',
                                 borderRadius: '4px',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
                               }}
                             >
                               New Driver
                             </span>
                           )}
                           {isDriver && (
-                            <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#1e40af', backgroundColor: '#eff6ff', padding: '1px 5px', borderRadius: '4px' }}>
+                            <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#1e40af', backgroundColor: '#eff6ff', padding: '1px 5px', borderRadius: '4px', flexShrink: 0 }}>
                               You
                             </span>
                           )}
                         </div>
-                        <SeatDots available={ride.availableSeats} />
+                        <div style={{ flexShrink: 0 }}>
+                          <SeatDots available={ride.availableSeats} />
+                        </div>
                       </div>
                     </div>
 
-                    <Button
-                      variant={isSelected ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedRide(ride);
-                      }}
-                      style={{ width: '100%' }}
-                    >
-                      {isDriver ? 'View Your Published Ride' : isSelected ? 'Viewing Details' : 'View Details & Book'}
-                    </Button>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <Button
+                        variant={isSelected ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedRide(ride);
+                        }}
+                        style={{ flex: 1 }}
+                      >
+                        {isDriver ? 'View Your Published Ride' : isSelected ? 'Viewing Details' : 'View Details & Book'}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleShareWhatsApp(ride, e)}
+                        title="Share this ride via WhatsApp"
+                        aria-label="Share this ride via WhatsApp"
+                        id={`btn-share-ride-${ride.id}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: '1px solid #bbf7d0',
+                          backgroundColor: '#f0fdf4',
+                          color: '#15803d',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Share2 size={15} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -879,41 +1196,152 @@ export const RidesPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Vehicle Appearance (Car Image) Banner */}
+            {selectedRide.vehicle?.imageUrl && (
+              <div
+                id="booking-vehicle-photo-banner"
+                style={{
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-light, #e2e8f0)',
+                  backgroundColor: '#f8fafc',
+                }}
+              >
+                <div style={{ position: 'relative', width: '100%', height: '180px', backgroundColor: '#0f172a' }}>
+                  <img
+                    src={selectedRide.vehicle.imageUrl}
+                    alt={`${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '8px',
+                      left: '8px',
+                      right: '8px',
+                      backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                      backdropFilter: 'blur(6px)',
+                      color: '#ffffff',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <Car size={13} style={{ color: '#60a5fa' }} />
+                      <span>Vehicle Appearance &bull; This is how the car looks</span>
+                    </span>
+                    <span style={{ color: '#cbd5e1', fontSize: '10px' }}>
+                      {selectedRide.vehicle.color} {selectedRide.vehicle.make} {selectedRide.vehicle.model}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Vehicle & Driver Safe Info */}
             <div className="responsive-two-col" style={{ gap: '12px' }}>
               <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Car size={13} /> Registered Vehicle
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', marginTop: '4px' }}>
-                  {selectedRide.vehicle
-                    ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
-                    : 'Campus Registered Car'}
-                </div>
-                {selectedRide.vehicle && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Total Capacity: {selectedRide.vehicle.capacity} seats
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                  {selectedRide.vehicle?.imageUrl && (
+                    <img
+                      src={selectedRide.vehicle.imageUrl}
+                      alt="Vehicle thumbnail"
+                      style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                      {selectedRide.vehicle
+                        ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
+                        : 'Campus Registered Car'}
+                    </div>
+                    {selectedRide.vehicle && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Total Capacity: {selectedRide.vehicle.capacity} seats
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <ShieldCheck size={13} /> Verified Driver
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>{selectedRide.driverName}</span>
-                  {selectedRide.driverRating && selectedRide.driverRating.count > 0 ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#b45309', fontWeight: 700, fontSize: '0.75rem', backgroundColor: '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
-                      <Star size={11} style={{ fill: '#eab308', color: '#eab308' }} />
-                      <span>{selectedRide.driverRating.average?.toFixed(1)}/5 ({selectedRide.driverRating.count})</span>
-                    </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                  {selectedRide.driverAvatarUrl ? (
+                    <img
+                      src={selectedRide.driverAvatarUrl}
+                      alt={selectedRide.driverName}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        flexShrink: 0,
+                        border: '1px solid var(--border-light)',
+                      }}
+                    />
                   ) : (
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(New Driver)</span>
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--color-brand-100)',
+                        color: 'var(--color-brand-700)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {selectedRide.driverName.charAt(0)}
+                    </div>
                   )}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {selectedRide.audience} Cohort
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span>{selectedRide.driverName}</span>
+                      {selectedRide.driverRating && selectedRide.driverRating.count > 0 ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            color: '#854d0e',
+                            fontWeight: 700,
+                            fontSize: '0.75rem',
+                            backgroundColor: '#fefce8',
+                            border: '1px solid #fef08a',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />
+                          <span>{selectedRide.driverRating.average?.toFixed(1)} / 5</span>
+                          <span style={{ color: '#a16207', fontWeight: 500, fontSize: '0.675rem' }}>
+                            ({selectedRide.driverRating.count} {selectedRide.driverRating.count === 1 ? 'review' : 'reviews'})
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(New Driver)</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {selectedRide.audience} Cohort
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -927,12 +1355,23 @@ export const RidesPage: React.FC = () => {
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#1e3a8a' }}>
                   You are the driver of this ride. You can review passenger seat requests, update departure details, or cancel this ride from your My Rides page.
                 </p>
-                <div style={{ marginTop: '6px' }}>
+                <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <Link to="/my-rides">
                     <Button variant="primary" size="sm">
                       Manage in My Rides
                     </Button>
                   </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => handleShareWhatsApp(selectedRide)}
+                    leftIcon={<Share2 size={15} style={{ color: '#15803d' }} />}
+                    id="btn-modal-share-whatsapp"
+                    style={{ borderColor: '#bbf7d0', color: '#15803d' }}
+                  >
+                    Share via WhatsApp
+                  </Button>
                 </div>
               </div>
             ) : selectedRide.availableSeats <= 0 ? (
@@ -1024,6 +1463,18 @@ export const RidesPage: React.FC = () => {
                 >
                   {bookingLoading ? 'Submitting Request...' : `Request ${requestedSeats} Seat${requestedSeats > 1 ? 's' : ''}`}
                 </Button>
+
+                <Button
+                  variant="outline"
+                  size="md"
+                  type="button"
+                  onClick={() => handleShareWhatsApp(selectedRide)}
+                  leftIcon={<Share2 size={16} style={{ color: '#15803d' }} />}
+                  id="btn-modal-share-whatsapp"
+                  style={{ width: '100%', borderColor: '#bbf7d0', color: '#15803d' }}
+                >
+                  Share Ride via WhatsApp
+                </Button>
               </div>
             )}
 
@@ -1037,6 +1488,292 @@ export const RidesPage: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* Detailed Filter & Refine Modal */}
+      <Modal
+        isOpen={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        title="Filter & Refine Campus Rides"
+        maxWidth="540px"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                handleClearFilters();
+                setFilterModalOpen(false);
+              }}
+              id="btn-modal-reset-filters"
+            >
+              Reset Filters
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setFilterModalOpen(false)}
+              id="btn-modal-apply-filters"
+            >
+              Apply &amp; View {rides.length} Rides
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Section: Sort Preference */}
+          <div>
+            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <ArrowUpDown size={14} style={{ color: 'var(--color-brand-600)' }} /> Sort Order
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ sortBy: 'departureTime', sortOrder: 'asc' })}
+                style={{
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: sortBy === 'departureTime' ? '2px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: sortBy === 'departureTime' ? '#eff6ff' : '#ffffff',
+                  color: sortBy === 'departureTime' ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: sortBy === 'departureTime' ? 700 : 500,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                }}
+                id="modal-sort-earliest"
+              >
+                Earliest
+              </button>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ sortBy: 'cost', sortOrder: 'asc' })}
+                style={{
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: sortBy === 'cost' ? '2px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: sortBy === 'cost' ? '#eff6ff' : '#ffffff',
+                  color: sortBy === 'cost' ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: sortBy === 'cost' ? 700 : 500,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                }}
+                id="modal-sort-cost"
+              >
+                Lowest Cost
+              </button>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ sortBy: 'seats', sortOrder: 'desc' })}
+                style={{
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: sortBy === 'seats' ? '2px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: sortBy === 'seats' ? '#eff6ff' : '#ffffff',
+                  color: sortBy === 'seats' ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: sortBy === 'seats' ? 700 : 500,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                }}
+                id="modal-sort-seats"
+              >
+                Most Seats
+              </button>
+            </div>
+          </div>
+
+          {/* Section: Max Fuel Share */}
+          <div>
+            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <IndianRupee size={14} style={{ color: 'var(--color-brand-600)' }} /> Maximum Fuel Share
+            </label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              {['', '50', '75', '100', '150'].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => applyFilterUpdates({ maxCost: preset })}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    border: maxCost === preset ? '1.5px solid #2563eb' : '1px solid var(--border-light)',
+                    backgroundColor: maxCost === preset ? '#eff6ff' : '#ffffff',
+                    color: maxCost === preset ? '#1d4ed8' : 'var(--text-secondary)',
+                    fontWeight: maxCost === preset ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                  }}
+                  id={`modal-preset-cost-${preset || 'any'}`}
+                >
+                  {preset === '' ? 'Any Amount' : `≤ ₹${preset}`}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              step={5}
+              placeholder="Custom max fuel share (₹)..."
+              value={maxCost}
+              onChange={(e) => applyFilterUpdates({ maxCost: e.target.value })}
+              style={{
+                width: '100%',
+                height: '38px',
+                padding: '8px 12px',
+                fontSize: '0.85rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border-medium)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              id="input-modal-max-cost"
+            />
+          </div>
+
+          {/* Section: Seats Needed */}
+          <div>
+            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Users size={14} style={{ color: 'var(--color-brand-600)' }} /> Seats Needed
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+              {[1, 2, 3, 4].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => applyFilterUpdates({ seats: s })}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '8px',
+                    border: seats === s ? '2px solid #2563eb' : '1px solid var(--border-light)',
+                    backgroundColor: seats === s ? '#eff6ff' : '#ffffff',
+                    color: seats === s ? '#1d4ed8' : 'var(--text-secondary)',
+                    fontWeight: seats === s ? 700 : 500,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                  id={`modal-seats-${s}`}
+                >
+                  {s} {s === 1 ? 'Seat' : s === 4 ? '4+ Seats' : 'Seats'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section: Proximity Radius */}
+          <div>
+            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Compass size={14} style={{ color: 'var(--color-brand-600)' }} /> Geographic Corridor Radius
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {[
+                { r: 3, label: '3 km (Standard Corridor)' },
+                { r: 5, label: '5 km (Wider Proximity)' },
+                { r: 10, label: '10 km (Extended Hub)' },
+                { r: 20, label: '20 km (Metro Range)' },
+              ].map(({ r, label }) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => applyFilterUpdates({ radiusKm: r })}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: radiusKm === r ? '2px solid #2563eb' : '1px solid var(--border-light)',
+                    backgroundColor: radiusKm === r ? '#eff6ff' : '#ffffff',
+                    color: radiusKm === r ? '#1d4ed8' : 'var(--text-secondary)',
+                    fontWeight: radiusKm === r ? 700 : 500,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  id={`modal-radius-${r}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section: Travel Date */}
+          <div>
+            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Calendar size={14} style={{ color: 'var(--color-brand-600)' }} /> Travel Date
+            </label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ date: '' })}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  border: !date ? '1.5px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: !date ? '#eff6ff' : '#ffffff',
+                  color: !date ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: !date ? 700 : 500,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                }}
+                id="modal-date-any"
+              >
+                Any Date
+              </button>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ date: getTodayStr() })}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  border: date === getTodayStr() ? '1.5px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: date === getTodayStr() ? '#eff6ff' : '#ffffff',
+                  color: date === getTodayStr() ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: date === getTodayStr() ? 700 : 500,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                }}
+                id="modal-date-today"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => applyFilterUpdates({ date: getTomorrowStr() })}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  border: date === getTomorrowStr() ? '1.5px solid #2563eb' : '1px solid var(--border-light)',
+                  backgroundColor: date === getTomorrowStr() ? '#eff6ff' : '#ffffff',
+                  color: date === getTomorrowStr() ? '#1d4ed8' : 'var(--text-secondary)',
+                  fontWeight: date === getTomorrowStr() ? 700 : 500,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                }}
+                id="modal-date-tomorrow"
+              >
+                Tomorrow
+              </button>
+            </div>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => applyFilterUpdates({ date: e.target.value })}
+              style={{
+                width: '100%',
+                height: '38px',
+                padding: '8px 12px',
+                fontSize: '0.85rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border-medium)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              id="input-modal-date"
+            />
+          </div>
+        </div>
+      </Modal>
     </PageShell>
   );
 };

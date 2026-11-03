@@ -113,7 +113,7 @@ export class AuthService {
   /**
    * Sign authenticated session JWT using custom RS256 private key (or test fixture in test mode).
    */
-  private signSessionJwt(payload: { sub: string; email: string; role?: string }): string {
+  public signSessionJwt(payload: { sub: string; email: string; role?: string }): string {
     if (this.customPrivateKeyPem) {
       return jwt.sign(
         {

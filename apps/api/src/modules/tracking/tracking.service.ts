@@ -452,7 +452,7 @@ export class TrackingService implements OnModuleInit {
         status: BookingStatus.CONFIRMED,
       },
       include: {
-        passenger: { select: { id: true, fullName: true, phoneNumber: true } },
+        passenger: { select: { id: true, fullName: true, phoneNumber: true, avatarUrl: true } },
       },
     });
 
@@ -492,6 +492,7 @@ export class TrackingService implements OnModuleInit {
         passengerId: b.passengerId,
         // Privacy: Passengers only see first name of co-passengers; driver sees full name
         passengerName: isDriver ? b.passenger.fullName : b.passenger.fullName.split(' ')[0],
+        passengerAvatarUrl: b.passenger.avatarUrl ?? null,
         pickupAddress: b.pickupAddress,
         pickupLatitude: b.pickupLatitude,
         pickupLongitude: b.pickupLongitude,
@@ -541,12 +542,14 @@ export class TrackingService implements OnModuleInit {
       lastUpdateAt: session?.lastUpdateAt ? session.lastUpdateAt.toISOString() : null,
       driverId: ride.driverId,
       driverName: ride.driver.fullName,
+      driverAvatarUrl: ride.driver.avatarUrl ?? null,
       vehicle: ride.vehicle
         ? {
             make: ride.vehicle.make,
             model: ride.vehicle.model,
             color: ride.vehicle.color,
             registrationNumber: ride.vehicle.registrationNumber, // Revealed to driver and confirmed passengers
+            imageUrl: ride.vehicle.imageUrl ?? null,
           }
         : undefined,
       origin: ride.origin,
@@ -583,10 +586,13 @@ export class TrackingService implements OnModuleInit {
   ): Promise<any> {
     const booking = await this.accessService.authorizeBoardingUpdate(user, bookingId);
 
-    const dataToUpdate: any = { boardingStatus: status };
     if (status === BoardingStatus.BOARDED) {
-      dataToUpdate.boardedAt = new Date();
+      throw new ForbiddenException(
+        'Direct boarding transition to BOARDED is disabled. Driver must verify passenger boarding OTP via /bookings/:id/verify-boarding.',
+      );
     }
+
+    const dataToUpdate: any = { boardingStatus: status };
     if (status === BoardingStatus.MISSED) {
       dataToUpdate.missedAt = new Date();
     }

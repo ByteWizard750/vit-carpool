@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Car,
@@ -31,6 +32,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
   const location = useLocation();
 
   React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setMobileMenuOpen(false);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [mobileMenuOpen]);
+
+  React.useEffect(() => {
     if (!user || !token) return;
     const checkUnread = () => {
       fetch('/chat/unread-count', {
@@ -47,7 +70,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
       })
         .then((r) => r.json())
         .then((d) => {
-          if (typeof d?.unreadCount === 'number') setUnreadNotifCount(d.unreadCount);
+          const count = typeof d?.unreadCount === 'number' ? d.unreadCount : typeof d?.count === 'number' ? d.count : 0;
+          setUnreadNotifCount(count);
         })
         .catch(() => {});
     };
@@ -200,72 +224,130 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div className="mobile-nav-panel">
-          {user ? (
-            <>
-              {/* User Identity / Dashboard Link Card */}
-              <Link
-                to="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                id="mobile-drawer-dashboard"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  backgroundColor: 'var(--bg-subtle, #f8fafc)',
-                  border: '1px solid var(--border-light, #e2e8f0)',
-                  marginBottom: '8px',
-                  textDecoration: 'none',
-                  minWidth: 0,
-                  width: '100%',
-                  boxSizing: 'border-box',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.fullName}
-                  </div>
-                  <div
+      {mobileMenuOpen &&
+        createPortal(
+          <>
+            <div
+              className="mobile-nav-backdrop"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="mobile-nav-panel" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+              {user ? (
+                <>
+                  {/* User Identity / Dashboard Link Card */}
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    id="mobile-drawer-dashboard"
                     style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--color-brand-600, #2563eb)',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      display: 'inline-flex',
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
-                      backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      backgroundColor: 'var(--bg-subtle, #f8fafc)',
+                      border: '1px solid var(--border-light, #e2e8f0)',
+                      marginBottom: '8px',
+                      textDecoration: 'none',
+                      minWidth: 0,
+                      width: '100%',
+                      boxSizing: 'border-box',
                     }}
                   >
-                    <span>Dashboard</span>
-                    <span>&rarr;</span>
-                  </div>
-                </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={user.fullName}
+                          style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--brand-subtle, #eef3ff)',
+                            color: 'var(--brand-blue, #2340b8)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {user.fullName
+                            ? user.fullName
+                                .split(' ')
+                                .map((n) => n[0])
+                                .slice(0, 2)
+                                .join('')
+                                .toUpperCase()
+                            : 'U'}
+                        </div>
+                      )}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontSize: '0.92rem',
+                            fontWeight: 700,
+                            color: 'var(--text-primary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {user.fullName}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            color: 'var(--text-muted)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            marginTop: '2px',
+                          }}
+                          title={`${user.email} • ${user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}`}
+                        >
+                          <span>{user.email}</span>
+                          <span style={{ margin: '0 4px', opacity: 0.6 }}>&bull;</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                            {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
 
-                <div
-                  style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-muted)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '100%',
-                  }}
-                  title={`${user.email} • ${user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}`}
-                >
-                  <span>{user.email}</span>
-                  <span style={{ margin: '0 5px', opacity: 0.6 }}>&bull;</span>
-                  <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
-                  </span>
-                </div>
-              </Link>
+                    <div
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--color-brand-600, #2563eb)',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                      }}
+                    >
+                      <span>Dashboard</span>
+                      <span>&rarr;</span>
+                    </div>
+                  </Link>
 
               {/* Home Navigation Link */}
               <Link
@@ -403,8 +485,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
               </div>
             </>
           )}
-        </div>
-      )}
+            </div>
+          </>,
+          document.body
+        )}
     </header>
   );
 };

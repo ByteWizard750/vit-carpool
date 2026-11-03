@@ -99,6 +99,7 @@ export const PassengerBookingResponseSchema = z.object({
     costPerSeat: z.number().int().nullable(),
     status: RideStatusSchema,
     driverName: z.string(),
+    driverAvatarUrl: z.string().nullable().optional(),
     // Strictly confidential: Only exposed if status === 'CONFIRMED'
     driverPhone: z.string().nullable().optional(),
     pickupDescription: z.string().nullable().optional(),
@@ -118,6 +119,7 @@ export const DriverBookingResponseSchema = z.object({
   rideId: z.string().uuid(),
   passengerId: z.string().uuid(),
   passengerName: z.string(),
+  passengerAvatarUrl: z.string().nullable().optional(),
   passengerPhone: z.string().nullable().optional(),
   driverId: z.string().uuid(),
   audience: AudienceTypeSchema,
@@ -148,3 +150,77 @@ export const DriverBookingResponseSchema = z.object({
 });
 
 export type DriverBookingResponseDto = z.infer<typeof DriverBookingResponseSchema>;
+
+/**
+ * Milestone 8: Secure Boarding OTP Retrieval DTO (Passenger Only)
+ */
+export const BoardingOtpResponseSchema = z.object({
+  bookingId: z.string().uuid(),
+  rideId: z.string().uuid(),
+  otp: z.string(), // Formatted e.g. "482 916"
+  rawOtp: z.string(), // "482916"
+  expiresAt: z.string().datetime(),
+  boardingStatus: BoardingStatusSchema,
+  canRegenerate: z.boolean(),
+  cooldownSecondsRemaining: z.number().int(),
+  regenCountRemaining: z.number().int(),
+  driverName: z.string(),
+  vehiclePlate: z.string(),
+  pickupAddress: z.string().nullable().optional(),
+});
+
+export type BoardingOtpResponseDto = z.infer<typeof BoardingOtpResponseSchema>;
+
+/**
+ * Milestone 8: Driver Verification Payload Schema
+ */
+export const VerifyBoardingOtpSchema = z
+  .object({
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'Boarding OTP must be exactly 6 digits'),
+  })
+  .strict();
+
+export type VerifyBoardingOtpDto = z.infer<typeof VerifyBoardingOtpSchema>;
+
+/**
+ * Milestone 8: Driver Verification Response DTO
+ */
+export const VerifyBoardingResponseSchema = z.object({
+  success: z.boolean(),
+  bookingId: z.string().uuid(),
+  rideId: z.string().uuid(),
+  passengerId: z.string().uuid(),
+  passengerName: z.string(),
+  boardingStatus: z.literal('BOARDED'),
+  boardedAt: z.string().datetime(),
+  message: z.string(),
+});
+
+export type VerifyBoardingResponseDto = z.infer<typeof VerifyBoardingResponseSchema>;
+
+/**
+ * Milestone 8: Mark No-Show Schema
+ */
+export const MarkNoShowSchema = z
+  .object({
+    reason: z.string().trim().max(255).optional(),
+  })
+  .strict();
+
+export type MarkNoShowDto = z.infer<typeof MarkNoShowSchema>;
+
+export const MarkNoShowResponseSchema = z.object({
+  success: z.boolean(),
+  bookingId: z.string().uuid(),
+  rideId: z.string().uuid(),
+  passengerId: z.string().uuid(),
+  passengerName: z.string(),
+  boardingStatus: z.literal('MISSED'),
+  missedAt: z.string().datetime(),
+  message: z.string(),
+});
+
+export type MarkNoShowResponseDto = z.infer<typeof MarkNoShowResponseSchema>;
