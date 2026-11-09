@@ -261,6 +261,11 @@ In `apps/api/src/modules/locations/locations.service.ts`:
 In `apps/web/src/components/common/LocationAutocomplete.tsx`:
 - Expanded dropdown to `min(580px, calc(100vw - 32px))` on desktop/tablet with dynamic viewport boundary clamping (`left: -offset`), eliminating single-line ellipsis truncation and displaying full location names and addresses.
 
+### F. Admin Incident Triage Card Multi-Tier Wrapping
+In `apps/web/src/pages/AdminDashboardPage.tsx`:
+- Visual inspection at 320×700 revealed that incident report cards in the Safety Moderation tab had badges ("SAFETY CONCERN", "INVESTIGATING") colliding with the report date timestamp due to unconstrained single-line flex rows.
+- Added `flexWrap: 'wrap'`, adjusted card padding to `16px 14px`, and gave metadata and action buttons dedicated wrapping rows, cleanly separating status badges, timestamps, reporter credentials, and resolution actions on compact mobile screens.
+
 ---
 
 ## 7. Interactive Components, Modals & Drawers Mobile Inspection

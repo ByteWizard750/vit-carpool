@@ -1767,7 +1767,7 @@ export const AdminDashboardPage: React.FC = () => {
                   <div
                     key={r.id}
                     style={{
-                      padding: '18px 20px',
+                      padding: '16px 14px',
                       backgroundColor: '#1e293b',
                       borderRadius: '12px',
                       border: '1px solid #334155',
@@ -1776,12 +1776,14 @@ export const AdminDashboardPage: React.FC = () => {
                     <div
                       style={{
                         display: 'flex',
+                        flexWrap: 'wrap',
                         justifyContent: 'space-between',
-                        alignItems: 'flex-start',
+                        alignItems: 'center',
+                        gap: '8px',
                         marginBottom: '10px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
                         <span
                           style={{
                             fontSize: '0.725rem',
@@ -1835,8 +1837,10 @@ export const AdminDashboardPage: React.FC = () => {
                     <div
                       style={{
                         display: 'flex',
+                        flexWrap: 'wrap',
                         justifyContent: 'space-between',
                         alignItems: 'center',
+                        gap: '10px',
                         fontSize: '0.75rem',
                         color: '#94a3b8',
                         paddingTop: '10px',
