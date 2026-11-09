@@ -9,6 +9,7 @@ generator client {
   provider        = "prisma-client-js"
   output          = "./client"
   previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 // -----------------------------------------------------------------------------
@@ -119,6 +120,7 @@ model User {
   adminInvitations            AdminInvitation[]     @relation("InvitedAdmins")
   moderationNotesWritten      ModerationNote[]      @relation("AuthorModerationNotes")
   moderationNotesReceived     ModerationNote[]      @relation("TargetUserModerationNotes")
+  cabFareAcknowledgements     CabFareAcknowledgement[]
 
   @@unique([id, audience])
   @@map("users")
@@ -196,6 +198,13 @@ model Vehicle {
 // Milestone 3.2 Ride Publishing & Management Models
 // -----------------------------------------------------------------------------
 
+enum RideType {
+  VEHICLE_RIDE
+  CAB_SHARE
+
+  @@map("ride_type")
+}
+
 enum RideStatus {
   SCHEDULED
   IN_PROGRESS
@@ -205,10 +214,21 @@ enum RideStatus {
   @@map("ride_status_type")
 }
 
+enum RouteStatus {
+  NONE
+  PENDING
+  READY
+  FALLBACK
+  FAILED
+
+  @@map("route_status_type")
+}
+
 model Ride {
   id                 String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   driverId           String     @map("driver_id") @db.Uuid
-  vehicleId          String     @map("vehicle_id") @db.Uuid
+  vehicleId          String?    @map("vehicle_id") @db.Uuid
+  rideType           RideType   @default(VEHICLE_RIDE) @map("ride_type")
   audience           Audience
   origin             String     @db.VarChar(128)
   originAddress      String?    @map("origin_address") @db.VarChar(255)
@@ -229,17 +249,29 @@ model Ride {
   status              RideStatus        @default(SCHEDULED)
   recurringCommuteId  String?           @map("recurring_commute_id") @db.Uuid
   scheduledOccurrence DateTime?         @map("scheduled_occurrence") @db.Date
+
+  // Milestone 8.1 Route Geometry Foundation
+  routeGeom           Unsupported("geography(LineString,4326)")? @map("route_geom")
+  routeDistanceM      Int?                                       @map("route_distance_m")
+  routeDurationS      Int?                                       @map("route_duration_s")
+  routeStatus         RouteStatus                                @default(NONE) @map("route_status")
+  routeProvider       String?                                    @map("route_provider") @db.VarChar(32)
+  routeComputedAt     DateTime?                                  @map("route_computed_at") @db.Timestamptz(6)
+  routeVersion        Int                                        @default(0) @map("route_version")
+  maxDetourMinutes    Int?                                       @map("max_detour_minutes")
+
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   driver             User              @relation("DriverRides", fields: [driverId, audience], references: [id, audience], onDelete: Restrict)
-  vehicle            Vehicle           @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
+  vehicle            Vehicle?          @relation("VehicleRides", fields: [vehicleId, driverId], references: [id, userId], onDelete: Restrict)
   recurringCommute   RecurringCommute? @relation("RecurringCommuteRides", fields: [recurringCommuteId], references: [id], onDelete: SetNull)
   bookings           Booking[]         @relation("RideBookings")
   conversations      Conversation[]
   ratings            DriverRating[]
   notifications      Notification[]
   idempotencyKeys    IdempotencyKey[]
+  cabShareDetail     CabShareDetail?
   reports            Report[]          @relation("ReportedRides")
   moderationNotes    ModerationNote[]  @relation("TargetRideModerationNotes")
   trackingSession    RideTrackingSession?
@@ -253,6 +285,7 @@ model Ride {
   @@index([recurringCommuteId])
   @@index([audience, status, departureTime])
   @@index([departureTime])
+  @@index([routeStatus])
   @@map("rides")
 }
 
@@ -321,6 +354,7 @@ model Booking {
   rating       DriverRating?
   notifications Notification[]
   reports      Report[]       @relation("ReportedBookings")
+  cabFareAcknowledgements CabFareAcknowledgement[]
 
   @@index([rideId])
   @@index([passengerId])
@@ -584,6 +618,8 @@ enum NotificationType {
   DRIVER_ARRIVED
   MISSED_PICKUP
   RIDE_COMPLETED
+  CAB_FARE_UPDATED
+  CAB_BOOKING_DEADLINE
 
   @@map("notification_type")
 }
@@ -752,6 +788,51 @@ model ModerationNote {
   @@index([targetReportId])
   @@map("moderation_notes")
 }
+
+// -----------------------------------------------------------------------------
+// Milestone 9: Cab Sharing Models & Fare Acknowledgements
+// -----------------------------------------------------------------------------
+
+model CabShareDetail {
+  id                 String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rideId             String     @unique @map("ride_id") @db.Uuid
+  totalCapacity      Int        @map("total_capacity") @db.Integer
+  estimatedTotalFare Int        @map("estimated_total_fare") @db.Integer
+  finalTotalFare     Int?       @map("final_total_fare") @db.Integer
+  fareRevision       Int        @default(1) @map("fare_revision") @db.Integer
+  bookingDeadline    DateTime   @map("booking_deadline") @db.Timestamptz(6)
+  cabService         String?    @map("cab_service") @db.VarChar(64)
+  cabBookingRef      String?    @map("cab_booking_ref") @db.VarChar(32)
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ride               Ride       @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  fareAcknowledgements CabFareAcknowledgement[]
+
+  @@index([rideId])
+  @@index([bookingDeadline])
+  @@map("cab_share_details")
+}
+
+model CabFareAcknowledgement {
+  id              String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  cabDetailId     String         @map("cab_detail_id") @db.Uuid
+  bookingId       String         @map("booking_id") @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  fareRevision    Int            @map("fare_revision") @db.Integer
+  acknowledgedAt  DateTime       @default(now()) @map("acknowledged_at") @db.Timestamptz(6)
+
+  cabDetail       CabShareDetail @relation(fields: [cabDetailId], references: [id], onDelete: Cascade)
+  booking         Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, userId, fareRevision])
+  @@index([cabDetailId])
+  @@index([bookingId])
+  @@index([userId])
+  @@map("cab_fare_acknowledgements")
+}
+
 
 
 

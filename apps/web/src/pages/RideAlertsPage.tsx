@@ -99,7 +99,7 @@ export const RideAlertsPage: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch('/ride-alerts', {
+      const res = await fetch('/api/ride-alerts', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -162,7 +162,7 @@ export const RideAlertsPage: React.FC = () => {
         minSeats: Number(minSeats) || 1,
       };
 
-      const res = await fetch('/ride-alerts', {
+      const res = await fetch('/api/ride-alerts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -206,7 +206,7 @@ export const RideAlertsPage: React.FC = () => {
     setActionLoadingId(alert.id);
 
     try {
-      const res = await fetch(`/ride-alerts/${alert.id}/${action}`, {
+      const res = await fetch(`/api/ride-alerts/${alert.id}/${action}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -239,7 +239,7 @@ export const RideAlertsPage: React.FC = () => {
 
     setActionLoadingId(editModalAlert.id);
     try {
-      const res = await fetch(`/ride-alerts/${editModalAlert.id}`, {
+      const res = await fetch(`/api/ride-alerts/${editModalAlert.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -276,7 +276,7 @@ export const RideAlertsPage: React.FC = () => {
 
     setActionLoadingId(deleteConfirmAlert.id);
     try {
-      const res = await fetch(`/ride-alerts/${deleteConfirmAlert.id}`, {
+      const res = await fetch(`/api/ride-alerts/${deleteConfirmAlert.id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,

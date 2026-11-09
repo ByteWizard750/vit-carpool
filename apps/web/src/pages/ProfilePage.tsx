@@ -59,7 +59,7 @@ export const ProfilePage: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/users/me/avatar', {
+      const res = await fetch('/api/users/me/avatar', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -86,7 +86,7 @@ export const ProfilePage: React.FC = () => {
     setAvatarUploading(true);
     setAvatarError(null);
     try {
-      const res = await fetch('/users/me/avatar', {
+      const res = await fetch('/api/users/me/avatar', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -106,7 +106,7 @@ export const ProfilePage: React.FC = () => {
     if (!token) return;
     setLoadingBlocks(true);
     try {
-      const res = await fetch('/moderation/blocks', {
+      const res = await fetch('/api/moderation/blocks', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -128,7 +128,7 @@ export const ProfilePage: React.FC = () => {
     if (!token) return;
     setUnblockingId(targetUserId);
     try {
-      const res = await fetch(`/moderation/blocks/${targetUserId}`, {
+      const res = await fetch(`/api/moderation/blocks/${targetUserId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -144,7 +144,7 @@ export const ProfilePage: React.FC = () => {
 
   React.useEffect(() => {
     if (!token || !user?.id) return;
-    fetch(`/ratings/driver/${user.id}`, {
+    fetch(`/api/ratings/driver/${user.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())

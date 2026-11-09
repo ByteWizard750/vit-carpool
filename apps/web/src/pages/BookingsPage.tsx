@@ -64,6 +64,9 @@ export const BookingsPage: React.FC = () => {
   const [bookingToRate, setBookingToRate] = useState<PassengerBookingResponseDto | null>(null);
   const [ratedBookings, setRatedBookings] = useState<Record<string, DriverRatingResponseDto>>({});
 
+  // Cab fare revision acknowledgement state
+  const [acknowledgingBookingId, setAcknowledgingBookingId] = useState<string | null>(null);
+
   // Fetch passenger bookings
   const fetchPassengerBookings = useCallback(async () => {
     if (!token || user?.verificationStatus !== 'VERIFIED') return;
@@ -71,7 +74,7 @@ export const BookingsPage: React.FC = () => {
     setPassengerError(null);
 
     try {
-      const res = await fetch('/bookings/mine', {
+      const res = await fetch('/api/bookings/mine', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -99,7 +102,7 @@ export const BookingsPage: React.FC = () => {
     setDriverError(null);
 
     try {
-      const res = await fetch('/bookings/driver', {
+      const res = await fetch('/api/bookings/driver', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -146,7 +149,7 @@ export const BookingsPage: React.FC = () => {
     );
 
     for (const b of completedConfirmed) {
-      fetch(`/ratings/eligibility/${b.id}`, {
+      fetch(`/api/ratings/eligibility/${b.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -173,7 +176,7 @@ export const BookingsPage: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/cancel`, {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -204,6 +207,50 @@ export const BookingsPage: React.FC = () => {
     }
   };
 
+  const handleAcknowledgeCabFare = async (booking: PassengerBookingResponseDto) => {
+    if (!token || !booking.ride.cabShare) return;
+    const revisionToAck = booking.ride.cabShare.fareRevision;
+    setAcknowledgingBookingId(booking.id);
+    setActionMessage(null);
+
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}/cab-fare/acknowledge`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          fareRevision: revisionToAck,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || `Fare acknowledgement failed (${res.status})`);
+      }
+
+      setActionMessage({
+        type: 'success',
+        text: `You have successfully acknowledged Revision #${revisionToAck} for this cab share!`,
+      });
+
+      // Update local state directly so UI responds instantly
+      setPassengerBookings((prev) =>
+        prev.map((b) => (b.id === booking.id ? { ...b, fareRevisionAcknowledged: revisionToAck } : b)),
+      );
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || 'Unable to acknowledge fare revision.',
+      });
+    } finally {
+      setAcknowledgingBookingId(null);
+    }
+  };
+
   // Update driver request status (Approve or Reject)
   const handleDriverDecision = async (bookingId: string, status: 'CONFIRMED' | 'REJECTED') => {
     if (!token) return;
@@ -211,7 +258,7 @@ export const BookingsPage: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const endpoint = status === 'CONFIRMED' ? `/bookings/${bookingId}/approve` : `/bookings/${bookingId}/reject`;
+      const endpoint = status === 'CONFIRMED' ? `/api/bookings/${bookingId}/approve` : `/api/bookings/${bookingId}/reject`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -399,7 +446,10 @@ export const BookingsPage: React.FC = () => {
               {passengerBookings.map((b) => {
                 const isConfirmed = b.status === 'CONFIRMED';
                 const isPending = b.status === 'PENDING';
-                const totalCost = (b.ride.costPerSeat || 0) * b.requestedSeats;
+                const isCab = b.ride.rideType === 'CAB_SHARE' || Boolean(b.ride.cabShare);
+                const displayCost = isCab && b.ride.cabShare
+                  ? b.ride.cabShare.currentPerPerson * b.requestedSeats
+                  : (b.ride.costPerSeat || 0) * b.requestedSeats;
 
                 return (
                   <div
@@ -419,8 +469,29 @@ export const BookingsPage: React.FC = () => {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                           <StatusBadge status={b.status} domain="booking" />
+
+                          {isCab && (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: '#fef3c7',
+                                color: '#92400e',
+                                border: '1px solid #fde68a',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              id={`badge-cab-booking-${b.id}`}
+                            >
+                              <Users size={11} /> CAB SHARE
+                            </span>
+                          )}
+
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             Requested {b.requestedSeats} {b.requestedSeats === 1 ? 'seat' : 'seats'}
                           </span>
@@ -436,22 +507,29 @@ export const BookingsPage: React.FC = () => {
                       </div>
 
                       <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
-                          ₹{totalCost}
+                        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: isCab ? '#92400e' : 'var(--color-brand-700)' }}>
+                          ₹{displayCost}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>
-                          Fuel Contribution
+                          {isCab ? 'Cab Cost Share' : 'Fuel Contribution'}
                         </span>
                       </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
-                      <Clock size={14} style={{ color: 'var(--color-brand-600)' }} />
+                      <Clock size={14} style={{ color: isCab ? '#d97706' : 'var(--color-brand-600)' }} />
                       <span>Departure: {formatDeparture(b.ride.departureTime)}</span>
                     </div>
 
-                    {/* Safe Vehicle Details */}
-                    {b.ride.vehicle && (
+                    {/* Cab Details or Registered Vehicle */}
+                    {isCab && b.ride.cabShare ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                        <Users size={14} style={{ color: '#d97706' }} />
+                        <span>
+                          Commercial Cab: <strong>{b.ride.cabShare.cabService || 'Commercial Shared Cab'}</strong> (Total Capacity: {b.ride.cabShare.totalCapacity} seats)
+                        </span>
+                      </div>
+                    ) : b.ride.vehicle ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
                         {b.ride.vehicle.imageUrl ? (
                           <img
@@ -466,18 +544,18 @@ export const BookingsPage: React.FC = () => {
                           Vehicle: <strong>{b.ride.vehicle.color} {b.ride.vehicle.make} {b.ride.vehicle.model}</strong>
                         </span>
                       </div>
-                    )}
+                    ) : null}
 
-                    {/* Confirmed Details: Driver contact and pickup notes */}
+                    {/* Confirmed Details: Driver/Organiser contact and pickup notes */}
                     {isConfirmed && (
                       <div
                         style={{
                           padding: '12px 14px',
-                          backgroundColor: '#f0fdf4',
-                          border: '1px solid #bbf7d0',
+                          backgroundColor: isCab ? '#fffbeb' : '#f0fdf4',
+                          border: `1px solid ${isCab ? '#fde68a' : '#bbf7d0'}`,
                           borderRadius: '8px',
                           fontSize: '0.825rem',
-                          color: '#166534',
+                          color: isCab ? '#92400e' : '#166534',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '6px',
@@ -488,12 +566,12 @@ export const BookingsPage: React.FC = () => {
                             <img
                               src={b.ride.driverAvatarUrl}
                               alt={b.ride.driverName}
-                              style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #86efac', flexShrink: 0 }}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: isCab ? '1px solid #fde68a' : '1px solid #86efac', flexShrink: 0 }}
                             />
                           ) : (
-                            <CheckCircle2 size={15} />
+                            <CheckCircle2 size={15} style={{ color: isCab ? '#d97706' : '#16a34a' }} />
                           )}
-                          <span>Confirmed Driver Contact: {b.ride.driverName}</span>
+                          <span>{isCab ? 'Confirmed Journey Organiser:' : 'Confirmed Driver Contact:'} {b.ride.driverName}</span>
                         </div>
                         {b.ride.pickupDescription && (
                           <div>
@@ -502,6 +580,101 @@ export const BookingsPage: React.FC = () => {
                         )}
                       </div>
                     )}
+
+                    {/* Material Fare Revision & Passenger Acknowledgement Banner */}
+                    {isConfirmed && isCab && b.ride.cabShare && (() => {
+                      const cab = b.ride.cabShare;
+                      const hasRevision = (cab.fareRevision ?? 1) > 1;
+                      const isAcked = (b.fareRevisionAcknowledged ?? 0) >= cab.fareRevision;
+                      const isAcking = acknowledgingBookingId === b.id;
+
+                      if (!hasRevision && isAcked) return null;
+
+                      if (hasRevision && !isAcked) {
+                        const estTotal = cab.estimatedTotalFare;
+                        const finalTotal = cab.finalTotalFare ?? estTotal;
+                        const diff = finalTotal - estTotal;
+                        const diffPercent = estTotal > 0 ? Math.round((diff / estTotal) * 100) : 0;
+
+                        return (
+                          <div
+                            style={{
+                              padding: '14px',
+                              backgroundColor: '#fffbeb',
+                              border: '1.5px solid #f59e0b',
+                              borderRadius: '10px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '10px',
+                              boxShadow: '0 2px 6px rgba(245, 158, 11, 0.1)',
+                            }}
+                            id={`fare-revision-notice-${b.id}`}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: '#b45309', fontSize: '0.875rem' }}>
+                                <AlertCircle size={16} />
+                                <span>Fare Revision Notice (Revision #{cab.fareRevision})</span>
+                              </div>
+                              <span style={{ fontSize: '0.725rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                                Action Required
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.825rem', color: '#92400e', lineHeight: '1.45' }}>
+                              The organiser updated the total cab fare from <strong>₹{estTotal}</strong> to <strong>₹{finalTotal}</strong>{' '}
+                              {diff !== 0 && (
+                                <span>({diff > 0 ? `+₹${diff} / +${diffPercent}%` : `-₹${Math.abs(diff)} / ${diffPercent}%`})</span>
+                              )}.
+                              <div style={{ marginTop: '4px' }}>
+                                Your updated share is <strong>₹{cab.currentPerPerson * b.requestedSeats}</strong> (~₹{cab.currentPerPerson} / seat across {cab.totalConfirmedParticipants} participants).
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px' }}>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                disabled={isAcking}
+                                onClick={() => handleAcknowledgeCabFare(b)}
+                                leftIcon={isAcking ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                                style={{ backgroundColor: '#d97706', borderColor: '#d97706' }}
+                                id={`btn-ack-fare-${b.id}`}
+                              >
+                                {isAcking ? 'Acknowledging...' : 'Acknowledge Updated Fare'}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (isAcked && (cab.fareRevision ?? 1) > 1) {
+                        return (
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              backgroundColor: '#f0fdf4',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: '6px',
+                              fontSize: '0.775rem',
+                              color: '#166534',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                            }}
+                            id={`fare-ack-badge-${b.id}`}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
+                              <span>You have acknowledged Fare Revision #{cab.fareRevision} (~₹{cab.currentPerPerson}/seat).</span>
+                            </div>
+                            <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#15803d' }}>Acknowledged</span>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })()}
 
                     {/* Pending state notice */}
                     {isPending && (
@@ -558,7 +731,7 @@ export const BookingsPage: React.FC = () => {
                                 leftIcon={<MessageSquare size={13} style={{ color: '#2563eb' }} />}
                                 id={`btn-chat-driver-${b.id}`}
                               >
-                                Chat with Driver
+                                {isCab ? 'Chat with Organiser' : 'Chat with Driver'}
                               </Button>
                             </Link>
                           </div>

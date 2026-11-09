@@ -612,7 +612,7 @@ export const AuthPage: React.FC = () => {
                       onClick={async () => {
                         try {
                           setIsLoading(true);
-                          const res = await fetch('/auth/dev-login', {
+                          const res = await fetch('/api/auth/dev-login', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email: 'arjun.driver@vitstudent.ac.in' }),

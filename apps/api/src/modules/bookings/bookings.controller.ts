@@ -26,6 +26,7 @@ import {
   VerifyBoardingResponseDto,
   MarkNoShowSchema,
   MarkNoShowResponseDto,
+  CabFareAcknowledgementSchema,
 } from '@vit-carpool/contracts';
 
 @ApiTags('bookings')
@@ -156,5 +157,26 @@ export class BookingsController {
   ): Promise<MarkNoShowResponseDto> {
     const parsed = MarkNoShowSchema.safeParse(body || {});
     return this.bookingsService.markNoShow(user, id, parsed.success ? parsed.data.reason : undefined);
+  }
+
+  @Post(':id/cab-fare/acknowledge')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Acknowledge material fare revision for a cab share booking (Passenger only)' })
+  async acknowledgeCabFare(
+    @CurrentUser() user: User,
+    @Param('id') bookingId: string,
+    @Body() body: unknown,
+  ): Promise<{ acknowledged: boolean; bookingId: string; fareRevision: number }> {
+    const parsed = CabFareAcknowledgementSchema.safeParse({ ...((body as any) || {}), bookingId });
+    if (!parsed.success) {
+      const messages = parsed.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+      throw new BadRequestException({
+        statusCode: 400,
+        message: messages.join('; '),
+        error: 'Bad Request',
+      });
+    }
+
+    return this.bookingsService.acknowledgeCabFare(user, bookingId, parsed.data);
   }
 }

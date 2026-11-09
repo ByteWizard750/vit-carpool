@@ -177,7 +177,7 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
 
   const handleStartEdit = (ride: DriverRideResponseDto) => {
     setEditingRideId(ride.id);
-    setSelectedVehicleId(ride.vehicleId);
+    setSelectedVehicleId(ride.vehicleId ?? '');
     setOrigin(ride.origin);
     if (ride.originLatitude !== undefined && ride.originLongitude !== undefined && ride.originLatitude !== null && ride.originLongitude !== null) {
       setOriginLocation({

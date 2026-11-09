@@ -122,7 +122,8 @@ export class VerificationService {
     requestId: string,
     dto: ReviewVerificationRequestDto,
   ): Promise<VerificationRequest> {
-    if (adminUser.role !== UserRole.ADMIN) {
+    const allowedAdminRoles: UserRole[] = [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MODERATOR];
+    if (!allowedAdminRoles.includes(adminUser.role)) {
       throw new BadRequestException('Only administrators can review verification requests.');
     }
 

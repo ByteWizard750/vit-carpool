@@ -23,7 +23,9 @@ export default defineConfig({
     port: 5173,
     host: '127.0.0.1',
     proxy: {
+      '/api': apiProxy,
       '/health': apiProxy,
+      '/uploads': apiProxy,
       '/rides': apiProxy,
       '/vehicles': apiProxy,
       '/locations': apiProxy,
@@ -38,15 +40,13 @@ export default defineConfig({
       '/moderation': apiProxy,
       '/admin': apiProxy,
       '/verification': apiProxy,
-      '/uploads': apiProxy,
       '/socket.io': {
         target: 'http://localhost:3000',
         ws: true,
       },
-      '/api': {
+      '/tracking': {
         target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        ws: true,
       },
     },
   },

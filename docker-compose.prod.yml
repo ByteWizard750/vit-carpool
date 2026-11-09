@@ -1,0 +1,96 @@
+name: vit-carpool-production
+
+services:
+  # ============================================================================
+  # Caddy Reverse Proxy & Edge TLS
+  # Handles SSL/TLS, Cloudflare reverse proxy, WebSocket upgrades, and compression
+  # ============================================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: vit_carpool_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 QUIC
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - carpool_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # Frontend Web Container (Static SPA served by unprivileged Nginx)
+  # ============================================================================
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/bytewizard750/vit-carpool-web:latest}
+    container_name: vit_carpool_web
+    restart: unless-stopped
+    expose:
+      - "8080"
+    networks:
+      - carpool_net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/web-health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # Backend API Container (NestJS + Prisma + Socket.io)
+  # ============================================================================
+  api:
+    image: ${API_IMAGE:-ghcr.io/bytewizard750/vit-carpool-api:latest}
+    container_name: vit_carpool_api
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env.production
+    volumes:
+      # Persistent fallback volume for uploads (when STORAGE_PROVIDER=local)
+      - local_uploads:/app/uploads
+    networks:
+      - carpool_net
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  caddy_data:
+    name: vit_carpool_caddy_data
+  caddy_config:
+    name: vit_carpool_caddy_config
+  local_uploads:
+    name: vit_carpool_local_uploads
+
+networks:
+  carpool_net:
+    name: vit_carpool_network
+    driver: bridge
+

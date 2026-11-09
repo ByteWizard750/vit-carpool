@@ -40,11 +40,61 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Position dropdown intelligently within viewport to prevent overflow and maximize readability
+  const updateDropdownPosition = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const isMobile = viewportWidth < 640;
+
+      if (isMobile) {
+        // On mobile, stretch cleanly across the container / viewport width
+        setDropdownStyle({
+          width: '100%',
+          minWidth: '100%',
+          maxWidth: `${viewportWidth - 32}px`,
+          left: 0,
+        });
+      } else {
+        // On desktop/tablet, provide a wide, generous dropdown (540px - 600px) so full location names and addresses are visible
+        const desiredWidth = Math.min(580, viewportWidth - 32);
+        const spaceOnRight = viewportWidth - rect.left - 16;
+
+        if (spaceOnRight < desiredWidth) {
+          // If expanding to the right would clip off-screen, shift left to stay nicely inside viewport
+          const offset = Math.min(rect.left - 16, desiredWidth - rect.width);
+          setDropdownStyle({
+            width: `${desiredWidth}px`,
+            left: `-${Math.max(0, offset)}px`,
+          });
+        } else {
+          setDropdownStyle({
+            width: `${desiredWidth}px`,
+            left: 0,
+          });
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      updateDropdownPosition();
+      window.addEventListener('resize', updateDropdownPosition);
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      return () => {
+        window.removeEventListener('resize', updateDropdownPosition);
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+      };
+    }
+  }, [isOpen, updateDropdownPosition]);
 
   // Sync internal inputValue if value prop changes externally
   useEffect(() => {
@@ -89,7 +139,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       let token = localStorage.getItem('vit_auth_token');
       if (!token && import.meta.env.DEV) {
         try {
-          const devRes = await fetch('/auth/dev-login', {
+          const devRes = await fetch('/api/auth/dev-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: 'student@vitstudent.ac.in' }),
@@ -113,7 +163,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       }
 
       const response = await fetch(
-        `/locations/autocomplete?q=${encodeURIComponent(query.trim())}&limit=6`,
+        `/api/locations/autocomplete?q=${encodeURIComponent(query.trim())}&limit=6`,
         {
           headers,
           signal: abortController.signal,
@@ -200,6 +250,24 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     }
   };
 
+  const handleBlur = () => {
+    // Graceful landmark auto-matching if user typed without clicking dropdown
+    if (!selectedLocation && inputValue.trim().length >= 3) {
+      const trimmed = inputValue.trim().toLowerCase();
+      const matched = searchFallbackLandmarks(trimmed, 1);
+      if (matched.length > 0) {
+        const top = matched[0];
+        if (
+          top.name.toLowerCase() === trimmed ||
+          top.name.toLowerCase().includes(trimmed) ||
+          trimmed.includes(top.name.toLowerCase())
+        ) {
+          onChange(inputValue, top);
+        }
+      }
+    }
+  };
+
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -247,15 +315,45 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   };
 
   const getCategoryBadge = (category?: string) => {
+    const baseStyle: React.CSSProperties = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      fontSize: '0.675rem',
+      fontWeight: 700,
+      padding: '2px 7px',
+      borderRadius: '9999px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.03em',
+      whiteSpace: 'nowrap',
+      lineHeight: 1.2,
+      border: '1px solid transparent',
+    };
+
     switch (category) {
       case 'station':
-        return <span className="location-badge station">Transit</span>;
+        return (
+          <span style={{ ...baseStyle, backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}>
+            Transit
+          </span>
+        );
       case 'campus':
-        return <span className="location-badge campus">Campus</span>;
+        return (
+          <span style={{ ...baseStyle, backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0' }}>
+            Campus
+          </span>
+        );
       case 'locality':
-        return <span className="location-badge locality">Hub</span>;
+        return (
+          <span style={{ ...baseStyle, backgroundColor: '#faf5ff', color: '#7e22ce', borderColor: '#e9d5ff' }}>
+            Hub
+          </span>
+        );
       case 'landmark':
-        return <span className="location-badge landmark">Point</span>;
+        return (
+          <span style={{ ...baseStyle, backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a' }}>
+            Point
+          </span>
+        );
       default:
         return null;
     }
@@ -300,6 +398,7 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
             }
           }}
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           placeholder={placeholder}
           required={required}
           disabled={disabled}
@@ -376,33 +475,33 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
           role="listbox"
           style={{
             position: 'absolute',
-            top: 'calc(100% + 4px)',
-            left: 0,
-            right: 0,
+            top: 'calc(100% + 6px)',
             backgroundColor: '#ffffff',
-            borderRadius: '8px',
+            borderRadius: '12px',
             border: '1px solid var(--border-medium, #cbd5e1)',
             boxShadow:
-              '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+              '0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.05)',
             zIndex: 9999,
-            maxHeight: '280px',
+            maxHeight: '420px',
             overflowY: 'auto',
-            padding: '4px 0',
+            padding: '6px 0',
+            boxSizing: 'border-box',
+            ...dropdownStyle,
           }}
         >
           {loading && suggestions.length === 0 && (
             <div
               style={{
-                padding: '12px 14px',
+                padding: '14px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                fontSize: '0.825rem',
+                gap: '10px',
+                fontSize: '0.875rem',
                 color: 'var(--text-muted, #64748b)',
               }}
             >
               <Loader2
-                size={14}
+                size={16}
                 style={{ animation: 'spin 1s linear infinite', color: '#2563eb' }}
               />
               <span>Searching Chennai transit stops and landmarks...</span>
@@ -412,16 +511,16 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
           {!loading && error && (
             <div
               style={{
-                padding: '12px 14px',
+                padding: '14px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                fontSize: '0.825rem',
+                gap: '10px',
+                fontSize: '0.875rem',
                 color: '#b91c1c',
                 backgroundColor: '#fef2f2',
               }}
             >
-              <AlertCircle size={15} style={{ flexShrink: 0 }} />
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span>{error}</span>
             </div>
           )}
@@ -429,9 +528,9 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
           {!loading && !error && suggestions.length === 0 && (
             <div
               style={{
-                padding: '14px',
+                padding: '16px',
                 textAlign: 'center',
-                fontSize: '0.825rem',
+                fontSize: '0.875rem',
                 color: 'var(--text-muted, #64748b)',
               }}
             >
@@ -458,10 +557,10 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                 }}
                 onMouseEnter={() => setHighlightedIndex(index)}
                 style={{
-                  padding: '9px 12px',
+                  padding: '12px 16px',
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: '10px',
+                  gap: '12px',
                   cursor: 'pointer',
                   backgroundColor: isHighlighted
                     ? '#eff6ff'
@@ -473,20 +572,27 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                     : isSelected
                     ? '3px solid #16a34a'
                     : '3px solid transparent',
-                  transition: 'background-color 0.1s ease',
+                  transition: 'background-color 0.15s ease',
                 }}
               >
                 <div
                   style={{
-                    marginTop: '2px',
-                    color: isHighlighted ? '#2563eb' : '#64748b',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: isHighlighted ? '#dbeafe' : '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isHighlighted ? '#1d4ed8' : '#475569',
                     flexShrink: 0,
+                    marginTop: '2px',
                   }}
                 >
                   {suggestion.category === 'campus' ? (
-                    <Building size={16} />
+                    <Building size={20} />
                   ) : (
-                    <MapPin size={16} />
+                    <MapPin size={20} />
                   )}
                 </div>
 
@@ -494,33 +600,33 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                   <div
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       justifyContent: 'space-between',
-                      gap: '6px',
+                      gap: '10px',
                     }}
                   >
                     <span
                       style={{
                         fontWeight: 600,
-                        fontSize: '0.875rem',
+                        fontSize: '0.975rem',
+                        lineHeight: 1.35,
                         color: isHighlighted ? '#1d4ed8' : '#0f172a',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        wordBreak: 'break-word',
                       }}
                     >
                       {suggestion.name}
                     </span>
-                    {getCategoryBadge(suggestion.category)}
+                    <div style={{ flexShrink: 0, marginTop: '1px' }}>
+                      {getCategoryBadge(suggestion.category)}
+                    </div>
                   </div>
                   <div
                     style={{
-                      fontSize: '0.75rem',
-                      color: '#64748b',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginTop: '1px',
+                      fontSize: '0.85rem',
+                      lineHeight: 1.45,
+                      color: '#475569',
+                      marginTop: '4px',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {suggestion.address}
@@ -529,8 +635,8 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
 
                 {isSelected && (
                   <CheckCircle2
-                    size={16}
-                    style={{ color: '#16a34a', flexShrink: 0, marginTop: '2px' }}
+                    size={18}
+                    style={{ color: '#16a34a', flexShrink: 0, marginTop: '8px' }}
                   />
                 )}
               </div>

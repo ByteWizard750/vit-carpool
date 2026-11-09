@@ -33,10 +33,10 @@ export class LocationRateLimiterGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const now = Date.now();
 
-    // Key by user ID if authenticated, otherwise fall back to client IP
+    // Key by user ID if authenticated, otherwise fall back to client IP safely via Express req.ip
     const clientId =
       req.user?.id ||
-      req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
+      (req.ip && req.ip.trim().length > 0 ? req.ip.trim() : null) ||
       req.socket?.remoteAddress ||
       'unknown-client';
 

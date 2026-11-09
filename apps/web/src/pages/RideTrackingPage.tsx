@@ -126,7 +126,7 @@ export const RideTrackingPage: React.FC = () => {
   const fetchState = async () => {
     if (!rideId || !token) return;
     try {
-      const res = await fetch(`/rides/${rideId}/tracking`, {
+      const res = await fetch(`/api/rides/${rideId}/tracking`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -363,7 +363,7 @@ export const RideTrackingPage: React.FC = () => {
     const fetchOtp = async () => {
       setOtpLoading(true);
       try {
-        const res = await fetch(`/bookings/${trackingState.myPickup!.bookingId}/boarding-otp`, {
+        const res = await fetch(`/api/bookings/${trackingState.myPickup!.bookingId}/boarding-otp`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -501,7 +501,7 @@ export const RideTrackingPage: React.FC = () => {
     } else {
       // REST fallback bridge
       try {
-        await fetch(`/rides/${rideId}/location-update`, {
+        await fetch(`/api/rides/${rideId}/location-update`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -542,7 +542,7 @@ export const RideTrackingPage: React.FC = () => {
     navigator.geolocation.getCurrentPosition(
       async (initialPos) => {
         try {
-          const res = await fetch(`/rides/${rideId}/start`, {
+          const res = await fetch(`/api/rides/${rideId}/start`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
@@ -593,7 +593,7 @@ export const RideTrackingPage: React.FC = () => {
     if (!rideId || !token) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/rides/${rideId}/complete`, {
+      const res = await fetch(`/api/rides/${rideId}/complete`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -620,7 +620,7 @@ export const RideTrackingPage: React.FC = () => {
     if (!rideId || !token) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/rides/${rideId}/cancel`, {
+      const res = await fetch(`/api/rides/${rideId}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -647,7 +647,7 @@ export const RideTrackingPage: React.FC = () => {
     if (!token || !trackingState?.myPickup?.bookingId || regenCooldown > 0) return;
     setOtpLoading(true);
     try {
-      const res = await fetch(`/bookings/${trackingState.myPickup.bookingId}/boarding-otp/regenerate`, {
+      const res = await fetch(`/api/bookings/${trackingState.myPickup.bookingId}/boarding-otp/regenerate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -677,7 +677,7 @@ export const RideTrackingPage: React.FC = () => {
     setOtpVerifyLoading(true);
     setOtpVerifyError(null);
     try {
-      const res = await fetch(`/bookings/${selectedPassengerForOtp.bookingId}/verify-boarding`, {
+      const res = await fetch(`/api/bookings/${selectedPassengerForOtp.bookingId}/verify-boarding`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -722,7 +722,7 @@ export const RideTrackingPage: React.FC = () => {
     if (!selectedPassengerForNoShow || !token) return;
     setNoShowLoading(true);
     try {
-      const res = await fetch(`/bookings/${selectedPassengerForNoShow.bookingId}/mark-no-show`, {
+      const res = await fetch(`/api/bookings/${selectedPassengerForNoShow.bookingId}/mark-no-show`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -781,7 +781,7 @@ export const RideTrackingPage: React.FC = () => {
     });
 
     try {
-      const res = await fetch(`/rides/${rideId}/boarding`, {
+      const res = await fetch(`/api/rides/${rideId}/boarding`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

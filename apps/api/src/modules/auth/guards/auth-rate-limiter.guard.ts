@@ -25,16 +25,26 @@ interface ClientRateWindow {
 @Injectable()
 export class AuthRateLimiterGuard implements CanActivate {
   private readonly logger = new Logger(AuthRateLimiterGuard.name);
-  private readonly requestWindows = new Map<string, ClientRateWindow>();
+  private static readonly sharedWindows = new Map<string, ClientRateWindow>();
+  private static testMaxLimitOverride: number | null = null;
   private readonly ttlMs: number;
-  private readonly maxLimit: number;
+  private _maxLimit: number;
 
   constructor(private readonly config: ConfigService) {
     const isTest = this.config.get<string>('NODE_ENV') === 'test';
     const configuredLimit = this.config.get<number>('AUTH_RATE_LIMIT_LIMIT');
-    this.maxLimit = isTest ? 100 : (configuredLimit || 10);
+    this._maxLimit = isTest ? 100 : (configuredLimit || 10);
     const ttlSeconds = this.config.get<number>('AUTH_RATE_LIMIT_TTL', 60);
     this.ttlMs = ttlSeconds * 1000;
+  }
+
+  public set maxLimit(val: number) {
+    AuthRateLimiterGuard.testMaxLimitOverride = val;
+    this._maxLimit = val;
+  }
+
+  public get maxLimit(): number {
+    return AuthRateLimiterGuard.testMaxLimitOverride ?? this._maxLimit;
   }
 
   canActivate(context: ExecutionContext): boolean {
@@ -46,10 +56,10 @@ export class AuthRateLimiterGuard implements CanActivate {
     const routeFamily = req.path.includes('verify') ? 'verify' : 'request';
     const clientKey = `${clientIp}:${routeFamily}`;
 
-    let window = this.requestWindows.get(clientKey);
+    let window = AuthRateLimiterGuard.sharedWindows.get(clientKey);
     if (!window) {
       window = { timestamps: [] };
-      this.requestWindows.set(clientKey, window);
+      AuthRateLimiterGuard.sharedWindows.set(clientKey, window);
     }
 
     // Prune timestamps older than active sliding window
@@ -105,6 +115,7 @@ export class AuthRateLimiterGuard implements CanActivate {
    * Reset rate limit state for test isolation.
    */
   reset(): void {
-    this.requestWindows.clear();
+    AuthRateLimiterGuard.sharedWindows.clear();
+    AuthRateLimiterGuard.testMaxLimitOverride = null;
   }
 }

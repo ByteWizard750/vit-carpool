@@ -21,6 +21,7 @@ import {
   UserCheck,
   UserX,
   ExternalLink,
+  IndianRupee,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { PageShell } from '../components/layout/PageShell';
@@ -49,7 +50,7 @@ export const NotificationsPage: React.FC = () => {
   const fetchChatUnread = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch('/chat/unread-count', {
+      const res = await fetch('/api/chat/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -71,7 +72,7 @@ export const NotificationsPage: React.FC = () => {
       setError(null);
 
       try {
-        const res = await fetch('/notifications?limit=50', {
+        const res = await fetch('/api/notifications?limit=50', {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -146,7 +147,7 @@ export const NotificationsPage: React.FC = () => {
       setUnreadCount((prev) => Math.max(0, prev - 1));
 
       try {
-        const res = await fetch(`/notifications/${id}/read`, {
+        const res = await fetch(`/api/notifications/${id}/read`, {
           method: 'PATCH',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -188,7 +189,7 @@ export const NotificationsPage: React.FC = () => {
     setActionLoadingId('all');
 
     try {
-      const res = await fetch('/notifications/mark-all-read', {
+      const res = await fetch('/api/notifications/mark-all-read', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -220,7 +221,7 @@ export const NotificationsPage: React.FC = () => {
 
     setActionLoadingId(id);
     try {
-      const res = await fetch(`/notifications/${id}`, {
+      const res = await fetch(`/api/notifications/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -407,6 +408,28 @@ export const NotificationsPage: React.FC = () => {
           primaryActionHref: '/rides',
           primaryActionIcon: <ArrowRight size={13} />,
         };
+      case 'CAB_FARE_UPDATED':
+        return {
+          icon: <IndianRupee size={18} color="#d97706" />,
+          bg: '#fffbeb',
+          border: '#fde68a',
+          badgeText: 'Cab Fare Updated',
+          badgeColor: '#92400e',
+          primaryActionText: 'Review & Acknowledge',
+          primaryActionHref: '/bookings?tab=passenger',
+          primaryActionIcon: <ArrowRight size={13} />,
+        };
+      case 'CAB_BOOKING_DEADLINE':
+        return {
+          icon: <Clock size={18} color="#0284c7" />,
+          bg: '#f0f9ff',
+          border: '#bae6fd',
+          badgeText: 'Booking Cutoff',
+          badgeColor: '#0369a1',
+          primaryActionText: 'View Cab Share',
+          primaryActionHref: notif.rideId ? `/rides` : '/rides',
+          primaryActionIcon: <ArrowRight size={13} />,
+        };
       default:
         return {
           icon: <Bell size={18} color="#2563eb" />,
@@ -430,6 +453,7 @@ export const NotificationsPage: React.FC = () => {
             'BOOKING_APPROVED',
             'BOOKING_REJECTED',
             'BOOKING_CANCELLED',
+            'CAB_FARE_UPDATED',
           ].includes(n.type),
         );
       case 'RIDES':
@@ -441,6 +465,7 @@ export const NotificationsPage: React.FC = () => {
             'DRIVER_ARRIVED',
             'RIDE_COMPLETED',
             'RIDE_CANCELLED',
+            'CAB_BOOKING_DEADLINE',
           ].includes(n.type),
         );
       case 'ALL':

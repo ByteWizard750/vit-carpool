@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { RidesController } from './rides.controller';
 import { RidesService } from './rides.service';
+import { RouteService } from './route.service';
+import { CorridorMatcherService } from './corridor-matcher.service';
 import { AuditModule } from '../audit/audit.module';
 import { RatingsModule } from '../ratings/ratings.module';
 import { RideAlertsModule } from '../ride-alerts/ride-alerts.module';
@@ -16,7 +18,7 @@ import { TrackingModule } from '../tracking/tracking.module';
     forwardRef(() => TrackingModule),
   ],
   controllers: [RidesController],
-  providers: [RidesService],
-  exports: [RidesService],
+  providers: [RidesService, RouteService, CorridorMatcherService],
+  exports: [RidesService, RouteService, CorridorMatcherService],
 })
 export class RidesModule {}

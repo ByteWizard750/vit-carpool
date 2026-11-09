@@ -45,6 +45,12 @@ export {
 export {
   RideStatusSchema,
   type RideStatus,
+  RouteStatusSchema,
+  type RouteStatus,
+  RideMatchTypeSchema,
+  type RideMatchType,
+  RideMatchMetadataSchema,
+  type RideMatchMetadataDto,
   CreateRideSchema,
   type CreateRideDto,
   UpdateRideSchema,
@@ -63,7 +69,27 @@ export {
   type ReusableRideTemplateDto,
   QuickRideTemplatesResponseSchema,
   type QuickRideTemplatesResponseDto,
+  RideRouteResponseSchema,
+  type RideRouteResponseDto,
 } from './ride.contract';
+
+export {
+  RideTypeSchema,
+  type RideType,
+  CabShareDetailSchema,
+  type CabShareDetailDto,
+  CabSharePublicSummarySchema,
+  type CabSharePublicSummaryDto,
+  CreateCabShareSchema,
+  type CreateCabShareDto,
+  UpdateCabShareFareSchema,
+  type UpdateCabShareFareDto,
+  CabFareAcknowledgementSchema,
+  type CabFareAcknowledgementDto,
+  type CabFareSplitResult,
+  calculateCabFareSplit,
+  isMaterialFareIncrease,
+} from './cab-share.contract';
 
 export {
   BookingStatusSchema,

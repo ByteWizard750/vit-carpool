@@ -12,7 +12,7 @@ export const BottomNav: React.FC = () => {
   useEffect(() => {
     if (!user || !token) return;
     const fetchCounts = () => {
-      fetch('/chat/unread-count', {
+      fetch('/api/chat/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -21,7 +21,7 @@ export const BottomNav: React.FC = () => {
         })
         .catch(() => {});
 
-      fetch('/notifications/unread-count', {
+      fetch('/api/notifications/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())

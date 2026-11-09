@@ -109,7 +109,32 @@ export const EnvSchema = z.object({
   LOCATION_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(500).max(30000).default(5000),
   LOCATION_RATE_LIMIT_TTL: z.coerce.number().int().min(1).default(60),
   LOCATION_RATE_LIMIT_LIMIT: z.coerce.number().int().min(1).default(30),
+
+  // Document & Image Storage Configuration (Local vs S3)
+  STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
+  S3_BUCKET_NAME: z.string().optional().or(z.literal('')),
+  S3_REGION: z.string().default('ap-south-1'),
+  S3_ENDPOINT: z.string().optional().or(z.literal('')),
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((val) => val === 'true'),
+  S3_PRESIGNED_URL_EXPIRES_IN_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  AWS_ACCESS_KEY_ID: z.string().optional().or(z.literal('')),
+  AWS_SECRET_ACCESS_KEY: z.string().optional().or(z.literal('')),
+
+  // Route Geometry & Corridor Discovery
+  ROUTE_GEOMETRY_PROVIDER: z.enum(['osrm', 'mapbox', 'straight_line', 'mock']).default('osrm'),
+  CORRIDOR_SEARCH_MODE: z.enum(['ENDPOINT', 'SHADOW', 'CORRIDOR']).default('ENDPOINT'),
+  CORRIDOR_MAX_PICKUP_METERS: z.coerce.number().positive().default(1500),
+  CORRIDOR_MAX_DROPOFF_METERS: z.coerce.number().positive().default(1500),
 }).refine(
+  (data) => !(data.STORAGE_PROVIDER === 's3' && (!data.S3_BUCKET_NAME || !data.S3_BUCKET_NAME.trim())),
+  {
+    message: 'S3_BUCKET_NAME is required when STORAGE_PROVIDER is set to s3',
+    path: ['S3_BUCKET_NAME'],
+  },
+).refine(
   (data) => !(data.NODE_ENV === 'production' && data.JWT_TEST_MODE === true),
   {
     message: 'JWT_TEST_MODE must not be enabled in production environment',

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit.service';
-import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, BoardingStatus, NotificationType, Prisma } from '@vit-carpool/db';
+import { User, Ride, Vehicle, Booking, BookingStatus, RideStatus, BoardingStatus, NotificationType, Prisma, RideType } from '@vit-carpool/db';
 import {
   CreateBookingRequestDto,
   CancelBookingDto,
@@ -19,6 +19,8 @@ import {
   BoardingOtpResponseDto,
   VerifyBoardingResponseDto,
   MarkNoShowResponseDto,
+  CabFareAcknowledgementDto,
+  calculateCabFareSplit,
 } from '@vit-carpool/contracts';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../moderation/moderation.service';
@@ -44,10 +46,36 @@ export class BookingsService {
    */
   private toPassengerBookingDto(
     booking: Booking & {
-      ride: Ride & { driver?: User | null; vehicle?: Vehicle | null };
+      ride: Ride & { driver?: User | null; vehicle?: Vehicle | null; cabShareDetail?: any };
+      cabFareAcknowledgements?: any[];
     },
   ): PassengerBookingResponseDto {
     const isConfirmed = booking.status === BookingStatus.CONFIRMED;
+    const cabShareDetail = booking.ride.cabShareDetail;
+    let cabShareSummary = undefined;
+    if (cabShareDetail) {
+      const activeFare = cabShareDetail.finalTotalFare ?? cabShareDetail.estimatedTotalFare;
+      const confirmedPassengerSeats = Math.max(0, (cabShareDetail.totalCapacity - 1) - booking.ride.availableSeats);
+      const split = calculateCabFareSplit(activeFare, cabShareDetail.totalCapacity, confirmedPassengerSeats);
+      cabShareSummary = {
+        totalCapacity: cabShareDetail.totalCapacity,
+        estimatedTotalFare: cabShareDetail.estimatedTotalFare,
+        finalTotalFare: cabShareDetail.finalTotalFare ?? null,
+        fareRevision: cabShareDetail.fareRevision,
+        bookingDeadline: typeof cabShareDetail.bookingDeadline?.toISOString === 'function'
+          ? cabShareDetail.bookingDeadline.toISOString()
+          : cabShareDetail.bookingDeadline,
+        cabService: cabShareDetail.cabService ?? null,
+        estimatedPerPersonIfFull: split.estimatedPerPersonIfFull,
+        currentPerPerson: split.currentPerPerson,
+        totalConfirmedParticipants: split.confirmedParticipants,
+      };
+    }
+
+    const acks = booking.cabFareAcknowledgements;
+    const fareRevisionAcknowledged = acks && acks.length > 0
+      ? Math.max(...acks.map((a: any) => a.fareRevision))
+      : null;
 
     return {
       id: booking.id,
@@ -68,10 +96,12 @@ export class BookingsService {
       rejectedAt: booking.rejectedAt ? booking.rejectedAt.toISOString() : null,
       cancelledAt: booking.cancelledAt ? booking.cancelledAt.toISOString() : null,
       cancellationReason: booking.cancellationReason,
+      fareRevisionAcknowledged,
       createdAt: booking.createdAt.toISOString(),
       updatedAt: booking.updatedAt.toISOString(),
       ride: {
         id: booking.ride.id,
+        rideType: (booking.ride.rideType as any) || 'VEHICLE_RIDE',
         origin: booking.ride.origin,
         destination: booking.ride.destination,
         departureTime: booking.ride.departureTime.toISOString(),
@@ -94,6 +124,7 @@ export class BookingsService {
               imageUrl: booking.ride.vehicle.imageUrl ?? null,
             }
           : undefined,
+        cabShare: cabShareSummary,
       },
     };
   }
@@ -105,10 +136,11 @@ export class BookingsService {
   private toDriverBookingDto(
     booking: Booking & {
       passenger?: User | null;
-      ride: Ride;
+      ride: Ride & { cabShareDetail?: any };
     },
   ): DriverBookingResponseDto {
     const isConfirmed = booking.status === BookingStatus.CONFIRMED;
+    const cabShareDetail = (booking.ride as any).cabShareDetail;
 
     return {
       id: booking.id,
@@ -136,12 +168,34 @@ export class BookingsService {
       updatedAt: booking.updatedAt.toISOString(),
       ride: {
         id: booking.ride.id,
+        rideType: (booking.ride.rideType as any) || 'VEHICLE_RIDE',
         origin: booking.ride.origin,
         destination: booking.ride.destination,
         departureTime: booking.ride.departureTime.toISOString(),
         availableSeats: booking.ride.availableSeats,
         totalSeats: booking.ride.totalSeats,
         status: booking.ride.status,
+        cabShare: cabShareDetail
+          ? {
+              id: cabShareDetail.id,
+              rideId: cabShareDetail.rideId,
+              totalCapacity: cabShareDetail.totalCapacity,
+              estimatedTotalFare: cabShareDetail.estimatedTotalFare,
+              finalTotalFare: cabShareDetail.finalTotalFare ?? null,
+              fareRevision: cabShareDetail.fareRevision,
+              bookingDeadline: typeof cabShareDetail.bookingDeadline?.toISOString === 'function'
+                ? cabShareDetail.bookingDeadline.toISOString()
+                : cabShareDetail.bookingDeadline,
+              cabService: cabShareDetail.cabService ?? null,
+              cabBookingRef: cabShareDetail.cabBookingRef ?? null,
+              createdAt: typeof cabShareDetail.createdAt?.toISOString === 'function'
+                ? cabShareDetail.createdAt.toISOString()
+                : cabShareDetail.createdAt,
+              updatedAt: typeof cabShareDetail.updatedAt?.toISOString === 'function'
+                ? cabShareDetail.updatedAt.toISOString()
+                : cabShareDetail.updatedAt,
+            }
+          : null,
       },
     };
   }
@@ -164,6 +218,7 @@ export class BookingsService {
       include: {
         driver: true,
         vehicle: true,
+        cabShareDetail: true,
       },
     });
 
@@ -176,9 +231,13 @@ export class BookingsService {
       throw new NotFoundException('Ride not found or not accessible.');
     }
 
-    // 3. Driver cannot book their own ride
+    // 3. Driver/Organiser cannot book their own ride
     if (ride.driverId === user.id) {
-      throw new BadRequestException('Drivers cannot book seats on their own rides.');
+      throw new BadRequestException(
+        ride.rideType === RideType.CAB_SHARE
+          ? 'Organisers cannot book seats on their own rides.'
+          : 'Drivers cannot book seats on their own rides.',
+      );
     }
 
     // 3.1 Mutual blocking check
@@ -205,6 +264,12 @@ export class BookingsService {
 
     if (ride.departureTime.getTime() <= Date.now()) {
       throw new BadRequestException('Cannot request seats on a ride that has already departed.');
+    }
+
+    if (ride.rideType === RideType.CAB_SHARE && ride.cabShareDetail) {
+      if (ride.cabShareDetail.bookingDeadline.getTime() <= Date.now()) {
+        throw new BadRequestException('The booking deadline for this cab share journey has passed.');
+      }
     }
 
     if (dto.requestedSeats > ride.availableSeats) {
@@ -249,8 +314,10 @@ export class BookingsService {
               include: {
                 driver: true,
                 vehicle: true,
+                cabShareDetail: true,
               },
             },
+            cabFareAcknowledgements: true,
           },
         });
 
@@ -316,8 +383,10 @@ export class BookingsService {
           include: {
             driver: true,
             vehicle: true,
+            cabShareDetail: true,
           },
         },
+        cabFareAcknowledgements: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -343,7 +412,11 @@ export class BookingsService {
       where,
       include: {
         passenger: true,
-        ride: true,
+        ride: {
+          include: {
+            cabShareDetail: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -363,10 +436,12 @@ export class BookingsService {
       where: { id: bookingId },
       include: {
         passenger: true,
+        cabFareAcknowledgements: true,
         ride: {
           include: {
             driver: true,
             vehicle: true,
+            cabShareDetail: true,
           },
         },
       },
@@ -451,6 +526,13 @@ export class BookingsService {
         throw new BadRequestException('Cannot approve booking for a ride that has already departed.');
       }
 
+      if (ride.rideType === RideType.CAB_SHARE) {
+        const cabDetail = await tx.cabShareDetail.findUnique({ where: { rideId: ride.id } });
+        if (cabDetail && cabDetail.bookingDeadline.getTime() <= Date.now()) {
+          throw new BadRequestException('The booking deadline for this cab share journey has passed.');
+        }
+      }
+
       // 4. Validate seat availability
       if (ride.availableSeats < booking.requestedSeats) {
         throw new ConflictException(
@@ -482,7 +564,11 @@ export class BookingsService {
         },
         include: {
           passenger: true,
-          ride: true,
+          ride: {
+            include: {
+              cabShareDetail: true,
+            },
+          },
         },
       });
 
@@ -543,7 +629,11 @@ export class BookingsService {
         where: { id: bookingId },
         include: {
           passenger: true,
-          ride: true,
+          ride: {
+            include: {
+              cabShareDetail: true,
+            },
+          },
         },
       });
 
@@ -568,7 +658,11 @@ export class BookingsService {
         },
         include: {
           passenger: true,
-          ride: true,
+          ride: {
+            include: {
+              cabShareDetail: true,
+            },
+          },
         },
       });
 
@@ -632,8 +726,10 @@ export class BookingsService {
             include: {
               driver: true,
               vehicle: true,
+              cabShareDetail: true,
             },
           },
+          cabFareAcknowledgements: true,
         },
       });
 
@@ -701,8 +797,10 @@ export class BookingsService {
             include: {
               driver: true,
               vehicle: true,
+              cabShareDetail: true,
             },
           },
+          cabFareAcknowledgements: true,
         },
       });
 
@@ -836,7 +934,7 @@ export class BookingsService {
       cooldownSecondsRemaining,
       regenCountRemaining,
       driverName: booking.ride.driver.fullName,
-      vehiclePlate: booking.ride.vehicle.registrationNumber,
+      vehiclePlate: booking.ride.vehicle?.registrationNumber ?? null,
       pickupAddress: booking.pickupAddress,
     };
   }
@@ -929,7 +1027,7 @@ export class BookingsService {
       cooldownSecondsRemaining: 60,
       regenCountRemaining: Math.max(0, BoardingOtpService.MAX_REGEN_COUNT - updated.boardingOtpRegenCount),
       driverName: updated.ride.driver.fullName,
-      vehiclePlate: updated.ride.vehicle.registrationNumber,
+      vehiclePlate: updated.ride.vehicle?.registrationNumber ?? null,
       pickupAddress: updated.pickupAddress,
     };
   }
@@ -1184,5 +1282,94 @@ export class BookingsService {
       missedAt: now.toISOString(),
       message: 'Passenger marked as no-show.',
     };
+  }
+
+  /**
+   * Passenger acknowledges a material fare revision for a cab share journey.
+   */
+  async acknowledgeCabFare(
+    user: User,
+    bookingId: string,
+    dto: CabFareAcknowledgementDto,
+  ): Promise<{ acknowledged: boolean; bookingId: string; fareRevision: number }> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        ride: {
+          include: {
+            cabShareDetail: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking request not found.');
+    }
+
+    if (booking.passengerId !== user.id) {
+      throw new NotFoundException('Booking not found or you are not the passenger.');
+    }
+
+    if (booking.ride.rideType !== RideType.CAB_SHARE || !booking.ride.cabShareDetail) {
+      throw new BadRequestException('This booking is not part of a shared cab journey.');
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Only confirmed bookings can acknowledge fare revisions.');
+    }
+
+    if (booking.ride.status === RideStatus.CANCELLED) {
+      throw new BadRequestException('Cannot acknowledge fare revisions on a cancelled cab share journey.');
+    }
+
+    if (dto.fareRevision < booking.ride.cabShareDetail.fareRevision) {
+      throw new BadRequestException('Cannot acknowledge an outdated fare revision.');
+    }
+
+    if (dto.fareRevision > booking.ride.cabShareDetail.fareRevision) {
+      throw new BadRequestException('Cannot acknowledge a future or invalid fare revision.');
+    }
+
+    const existing = await this.prisma.cabFareAcknowledgement.findUnique({
+      where: {
+        bookingId_userId_fareRevision: {
+          bookingId: booking.id,
+          userId: user.id,
+          fareRevision: dto.fareRevision,
+        },
+      },
+    });
+
+    if (existing) {
+      return { acknowledged: true, bookingId: booking.id, fareRevision: dto.fareRevision };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cabFareAcknowledgement.create({
+        data: {
+          cabDetailId: booking.ride.cabShareDetail!.id,
+          bookingId: booking.id,
+          userId: user.id,
+          fareRevision: dto.fareRevision,
+        },
+      });
+
+      await this.audit.log(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'CAB_FARE_ACKNOWLEDGED',
+          targetType: 'BOOKING',
+          targetId: booking.id,
+          changes: {
+            acknowledgedFareRevision: dto.fareRevision,
+          },
+        },
+        tx,
+      );
+    });
+
+    return { acknowledged: true, bookingId: booking.id, fareRevision: dto.fareRevision };
   }
 }

@@ -36,6 +36,7 @@ interface CachedEtaEntry {
 export class LocationsService {
   private readonly logger = new Logger(LocationsService.name);
   private readonly provider: ILocationProvider;
+  private readonly transitCatalog: MockLocationProvider = new MockLocationProvider();
 
   // In-memory ETA cache keyed by "rideId:destLat:destLng"
   private readonly etaCache = new Map<string, CachedEtaEntry>();
@@ -76,15 +77,46 @@ export class LocationsService {
 
   async autocomplete(
     query: string,
-    limit: number = 5,
+    limit: number = 6,
   ): Promise<LocationAutocompleteResponseDto> {
     const trimmed = query?.trim() || '';
     if (trimmed.length < 2) {
       return { suggestions: [] };
     }
 
-    const suggestions = await this.provider.search(trimmed, limit);
-    return { suggestions };
+    // 1. Authoritative local transit landmarks for VIT Chennai commuting corridors
+    const transitSuggestions = await this.transitCatalog.search(trimmed, limit);
+
+    // If using mock provider, return transit suggestions directly
+    if (!(this.provider instanceof MapboxLocationProvider)) {
+      return { suggestions: transitSuggestions.slice(0, limit) };
+    }
+
+    // 2. When Mapbox is active, query Mapbox to find addresses, streets, and broader localities
+    let mapboxSuggestions: LocationSuggestionDto[] = [];
+    try {
+      mapboxSuggestions = await this.provider.search(trimmed, limit);
+    } catch (err: any) {
+      this.logger.warn(`[LocationsService] Mapbox autocomplete search failed, using transit catalog: ${err.message}`);
+    }
+
+    // 3. Deduplicate Mapbox suggestions against local transit suggestions
+    const seenNames = new Set(transitSuggestions.map((s) => s.name.toLowerCase().trim()));
+    const filteredMapbox = mapboxSuggestions.filter((m) => {
+      const lower = m.name.toLowerCase().trim();
+      if (seenNames.has(lower)) return false;
+
+      // Filter out obvious commercial retail stores / outlets that pollute commuter transit searches
+      const isRetailNoise =
+        /\b(outlet|showroom|store|apparel|textiles|sarees|jewellers|jewellery|sweets|bakery|cabs|tempo)\b/i.test(m.name) &&
+        !/\b(outlet|showroom|store|apparel|textiles|sarees|jewellers|jewellery|sweets|bakery|cabs|tempo)\b/i.test(trimmed);
+      if (isRetailNoise) return false;
+      return true;
+    });
+
+    // 4. Transit landmarks come first, followed by Mapbox results up to limit
+    const merged = [...transitSuggestions, ...filteredMapbox].slice(0, limit);
+    return { suggestions: merged };
   }
 
   /**

@@ -1483,7 +1483,7 @@ export const AdminDashboardPage: React.FC = () => {
                           <div style={{ fontSize: '0.725rem', color: '#94a3b8' }}>{r.driver.email}</div>
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
-                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.registrationNumber})
+                          {r.vehicle ? `${r.vehicle.make} ${r.vehicle.model} (${r.vehicle.registrationNumber})` : 'Cab Share (External)'}
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#cbd5e1' }}>
                           {r.availableSeats} / {r.totalSeats}

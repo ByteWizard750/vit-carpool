@@ -78,7 +78,7 @@ export const MessagesPage: React.FC = () => {
       setListError(null);
 
       try {
-        const res = await fetch('/chat/conversations', {
+        const res = await fetch('/api/chat/conversations', {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -109,7 +109,7 @@ export const MessagesPage: React.FC = () => {
       setDetailError(null);
 
       try {
-        const res = await fetch(`/chat/conversations/${id}`, {
+        const res = await fetch(`/api/chat/conversations/${id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -161,7 +161,7 @@ export const MessagesPage: React.FC = () => {
       setLoadingDetail(true);
       setDetailError(null);
       try {
-        const res = await fetch(`/chat/conversations/booking/${bookingIdQuery}`, {
+        const res = await fetch(`/api/chat/conversations/booking/${bookingIdQuery}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -195,7 +195,7 @@ export const MessagesPage: React.FC = () => {
   useEffect(() => {
     fetchConversations();
     if (token) {
-      fetch('/notifications/unread-count', {
+      fetch('/api/notifications/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -270,7 +270,7 @@ export const MessagesPage: React.FC = () => {
     setSendError(null);
 
     try {
-      const res = await fetch(`/chat/conversations/${selectedConvId}/messages`, {
+      const res = await fetch(`/api/chat/conversations/${selectedConvId}/messages`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

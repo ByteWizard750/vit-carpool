@@ -89,7 +89,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/moderation/reports', {
+      const res = await fetch('/api/moderation/reports', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
   React.useEffect(() => {
     if (!user || !token) return;
     const checkUnread = () => {
-      fetch('/chat/unread-count', {
+      fetch('/api/chat/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         })
         .catch(() => {});
 
-      fetch('/notifications/unread-count', {
+      fetch('/api/notifications/unread-count', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())

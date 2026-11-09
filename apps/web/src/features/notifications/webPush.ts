@@ -51,7 +51,7 @@ export async function requestAndSubscribePush(token: string): Promise<boolean> {
   const reg = await navigator.serviceWorker.ready;
 
   // 1. Fetch backend VAPID public key
-  const keyRes = await fetch('/notifications/push-public-key', {
+  const keyRes = await fetch('/api/notifications/push-public-key', {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!keyRes.ok) return false;
@@ -71,7 +71,7 @@ export async function requestAndSubscribePush(token: string): Promise<boolean> {
   }
 
   // 3. Post to backend
-  const postRes = await fetch('/notifications/subscribe-push', {
+  const postRes = await fetch('/api/notifications/subscribe-push', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -96,7 +96,7 @@ export async function unsubscribeFromPush(token: string): Promise<boolean> {
   const endpoint = sub.endpoint;
   await sub.unsubscribe();
 
-  await fetch('/notifications/unsubscribe-push', {
+  await fetch('/api/notifications/unsubscribe-push', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

@@ -1,0 +1,82 @@
+# ==============================================================================
+# Caddyfile - Production Edge Reverse Proxy for VIT Carpool
+# Supports Cloudflare Proxy (Full Strict TLS), WebSocket sticky/streaming, & SPA
+# ==============================================================================
+{
+	# Global options
+	email {$ACME_EMAIL:admin@vitcarpool.com}
+	admin off
+
+	# Cloudflare trusted proxy IP ranges + private subnets
+	# Ensures forged client IP headers from direct-origin attacks are stripped
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32 127.0.0.1/32 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+}
+
+# Domain variable interpolated from environment (e.g. vitcarpool.com or localhost)
+{$APP_DOMAIN:localhost} {
+	# Encode with gzip and zstd
+	encode zstd gzip
+
+	# Security headers
+	header {
+		# Strict-Transport-Security (HSTS)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# Prevent clickjacking
+		X-Frame-Options "SAMEORIGIN"
+		# Prevent MIME type sniffing
+		X-Content-Type-Options "nosniff"
+		# Referrer policy
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Remove Server header identity
+		-Server
+	}
+
+	# --------------------------------------------------------------------------
+	# API, Health, and Dynamic Endpoints -> NestJS API Container
+	# --------------------------------------------------------------------------
+	@api_routes path /api* /health /uploads*
+	handle @api_routes {
+		reverse_proxy api:3000 {
+			header_up Host {host}
+			header_up X-Real-IP {client_ip}
+			header_up X-Forwarded-For {client_ip}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# --------------------------------------------------------------------------
+	# WebSockets & Live Ride Tracking Gateway (/socket.io/* and /tracking/*)
+	# --------------------------------------------------------------------------
+	@websocket_routes path /socket.io* /tracking*
+	handle @websocket_routes {
+		reverse_proxy api:3000 {
+			header_up Host {host}
+			header_up X-Real-IP {client_ip}
+			header_up X-Forwarded-For {client_ip}
+			header_up X-Forwarded-Proto {scheme}
+			# Caddy automatically handles Upgrade and Connection headers for WebSockets
+		}
+	}
+
+	# --------------------------------------------------------------------------
+	# Frontend SPA Web Container (Nginx unprivileged static server)
+	# --------------------------------------------------------------------------
+	handle {
+		reverse_proxy web:8080 {
+			header_up Host {host}
+			header_up X-Real-IP {client_ip}
+			header_up X-Forwarded-For {client_ip}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# Log format in JSON for production observability
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

@@ -6,6 +6,7 @@ import * as jwt from 'jsonwebtoken';
 import { AppModule } from '../src/app.module';
 import { PrismaClient, UserRole, VerificationStatus, Audience } from '@vit-carpool/db';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { AuthModule } from '../src/modules/auth/auth.module';
 import { JwksService } from '../src/modules/auth/jwks.service';
 import { AuthRateLimiterGuard } from '../src/modules/auth/guards/auth-rate-limiter.guard';
 import { OtpCleanupService } from '../src/modules/auth/otp-cleanup.service';
@@ -88,7 +89,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
     authService = app.get(AuthService);
     jwksService = app.get(JwksService);
-    rateLimiterGuard = app.get(AuthRateLimiterGuard);
+    rateLimiterGuard = app.select(AuthModule).get(AuthRateLimiterGuard);
     otpCleanupService = app.get(OtpCleanupService);
   });
 

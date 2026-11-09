@@ -1,9 +1,29 @@
 import { z } from 'zod';
 import { AudienceTypeSchema } from './audience.contract';
 import { VehicleResponseSchema, PublicVehicleSummarySchema } from './vehicle.contract';
+import {
+  RideTypeSchema,
+  type RideType,
+  CabShareDetailSchema,
+  type CabShareDetailDto,
+  CabSharePublicSummarySchema,
+  type CabSharePublicSummaryDto,
+} from './cab-share.contract';
+
+export {
+  RideTypeSchema,
+  type RideType,
+  CabShareDetailSchema,
+  type CabShareDetailDto,
+  CabSharePublicSummarySchema,
+  type CabSharePublicSummaryDto,
+};
 
 export const RideStatusSchema = z.enum(['SCHEDULED', 'IN_PROGRESS', 'CANCELLED', 'COMPLETED']);
 export type RideStatus = z.infer<typeof RideStatusSchema>;
+
+export const RouteStatusSchema = z.enum(['NONE', 'PENDING', 'READY', 'FALLBACK', 'FAILED']);
+export type RouteStatus = z.infer<typeof RouteStatusSchema>;
 
 /**
  * Zod schema for publishing a new ride.
@@ -11,7 +31,8 @@ export type RideStatus = z.infer<typeof RideStatusSchema>;
  */
 export const CreateRideSchema = z
   .object({
-    vehicleId: z.string().uuid('Invalid vehicle ID format'),
+    rideType: RideTypeSchema.optional().default('VEHICLE_RIDE'),
+    vehicleId: z.string().uuid('Invalid vehicle ID format').optional().nullable(),
     origin: z
       .string()
       .trim()
@@ -42,6 +63,13 @@ export const CreateRideSchema = z
       .max(255, 'Dropoff description cannot exceed 255 characters')
       .optional()
       .nullable(),
+    maxDetourMinutes: z
+      .number({ invalid_type_error: 'Max detour minutes must be a number' })
+      .int('Max detour minutes must be an integer')
+      .min(0, 'Max detour minutes cannot be negative')
+      .max(60, 'Max detour minutes cannot exceed 60 minutes')
+      .optional()
+      .nullable(),
     departureTime: z
       .string()
       .datetime({ message: 'Departure time must be a valid ISO-8601 datetime' }),
@@ -60,6 +88,18 @@ export const CreateRideSchema = z
     idempotencyKey: z.string().max(128).optional().nullable(),
   })
   .strict()
+  .refine(
+    (data) => {
+      if (data.rideType === 'VEHICLE_RIDE' && !data.vehicleId) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Vehicle ID is required for vehicle rides',
+      path: ['vehicleId'],
+    },
+  )
   .refine(
     (data) => {
       const hasOriginLat = data.originLatitude !== undefined && data.originLatitude !== null;
@@ -112,6 +152,13 @@ export const UpdateRideSchema = z
       .string()
       .trim()
       .max(255, 'Dropoff description cannot exceed 255 characters')
+      .optional()
+      .nullable(),
+    maxDetourMinutes: z
+      .number({ invalid_type_error: 'Max detour minutes must be a number' })
+      .int('Max detour minutes must be an integer')
+      .min(0, 'Max detour minutes cannot be negative')
+      .max(60, 'Max detour minutes cannot exceed 60 minutes')
       .optional()
       .nullable(),
     departureTime: z
@@ -168,10 +215,11 @@ export type UpdateRideDto = z.infer<typeof UpdateRideSchema>;
  */
 export const DriverRideResponseSchema = z.object({
   id: z.string().uuid(),
+  rideType: RideTypeSchema.optional().default('VEHICLE_RIDE'),
   driverId: z.string().uuid(),
   driverName: z.string().optional(),
   driverAvatarUrl: z.string().nullable().optional(),
-  vehicleId: z.string().uuid(),
+  vehicleId: z.string().uuid().nullable().optional(),
   audience: AudienceTypeSchema,
   origin: z.string(),
   originAddress: z.string().nullable().optional(),
@@ -190,12 +238,18 @@ export const DriverRideResponseSchema = z.object({
   totalSeats: z.number().int().optional(),
   costPerSeat: z.number().int().nullable(),
   status: RideStatusSchema,
+  routeStatus: RouteStatusSchema.optional(),
+  routeDistanceM: z.number().int().nullable().optional(),
+  routeDurationS: z.number().int().nullable().optional(),
+  routeVersion: z.number().int().optional(),
+  maxDetourMinutes: z.number().int().nullable().optional(),
   confirmedBookingsCount: z.number().int().optional(),
   confirmedSeatsCount: z.number().int().optional(),
   pendingBookingsCount: z.number().int().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   vehicle: VehicleResponseSchema.optional(),
+  cabShare: CabShareDetailSchema.nullable().optional(),
   driverRating: z
     .object({
       average: z.number().nullable(),
@@ -208,11 +262,34 @@ export const DriverRideResponseSchema = z.object({
 export type DriverRideResponseDto = z.infer<typeof DriverRideResponseSchema>;
 
 /**
+ * Match classification category for intelligent route discovery.
+ */
+export const RideMatchTypeSchema = z.enum(['EXACT', 'ALONG_ROUTE', 'ENDPOINT_ONLY']);
+export type RideMatchType = z.infer<typeof RideMatchTypeSchema>;
+
+/**
+ * Structured match metadata explaining how and why a ride matches a passenger's search corridor.
+ */
+export const RideMatchMetadataSchema = z.object({
+  matchType: RideMatchTypeSchema,
+  pickupDistanceM: z.number().nullable().optional(),
+  dropoffDistanceM: z.number().nullable().optional(),
+  pickupFraction: z.number().nullable().optional(),
+  dropoffFraction: z.number().nullable().optional(),
+  sharedDistanceM: z.number().nullable().optional(),
+  isFallbackGeometry: z.boolean().optional(),
+  matchReasons: z.array(z.string()),
+});
+
+export type RideMatchMetadataDto = z.infer<typeof RideMatchMetadataSchema>;
+
+/**
  * Privacy-preserving ride summary for eligible peer riders of the matching audience.
  * Strictly excludes vehicle registration number and driver private credentials.
  */
 export const PublicRideSummarySchema = z.object({
   id: z.string().uuid(),
+  rideType: RideTypeSchema.optional().default('VEHICLE_RIDE'),
   driverId: z.string().uuid(),
   driverName: z.string(),
   driverAvatarUrl: z.string().nullable().optional(),
@@ -231,8 +308,12 @@ export const PublicRideSummarySchema = z.object({
   availableSeats: z.number().int(),
   costPerSeat: z.number().int().nullable(),
   status: RideStatusSchema,
+  routeStatus: RouteStatusSchema.optional(),
+  routeDistanceM: z.number().int().nullable().optional(),
+  routeDurationS: z.number().int().nullable().optional(),
   createdAt: z.string().datetime(),
   vehicle: PublicVehicleSummarySchema.optional(),
+  cabShare: CabSharePublicSummarySchema.nullable().optional(),
   driverRating: z
     .object({
       average: z.number().nullable(),
@@ -240,6 +321,7 @@ export const PublicRideSummarySchema = z.object({
     })
     .nullable()
     .optional(),
+  match: RideMatchMetadataSchema.optional(),
 });
 
 export type PublicRideSummaryDto = z.infer<typeof PublicRideSummarySchema>;
@@ -251,6 +333,7 @@ export type PublicRideSummaryDto = z.infer<typeof PublicRideSummarySchema>;
  */
 export const SearchRidesQuerySchema = z
   .object({
+    rideType: z.enum(['ALL', 'VEHICLE_RIDE', 'CAB_SHARE']).optional().default('ALL'),
     origin: z
       .string()
       .trim()
@@ -280,6 +363,12 @@ export const SearchRidesQuerySchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Departure date must be formatted as YYYY-MM-DD')
       .optional()
       .transform((val) => (val === '' ? undefined : val)),
+    date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Departure date must be formatted as YYYY-MM-DD')
+      .optional()
+      .transform((val) => (val === '' ? undefined : val)),
     departureFrom: z
       .string()
       .trim()
@@ -298,6 +387,12 @@ export const SearchRidesQuerySchema = z
       .min(1, 'minSeats must be at least 1')
       .max(6, 'minSeats cannot exceed 6')
       .default(1),
+    seats: z.coerce
+      .number({ invalid_type_error: 'seats must be a number' })
+      .int('seats must be an integer')
+      .min(1, 'seats must be at least 1')
+      .max(6, 'seats cannot exceed 6')
+      .optional(),
     maxCost: z.coerce
       .number({ invalid_type_error: 'maxCost must be a number' })
       .int('maxCost must be an integer')
@@ -399,6 +494,28 @@ export const ReusableRideTemplateSchema = z.object({
 });
 
 export type ReusableRideTemplateDto = z.infer<typeof ReusableRideTemplateSchema>;
+
+/**
+ * Route geometry and navigation metadata representation for a ride.
+ */
+export const RideRouteResponseSchema = z.object({
+  rideId: z.string().uuid(),
+  status: RouteStatusSchema,
+  provider: z.string().nullable().optional(),
+  distanceMeters: z.number().int().nullable().optional(),
+  durationSeconds: z.number().int().nullable().optional(),
+  computedAt: z.string().datetime().nullable().optional(),
+  version: z.number().int(),
+  geometry: z
+    .object({
+      type: z.literal('LineString'),
+      coordinates: z.array(z.tuple([z.number(), z.number()])),
+    })
+    .nullable()
+    .optional(),
+});
+
+export type RideRouteResponseDto = z.infer<typeof RideRouteResponseSchema>;
 
 export const QuickRideTemplatesResponseSchema = z.object({
   recentRide: ReusableRideTemplateSchema.nullable(),

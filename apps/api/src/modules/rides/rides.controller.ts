@@ -21,11 +21,14 @@ import { User } from '@vit-carpool/db';
 import {
   CreateRideSchema,
   UpdateRideSchema,
+  CreateCabShareSchema,
+  UpdateCabShareFareSchema,
   DriverRideResponseDto,
   PublicRideSummaryDto,
   SearchRidesQuerySchema,
   SearchRidesResponseDto,
   QuickRideTemplatesResponseDto,
+  RideRouteResponseDto,
 } from '@vit-carpool/contracts';
 
 @ApiTags('rides')
@@ -76,6 +79,45 @@ export class RidesController {
     return this.ridesService.publishRide(user, parsed.data, key);
   }
 
+  @Post('cab-share')
+  @ApiOperation({ summary: 'Publish a new shared cab journey (Verified students/faculty, no vehicle required)' })
+  async publishCabShare(
+    @CurrentUser() user: User,
+    @Body() body: unknown,
+  ): Promise<DriverRideResponseDto> {
+    const parsed = CreateCabShareSchema.safeParse(body);
+    if (!parsed.success) {
+      const messages = parsed.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+      throw new BadRequestException({
+        statusCode: 400,
+        message: messages.join('; '),
+        error: 'Bad Request',
+      });
+    }
+
+    return this.ridesService.publishCabShare(user, parsed.data);
+  }
+
+  @Patch(':id/cab-fare')
+  @ApiOperation({ summary: 'Update final total cab fare (Organizer only)' })
+  async updateCabShareFare(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<DriverRideResponseDto> {
+    const parsed = UpdateCabShareFareSchema.safeParse(body);
+    if (!parsed.success) {
+      const messages = parsed.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+      throw new BadRequestException({
+        statusCode: 400,
+        message: messages.join('; '),
+        error: 'Bad Request',
+      });
+    }
+
+    return this.ridesService.updateCabShareFare(user, id, parsed.data);
+  }
+
   @Get('mine')
   @ApiOperation({ summary: 'List all rides published by the authenticated driver' })
   async listMyRides(@CurrentUser() user: User): Promise<DriverRideResponseDto[]> {
@@ -97,6 +139,15 @@ export class RidesController {
     @Param('id') id: string,
   ): Promise<DriverRideResponseDto | PublicRideSummaryDto> {
     return this.ridesService.getRideById(user, id);
+  }
+
+  @Get(':id/route')
+  @ApiOperation({ summary: 'Retrieve route geometry and navigation metrics for a ride' })
+  async getRideRoute(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<RideRouteResponseDto> {
+    return this.ridesService.getRideRoute(user, id);
   }
 
   @Patch(':id')

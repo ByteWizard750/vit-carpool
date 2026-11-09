@@ -176,11 +176,13 @@ export const AdminRideSummarySchema = z.object({
     email: z.string(),
     audience: z.string().nullable().optional(),
   }),
-  vehicle: z.object({
-    make: z.string(),
-    model: z.string(),
-    registrationNumber: z.string(),
-  }),
+  vehicle: z
+    .object({
+      make: z.string(),
+      model: z.string(),
+      registrationNumber: z.string(),
+    })
+    .nullable(),
   bookingsCount: z.number(),
   reportsCount: z.number(),
   createdAt: z.string().datetime(),

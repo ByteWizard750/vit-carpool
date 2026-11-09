@@ -64,9 +64,9 @@ export const RidesPage: React.FC = () => {
       : null;
   });
 
-  const [date, setDate] = useState(searchParams.get('date') || '');
+  const [date, setDate] = useState(searchParams.get('departureDate') || searchParams.get('date') || '');
   const [seats, setSeats] = useState<number>(() => {
-    const s = searchParams.get('seats');
+    const s = searchParams.get('minSeats') || searchParams.get('seats');
     return s ? parseInt(s, 10) : 1;
   });
 
@@ -83,6 +83,12 @@ export const RidesPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
     const so = searchParams.get('sortOrder');
     return so === 'desc' ? 'desc' : 'asc';
+  });
+
+  // Ride Type Filter: 'ALL' | 'VEHICLE_RIDE' | 'CAB_SHARE'
+  const [rideTypeFilter, setRideTypeFilter] = useState<'ALL' | 'VEHICLE_RIDE' | 'CAB_SHARE'>(() => {
+    const rt = searchParams.get('rideType');
+    return rt === 'VEHICLE_RIDE' || rt === 'CAB_SHARE' ? rt : 'ALL';
   });
 
   // Dedicated Filter & Refine Modal state
@@ -219,6 +225,7 @@ export const RidesPage: React.FC = () => {
         radiusKm?: number;
         sortBy?: 'departureTime' | 'cost' | 'seats';
         sortOrder?: 'asc' | 'desc';
+        rideType?: 'ALL' | 'VEHICLE_RIDE' | 'CAB_SHARE';
       },
     ) => {
       if (!token) return;
@@ -233,12 +240,16 @@ export const RidesPage: React.FC = () => {
       const curRadiusKm = overrides?.radiusKm !== undefined ? overrides.radiusKm : radiusKm;
       const curSortBy = overrides?.sortBy !== undefined ? overrides.sortBy : sortBy;
       const curSortOrder = overrides?.sortOrder !== undefined ? overrides.sortOrder : sortOrder;
+      const curRideType = overrides?.rideType !== undefined ? overrides.rideType : rideTypeFilter;
 
       setLoading(true);
       setError(null);
 
       try {
         const queryParams = new URLSearchParams();
+        if (curRideType && curRideType !== 'ALL') {
+          queryParams.set('rideType', curRideType);
+        }
         if (curOrigin.trim()) queryParams.set('origin', curOrigin.trim());
         if (curDest.trim()) queryParams.set('destination', curDest.trim());
         if (curOriginLoc?.latitude !== undefined && curOriginLoc?.longitude !== undefined) {
@@ -261,7 +272,7 @@ export const RidesPage: React.FC = () => {
         queryParams.set('page', pageToFetch.toString());
         queryParams.set('limit', '8');
 
-        const res = await fetch(`/rides?${queryParams.toString()}`, {
+        const res = await fetch(`/api/rides?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -285,7 +296,7 @@ export const RidesPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [token, origin, destination, originLocation, destLocation, date, seats, maxCost, radiusKm, sortBy, sortOrder],
+    [token, origin, destination, originLocation, destLocation, date, seats, maxCost, radiusKm, sortBy, sortOrder, rideTypeFilter],
   );
 
   // Unified helper to apply sort/filter updates, sync URL query params, and execute search immediately
@@ -300,6 +311,7 @@ export const RidesPage: React.FC = () => {
     sortOrder?: 'asc' | 'desc';
     originLocation?: LocationSuggestionDto | null;
     destLocation?: LocationSuggestionDto | null;
+    rideType?: 'ALL' | 'VEHICLE_RIDE' | 'CAB_SHARE';
   }) => {
     const nextOrigin = updates.origin !== undefined ? updates.origin : origin;
     const nextDestination = updates.destination !== undefined ? updates.destination : destination;
@@ -311,6 +323,7 @@ export const RidesPage: React.FC = () => {
     const nextSortOrder = updates.sortOrder !== undefined ? updates.sortOrder : sortOrder;
     const nextOriginLoc = updates.originLocation !== undefined ? updates.originLocation : originLocation;
     const nextDestLoc = updates.destLocation !== undefined ? updates.destLocation : destLocation;
+    const nextRideType = updates.rideType !== undefined ? updates.rideType : rideTypeFilter;
 
     if (updates.origin !== undefined) setOrigin(updates.origin);
     if (updates.destination !== undefined) setDestination(updates.destination);
@@ -322,8 +335,10 @@ export const RidesPage: React.FC = () => {
     if (updates.sortOrder !== undefined) setSortOrder(updates.sortOrder);
     if (updates.originLocation !== undefined) setOriginLocation(updates.originLocation);
     if (updates.destLocation !== undefined) setDestLocation(updates.destLocation);
+    if (updates.rideType !== undefined) setRideTypeFilter(updates.rideType);
 
     const nextParams = new URLSearchParams();
+    if (nextRideType && nextRideType !== 'ALL') nextParams.set('rideType', nextRideType);
     if (nextOrigin) nextParams.set('origin', nextOrigin);
     if (nextDestination) nextParams.set('destination', nextDestination);
     if (nextDate) nextParams.set('date', nextDate);
@@ -349,6 +364,7 @@ export const RidesPage: React.FC = () => {
       radiusKm: nextRadiusKm,
       sortBy: nextSortBy,
       sortOrder: nextSortOrder,
+      rideType: nextRideType,
     });
   };
 
@@ -362,6 +378,7 @@ export const RidesPage: React.FC = () => {
   const handleFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const nextParams = new URLSearchParams();
+    if (rideTypeFilter && rideTypeFilter !== 'ALL') nextParams.set('rideType', rideTypeFilter);
     if (origin) nextParams.set('origin', origin);
     if (destination) nextParams.set('destination', destination);
     if (date) nextParams.set('date', date);
@@ -403,7 +420,7 @@ export const RidesPage: React.FC = () => {
     setBookingError(null);
 
     try {
-      const res = await fetch('/bookings', {
+      const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -603,6 +620,95 @@ export const RidesPage: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      {/* Ride Type Filter Tabs (All / Vehicle Rides / Cab Shares) */}
+      {user && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '16px',
+            flexWrap: 'wrap',
+          }}
+          role="tablist"
+          id="rides-filter-type-tabs"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rideTypeFilter === 'ALL'}
+            onClick={() => applyFilterUpdates({ rideType: 'ALL' })}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              fontSize: '0.85rem',
+              fontWeight: rideTypeFilter === 'ALL' ? 700 : 500,
+              borderRadius: '8px',
+              border: `1px solid ${rideTypeFilter === 'ALL' ? 'var(--color-brand-600, #2563eb)' : 'var(--border-medium, #cbd5e1)'}`,
+              backgroundColor: rideTypeFilter === 'ALL' ? 'var(--color-brand-50, #eff6ff)' : '#ffffff',
+              color: rideTypeFilter === 'ALL' ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary, #475569)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            id="filter-type-all"
+          >
+            <span>🌐 All Commutes</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rideTypeFilter === 'VEHICLE_RIDE'}
+            onClick={() => applyFilterUpdates({ rideType: 'VEHICLE_RIDE' })}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              fontSize: '0.85rem',
+              fontWeight: rideTypeFilter === 'VEHICLE_RIDE' ? 700 : 500,
+              borderRadius: '8px',
+              border: `1px solid ${rideTypeFilter === 'VEHICLE_RIDE' ? '#2563eb' : 'var(--border-medium, #cbd5e1)'}`,
+              backgroundColor: rideTypeFilter === 'VEHICLE_RIDE' ? '#eff6ff' : '#ffffff',
+              color: rideTypeFilter === 'VEHICLE_RIDE' ? '#1d4ed8' : 'var(--text-secondary, #475569)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            id="filter-type-vehicle"
+          >
+            <Car size={14} />
+            <span>Vehicle Rides</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rideTypeFilter === 'CAB_SHARE'}
+            onClick={() => applyFilterUpdates({ rideType: 'CAB_SHARE' })}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              fontSize: '0.85rem',
+              fontWeight: rideTypeFilter === 'CAB_SHARE' ? 700 : 500,
+              borderRadius: '8px',
+              border: `1px solid ${rideTypeFilter === 'CAB_SHARE' ? '#d97706' : 'var(--border-medium, #cbd5e1)'}`,
+              backgroundColor: rideTypeFilter === 'CAB_SHARE' ? '#fffbeb' : '#ffffff',
+              color: rideTypeFilter === 'CAB_SHARE' ? '#92400e' : 'var(--text-secondary, #475569)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            id="filter-type-cab-share"
+          >
+            <Users size={14} style={{ color: '#d97706' }} />
+            <span>Cab Shares</span>
+          </button>
+        </div>
+      )}
 
       {/* Results Header with Dynamic Sort & Filter Controls */}
       {user && (
@@ -928,6 +1034,103 @@ export const RidesPage: React.FC = () => {
                     className="ride-result-card"
                   >
                     <div>
+                      {/* Top Badges Row: CAB SHARE & Corridor Match Indicator */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          marginBottom: '10px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        {ride.rideType === 'CAB_SHARE' && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#fef3c7',
+                              color: '#92400e',
+                              border: '1px solid #fde68a',
+                            }}
+                            id={`badge-cab-share-${ride.id}`}
+                          >
+                            <Users size={11} />
+                            CAB SHARE
+                          </span>
+                        )}
+
+                        {ride.match && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor:
+                                ride.match.isFallbackGeometry
+                                  ? '#fffbeb'
+                                  : ride.match.matchType === 'EXACT'
+                                  ? '#ecfdf5'
+                                  : ride.match.matchType === 'ALONG_ROUTE'
+                                  ? '#eff6ff'
+                                  : '#f8fafc',
+                              color:
+                                ride.match.isFallbackGeometry
+                                  ? '#b45309'
+                                  : ride.match.matchType === 'EXACT'
+                                  ? '#047857'
+                                  : ride.match.matchType === 'ALONG_ROUTE'
+                                  ? '#1d4ed8'
+                                  : '#475569',
+                              border: `1px solid ${
+                                ride.match.isFallbackGeometry
+                                  ? '#fde68a'
+                                  : ride.match.matchType === 'EXACT'
+                                  ? '#a7f3d0'
+                                  : ride.match.matchType === 'ALONG_ROUTE'
+                                  ? '#bfdbfe'
+                                  : '#e2e8f0'
+                              }`,
+                            }}
+                          >
+                            <Navigation size={11} />
+                            {ride.match.isFallbackGeometry
+                              ? 'Estimated Corridor'
+                              : ride.match.matchType === 'EXACT'
+                              ? 'Exact Route Match'
+                              : ride.match.matchType === 'ALONG_ROUTE'
+                              ? 'Along Your Route'
+                              : 'Endpoint Match'}
+                          </span>
+                        )}
+
+                        {ride.match?.matchReasons && ride.match.matchReasons.length > 0 && (
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              color: '#64748b',
+                              fontWeight: 500,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '220px',
+                            }}
+                            title={ride.match.matchReasons.join(' • ')}
+                          >
+                            {ride.match.matchReasons[0]}
+                          </span>
+                        )}
+                      </div>
+
                       {/* Route Spine Header */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                         <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
@@ -939,141 +1142,130 @@ export const RidesPage: React.FC = () => {
                           />
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
-                            ₹{ride.costPerSeat ?? 0}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>/seat</span>
-                        </div>
-                      </div>
-
-                      {/* Safe Vehicle Information (Milestone 5.2 requirement) */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                          {ride.vehicle?.imageUrl ? (
-                            <img
-                              src={ride.vehicle.imageUrl}
-                              alt="Car"
-                              style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
-                            />
+                          {ride.rideType === 'CAB_SHARE' && ride.cabShare ? (
+                            <>
+                              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#92400e' }}>
+                                ₹{ride.cabShare.currentPerPerson}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
+                                Est. /person
+                              </span>
+                            </>
                           ) : (
-                            <Car size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+                            <>
+                              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
+                                ₹{ride.costPerSeat ?? 0}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>/seat</span>
+                            </>
                           )}
-                          <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {ride.vehicle ? `${ride.vehicle.color} ${ride.vehicle.make} ${ride.vehicle.model}` : 'Campus Registered Car'}
-                          </span>
                         </div>
-                        {ride.vehicle?.imageUrl && (
-                          <span
-                            style={{
-                              fontSize: '0.675rem',
-                              fontWeight: 600,
-                              color: '#1d4ed8',
-                              backgroundColor: '#eff6ff',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            Photo Attached
-                          </span>
-                        )}
                       </div>
 
-                      {/* Driver & Available Seats Summary */}
+                      {/* Safe Vehicle or Cab Service Information */}
+                      {ride.rideType === 'CAB_SHARE' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <Users size={13} style={{ color: '#d97706', flexShrink: 0 }} />
+                            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {ride.cabShare?.cabService || 'Commercial Shared Cab'} &bull; Total: ₹{ride.cabShare?.estimatedTotalFare}
+                            </span>
+                          </div>
+                          {ride.cabShare?.bookingDeadline && (
+                            <span
+                              style={{
+                                fontSize: '0.675rem',
+                                fontWeight: 600,
+                                color: '#92400e',
+                                backgroundColor: '#fef3c7',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                flexShrink: 0,
+                              }}
+                              title="Booking cutoff deadline"
+                            >
+                              Cutoff: {formatDeparture(ride.cabShare.bookingDeadline)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            {ride.vehicle?.imageUrl ? (
+                              <img
+                                src={ride.vehicle.imageUrl}
+                                alt="Car"
+                                style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                              />
+                            ) : (
+                              <Car size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+                            )}
+                            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {ride.vehicle ? `${ride.vehicle.color} ${ride.vehicle.make} ${ride.vehicle.model}` : 'Campus Registered Car'}
+                            </span>
+                          </div>
+                          {ride.vehicle?.imageUrl && (
+                            <span
+                              style={{
+                                fontSize: '0.675rem',
+                                fontWeight: 600,
+                                color: '#1d4ed8',
+                                backgroundColor: '#eff6ff',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                flexShrink: 0,
+                              }}
+                            >
+                              Photo Attached
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Driver / Organiser & Available Seats Summary */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
                           {ride.driverAvatarUrl ? (
                             <img
                               src={ride.driverAvatarUrl}
                               alt={ride.driverName}
-                              style={{
-                                width: '26px',
-                                height: '26px',
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                flexShrink: 0,
-                                border: '1px solid var(--border-light)',
-                              }}
+                              style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
                             />
                           ) : (
                             <div
                               style={{
-                                width: '26px',
-                                height: '26px',
+                                width: '22px',
+                                height: '22px',
                                 borderRadius: '50%',
-                                backgroundColor: isDriver ? '#dbeafe' : 'var(--color-brand-100)',
-                                color: isDriver ? '#1e40af' : 'var(--color-brand-700)',
+                                backgroundColor: ride.rideType === 'CAB_SHARE' ? '#fef3c7' : 'var(--color-brand-100)',
+                                color: ride.rideType === 'CAB_SHARE' ? '#92400e' : 'var(--color-brand-700)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontWeight: 700,
-                                fontSize: '0.75rem',
+                                fontSize: '0.7rem',
                                 flexShrink: 0,
                               }}
                             >
                               {ride.driverName.charAt(0)}
                             </div>
                           )}
-                          <span
-                            style={{
-                              fontWeight: 600,
-                              color: 'var(--text-primary)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              maxWidth: '125px',
-                            }}
-                            title={ride.driverName}
-                          >
+                          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {ride.driverName}
                           </span>
-                          {ride.driverRating && ride.driverRating.count > 0 ? (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                fontSize: '0.725rem',
-                                fontWeight: 700,
-                                color: '#854d0e',
-                                backgroundColor: '#fefce8',
-                                border: '1px solid #fef08a',
-                                padding: '1px 6px',
-                                borderRadius: '6px',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                              }}
-                              id={`ride-rating-${ride.id}`}
-                              title={`${ride.driverRating.average?.toFixed(1)} out of 5 stars from ${ride.driverRating.count} reviews`}
-                            >
-                              <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />
-                              <span>{ride.driverRating.average?.toFixed(1)}</span>
-                              <span style={{ color: '#a16207', fontWeight: 500, fontSize: '0.675rem' }}>({ride.driverRating.count})</span>
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                fontSize: '0.675rem',
-                                fontWeight: 600,
-                                color: 'var(--text-muted)',
-                                backgroundColor: '#f1f5f9',
-                                padding: '1px 5px',
-                                borderRadius: '4px',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                              }}
-                            >
-                              New Driver
-                            </span>
-                          )}
-                          {isDriver && (
-                            <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#1e40af', backgroundColor: '#eff6ff', padding: '1px 5px', borderRadius: '4px', flexShrink: 0 }}>
-                              You
-                            </span>
-                          )}
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            ({ride.rideType === 'CAB_SHARE' ? 'Organiser' : 'Driver'})
+                          </span>
                         </div>
-                        <div style={{ flexShrink: 0 }}>
-                          <SeatDots available={ride.availableSeats} />
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <SeatDots
+                            available={ride.availableSeats}
+                            total={ride.rideType === 'CAB_SHARE' && ride.cabShare ? ride.cabShare.totalCapacity - 1 : (ride.availableSeats + 1)}
+                          />
+                          <span style={{ fontWeight: 600, color: ride.availableSeats > 0 ? '#15803d' : '#991b1b' }}>
+                            {ride.availableSeats} {ride.availableSeats === 1 ? 'seat' : 'seats'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1150,344 +1342,577 @@ export const RidesPage: React.FC = () => {
       )}
 
       {/* Ride Details & Seat Allocation Modal */}
-      {selectedRide && (
-        <Modal
-          isOpen={Boolean(selectedRide)}
-          onClose={() => setSelectedRide(null)}
-          title="Ride Details & Seat Allocation"
-          maxWidth="560px"
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            {/* Header Corridor Card */}
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: 'var(--color-brand-50)',
-                borderRadius: '10px',
-                border: '1px solid var(--color-brand-200)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: 'var(--color-brand-700)',
-                  }}
-                >
-                  Verified {selectedRide.audience} Corridor
-                </span>
-                <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
-                  ₹{selectedRide.costPerSeat ?? 0} <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>/seat</span>
-                </span>
-              </div>
+      {selectedRide && (() => {
+        const isCab = selectedRide.rideType === 'CAB_SHARE';
+        const isCabDeadlinePassed = Boolean(
+          isCab &&
+          selectedRide.cabShare?.bookingDeadline &&
+          new Date(selectedRide.cabShare.bookingDeadline).getTime() <= Date.now()
+        );
 
-              <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
-                {selectedRide.origin} &rarr; {selectedRide.destination}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                <Clock size={14} style={{ color: 'var(--color-brand-600)' }} />
-                <span>{formatDeparture(selectedRide.departureTime)}</span>
-              </div>
-            </div>
-
-            {/* Vehicle Appearance (Car Image) Banner */}
-            {selectedRide.vehicle?.imageUrl && (
+        return (
+          <Modal
+            isOpen={Boolean(selectedRide)}
+            onClose={() => setSelectedRide(null)}
+            title={isCab ? 'Shared Cab Details & Seat Request' : 'Ride Details & Seat Allocation'}
+            maxWidth="560px"
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Header Corridor Card */}
               <div
-                id="booking-vehicle-photo-banner"
                 style={{
+                  padding: '16px',
+                  backgroundColor: isCab ? '#fffbeb' : 'var(--color-brand-50)',
                   borderRadius: '10px',
-                  overflow: 'hidden',
-                  border: '1px solid var(--border-light, #e2e8f0)',
-                  backgroundColor: '#f8fafc',
+                  border: `1px solid ${isCab ? '#fde68a' : 'var(--color-brand-200)'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
                 }}
               >
-                <div style={{ position: 'relative', width: '100%', height: '180px', backgroundColor: '#0f172a' }}>
-                  <img
-                    src={selectedRide.vehicle.imageUrl}
-                    alt={`${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  <div
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
                     style={{
-                      position: 'absolute',
-                      bottom: '8px',
-                      left: '8px',
-                      right: '8px',
-                      backgroundColor: 'rgba(15, 23, 42, 0.78)',
-                      backdropFilter: 'blur(6px)',
-                      color: '#ffffff',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: isCab ? '#92400e' : 'var(--color-brand-700)',
                     }}
                   >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <Car size={13} style={{ color: '#60a5fa' }} />
-                      <span>Vehicle Appearance &bull; This is how the car looks</span>
+                    {isCab ? `Verified ${selectedRide.audience} Shared Cab` : `Verified ${selectedRide.audience} Corridor`}
+                  </span>
+                  <span style={{ fontSize: '1.25rem', fontWeight: 800, color: isCab ? '#92400e' : 'var(--color-brand-700)' }}>
+                    ₹{isCab && selectedRide.cabShare ? selectedRide.cabShare.currentPerPerson : (selectedRide.costPerSeat ?? 0)}{' '}
+                    <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>
+                      {isCab ? '/person (est)' : '/seat'}
                     </span>
-                    <span style={{ color: '#cbd5e1', fontSize: '10px' }}>
-                      {selectedRide.vehicle.color} {selectedRide.vehicle.make} {selectedRide.vehicle.model}
-                    </span>
-                  </div>
+                  </span>
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
+                  {selectedRide.origin} &rarr; {selectedRide.destination}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  <Clock size={14} style={{ color: isCab ? '#d97706' : 'var(--color-brand-600)' }} />
+                  <span>Departure: {formatDeparture(selectedRide.departureTime)}</span>
                 </div>
               </div>
-            )}
 
-            {/* Vehicle & Driver Safe Info */}
-            <div className="responsive-two-col" style={{ gap: '12px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Car size={13} /> Registered Vehicle
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
-                  {selectedRide.vehicle?.imageUrl && (
-                    <img
-                      src={selectedRide.vehicle.imageUrl}
-                      alt="Vehicle thumbnail"
-                      style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
-                    />
-                  )}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                      {selectedRide.vehicle
-                        ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
-                        : 'Campus Registered Car'}
-                    </div>
-                    {selectedRide.vehicle && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Total Capacity: {selectedRide.vehicle.capacity} seats
-                      </div>
+              {/* Intelligent Corridor Match Insights */}
+              {selectedRide.match && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    backgroundColor:
+                      selectedRide.match.matchType === 'EXACT'
+                        ? '#f0fdf4'
+                        : selectedRide.match.matchType === 'ALONG_ROUTE'
+                        ? '#eff6ff'
+                        : '#f8fafc',
+                    borderRadius: '8px',
+                    border: `1px solid ${
+                      selectedRide.match.matchType === 'EXACT'
+                        ? '#bbf7d0'
+                        : selectedRide.match.matchType === 'ALONG_ROUTE'
+                        ? '#bfdbfe'
+                        : '#e2e8f0'
+                    }`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        color:
+                          selectedRide.match.matchType === 'EXACT'
+                            ? '#15803d'
+                            : selectedRide.match.matchType === 'ALONG_ROUTE'
+                            ? '#1d4ed8'
+                            : '#475569',
+                      }}
+                    >
+                      <Navigation size={13} />
+                      {selectedRide.match.matchType === 'EXACT'
+                        ? 'Exact Route Match'
+                        : selectedRide.match.matchType === 'ALONG_ROUTE'
+                        ? 'Along Cab/Driver Route'
+                        : 'Endpoint Match'}
+                    </span>
+                    {selectedRide.match.isFallbackGeometry && (
+                      <span style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 600 }}>
+                        Estimated Corridor
+                      </span>
                     )}
                   </div>
-                </div>
-              </div>
 
-              <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={13} /> Verified Driver
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: '18px',
+                      fontSize: '0.75rem',
+                      color: '#334155',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '3px',
+                    }}
+                  >
+                    {selectedRide.match.matchReasons.map((reason, idx) => (
+                      <li key={idx}>{reason}</li>
+                    ))}
+                  </ul>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
-                  {selectedRide.driverAvatarUrl ? (
-                    <img
-                      src={selectedRide.driverAvatarUrl}
-                      alt={selectedRide.driverName}
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                        border: '1px solid var(--border-light)',
-                      }}
-                    />
-                  ) : (
+              )}
+
+              {/* Cab Share Breakdown vs Vehicle Details */}
+              {isCab ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Organiser Profile & Cab Service */}
+                  <div className="responsive-two-col" style={{ gap: '12px' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Users size={13} /> Journey Organiser
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                        {selectedRide.driverAvatarUrl ? (
+                          <img
+                            src={selectedRide.driverAvatarUrl}
+                            alt={selectedRide.driverName}
+                            style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '50%',
+                              backgroundColor: '#fef3c7',
+                              color: '#92400e',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {selectedRide.driverName.charAt(0)}
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                            {selectedRide.driverName}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Organiser occupies 1 seat &bull; {selectedRide.audience}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Users size={13} /> Commercial Cab Service
+                      </div>
+                      <div style={{ marginTop: '6px' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          {selectedRide.cabShare?.cabService || 'External Commercial Cab'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Capacity: {selectedRide.cabShare?.totalCapacity} seats ({selectedRide.availableSeats} seats left)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Transparent Fare Split Card */}
+                  {selectedRide.cabShare && (
                     <div
                       style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--color-brand-100)',
-                        color: 'var(--color-brand-700)',
+                        padding: '14px',
+                        backgroundColor: '#f0fdf4',
+                        borderRadius: '8px',
+                        border: '1px solid #bbf7d0',
+                        fontSize: '0.825rem',
+                        color: '#166534',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        flexShrink: 0,
+                        flexDirection: 'column',
+                        gap: '6px',
                       }}
                     >
-                      {selectedRide.driverName.charAt(0)}
+                      <div style={{ fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Fare Split Details</span>
+                        <span style={{ fontSize: '1rem', fontWeight: 800 }}>Total: ₹{selectedRide.cabShare.estimatedTotalFare}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem' }}>
+                        <span>Estimated share if cab is completely full:</span>
+                        <strong>~₹{selectedRide.cabShare.estimatedPerPersonIfFull} / person</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem' }}>
+                        <span>Current share ({selectedRide.cabShare.totalConfirmedParticipants} confirmed participant{selectedRide.cabShare.totalConfirmedParticipants > 1 ? 's' : ''}):</span>
+                        <strong>~₹{selectedRide.cabShare.currentPerPerson} / person</strong>
+                      </div>
+                      <div style={{ fontSize: '0.725rem', color: '#15803d', fontStyle: 'italic', marginTop: '2px' }}>
+                        Fair integer rupee division is guaranteed. Any small 1-rupee remainder is allocated fairly.
+                      </div>
                     </div>
                   )}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span>{selectedRide.driverName}</span>
-                      {selectedRide.driverRating && selectedRide.driverRating.count > 0 ? (
-                        <span
+
+                  {/* Booking Cutoff Warning */}
+                  {selectedRide.cabShare?.bookingDeadline && (
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: isCabDeadlinePassed ? '#fef2f2' : '#fffbeb',
+                        border: `1px solid ${isCabDeadlinePassed ? '#fecaca' : '#fde68a'}`,
+                        color: isCabDeadlinePassed ? '#991b1b' : '#92400e',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <Clock size={15} style={{ flexShrink: 0 }} />
+                      <span>
+                        {isCabDeadlinePassed
+                          ? `Booking cutoff passed on ${formatDeparture(selectedRide.cabShare.bookingDeadline)}. No new bookings accepted.`
+                          : `Booking Deadline: ${formatDeparture(selectedRide.cabShare.bookingDeadline)}.`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Commercial Cab Disclaimer */}
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      fontSize: '0.75rem',
+                      color: '#475569',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    <strong>Campus Disclaimer:</strong> This journey is arranged through an external commercial cab service (such as Uber, Ola, or local taxi). The organiser is a fellow student or faculty member sharing the actual trip cost, not a verified driver. Fares are divided equally among confirmed passengers.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Vehicle Appearance (Car Image) Banner */}
+                  {selectedRide.vehicle?.imageUrl && (
+                    <div
+                      id="booking-vehicle-photo-banner"
+                      style={{
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border-light, #e2e8f0)',
+                        backgroundColor: '#f8fafc',
+                      }}
+                    >
+                      <div style={{ position: 'relative', width: '100%', height: '180px', backgroundColor: '#0f172a' }}>
+                        <img
+                          src={selectedRide.vehicle.imageUrl}
+                          alt={`${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <div
                           style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            color: '#854d0e',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            backgroundColor: '#fefce8',
-                            border: '1px solid #fef08a',
-                            padding: '2px 7px',
+                            position: 'absolute',
+                            bottom: '8px',
+                            left: '8px',
+                            right: '8px',
+                            backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                            backdropFilter: 'blur(6px)',
+                            color: '#ffffff',
+                            padding: '4px 10px',
                             borderRadius: '6px',
-                            whiteSpace: 'nowrap',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
                           }}
                         >
-                          <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />
-                          <span>{selectedRide.driverRating.average?.toFixed(1)} / 5</span>
-                          <span style={{ color: '#a16207', fontWeight: 500, fontSize: '0.675rem' }}>
-                            ({selectedRide.driverRating.count} {selectedRide.driverRating.count === 1 ? 'review' : 'reviews'})
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <Car size={13} style={{ color: '#60a5fa' }} />
+                            <span>Vehicle Appearance &bull; This is how the car looks</span>
                           </span>
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(New Driver)</span>
+                          <span style={{ color: '#cbd5e1', fontSize: '10px' }}>
+                            {selectedRide.vehicle.color} {selectedRide.vehicle.make} {selectedRide.vehicle.model}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Vehicle & Driver Safe Info */}
+                  <div className="responsive-two-col" style={{ gap: '12px' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Car size={13} /> Registered Vehicle
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                        {selectedRide.vehicle?.imageUrl && (
+                          <img
+                            src={selectedRide.vehicle.imageUrl}
+                            alt="Vehicle thumbnail"
+                            style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border-light)' }}
+                          />
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                            {selectedRide.vehicle
+                              ? `${selectedRide.vehicle.color} ${selectedRide.vehicle.make} ${selectedRide.vehicle.model}`
+                              : 'Campus Registered Car'}
+                          </div>
+                          {selectedRide.vehicle && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              Total Capacity: {selectedRide.vehicle.capacity} seats
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ShieldCheck size={13} /> Verified Driver
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                        {selectedRide.driverAvatarUrl ? (
+                          <img
+                            src={selectedRide.driverAvatarUrl}
+                            alt={selectedRide.driverName}
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              flexShrink: 0,
+                              border: '1px solid var(--border-light)',
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '50%',
+                              backgroundColor: 'var(--color-brand-100)',
+                              color: 'var(--color-brand-700)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {selectedRide.driverName.charAt(0)}
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span>{selectedRide.driverName}</span>
+                            {selectedRide.driverRating && selectedRide.driverRating.count > 0 ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  color: '#854d0e',
+                                  fontWeight: 700,
+                                  fontSize: '0.75rem',
+                                  backgroundColor: '#fefce8',
+                                  border: '1px solid #fef08a',
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />
+                                <span>{selectedRide.driverRating.average?.toFixed(1)} / 5</span>
+                                <span style={{ color: '#a16207', fontWeight: 500, fontSize: '0.675rem' }}>
+                                  ({selectedRide.driverRating.count} {selectedRide.driverRating.count === 1 ? 'review' : 'reviews'})
+                                </span>
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(New Driver)</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {selectedRide.audience} Cohort
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Action State: Driver viewing own ride */}
+              {user?.id === selectedRide.driverId ? (
+                <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1e40af', fontWeight: 700, fontSize: '0.9rem' }}>
+                    <Car size={16} /> {isCab ? 'You Organised This Shared Cab' : 'You Published This Ride'}
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#1e3a8a' }}>
+                    {isCab
+                      ? 'You are the organiser of this shared cab. You can manage passenger bookings, update final cab fares, or cancel this journey from My Rides.'
+                      : 'You are the driver of this ride. You can review passenger seat requests, update departure details, or cancel this ride from your My Rides page.'}
+                  </p>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <Link to="/my-rides">
+                      <Button variant="primary" size="sm">
+                        Manage in My Rides
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => handleShareWhatsApp(selectedRide)}
+                      leftIcon={<Share2 size={15} style={{ color: '#15803d' }} />}
+                      id="btn-modal-share-whatsapp"
+                      style={{ borderColor: '#bbf7d0', color: '#15803d' }}
+                    >
+                      Share via WhatsApp
+                    </Button>
+                  </div>
+                </div>
+              ) : isCabDeadlinePassed ? (
+                <div style={{ padding: '14px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 600 }}>
+                  Booking deadline for this cab share has passed. No additional requests can be accepted.
+                </div>
+              ) : selectedRide.availableSeats <= 0 ? (
+                <div style={{ padding: '14px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 600 }}>
+                  This {isCab ? 'cab share' : 'ride'} has no seats remaining.
+                </div>
+              ) : bookingSuccess ? (
+                <div style={{ padding: '16px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px' }}>
+                    <CheckCircle2 size={18} /> Request Submitted!
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#14532d' }}>{bookingSuccess}</p>
+                  <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
+                    <Link to="/bookings?tab=passenger">
+                      <Button variant="primary" size="sm">
+                        View in My Bookings
+                      </Button>
+                    </Link>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedRide(null)}>
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {bookingError && (
+                    <div style={{ padding: '10px 14px', backgroundColor: '#fee2e2', border: '1px solid #fecaca', borderRadius: '6px', color: '#991b1b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        <span>{bookingError}</span>
+                      </div>
+                      {bookingError.includes('already have an active booking') && (
+                        <Link to="/bookings?tab=passenger">
+                          <Button variant="outline" size="sm">
+                            Go to Bookings
+                          </Button>
+                        </Link>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {selectedRide.audience} Cohort
+                  )}
+
+                  {/* Seat Counter */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block' }}>Number of Seats</label>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {selectedRide.availableSeats} {selectedRide.availableSeats === 1 ? 'seat' : 'seats'} currently available
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        type="button"
+                        disabled={requestedSeats <= 1}
+                        onClick={() => setRequestedSeats((p) => Math.max(1, p - 1))}
+                        style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--border-medium)', background: '#fff', cursor: requestedSeats <= 1 ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+                        aria-label="Decrease requested seats"
+                      >
+                        -
+                      </button>
+                      <span style={{ fontWeight: 700, fontSize: '1rem', minWidth: '20px', textAlign: 'center' }}>
+                        {requestedSeats}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={requestedSeats >= selectedRide.availableSeats}
+                        onClick={() => setRequestedSeats((p) => Math.min(selectedRide.availableSeats, p + 1))}
+                        style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--border-medium)', background: '#fff', cursor: requestedSeats >= selectedRide.availableSeats ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+                        aria-label="Increase requested seats"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Action State: Driver viewing own ride */}
-            {user?.id === selectedRide.driverId ? (
-              <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1e40af', fontWeight: 700, fontSize: '0.9rem' }}>
-                  <Car size={16} /> You Published This Ride
-                </div>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#1e3a8a' }}>
-                  You are the driver of this ride. You can review passenger seat requests, update departure details, or cancel this ride from your My Rides page.
-                </p>
-                <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <Link to="/my-rides">
-                    <Button variant="primary" size="sm">
-                      Manage in My Rides
-                    </Button>
-                  </Link>
+                  {/* Fuel or Fare Share Breakdown */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '10px 14px', backgroundColor: 'var(--bg-page)', borderRadius: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {isCab ? 'Estimated Cab Fare Share:' : 'Estimated Fuel Contribution:'}
+                    </span>
+                    <strong>
+                      {isCab && selectedRide.cabShare
+                        ? `₹${selectedRide.cabShare.currentPerPerson * requestedSeats} (${requestedSeats} × ₹${selectedRide.cabShare.currentPerPerson})`
+                        : `₹${(selectedRide.costPerSeat ?? 0) * requestedSeats} (${requestedSeats} × ₹${selectedRide.costPerSeat ?? 0})`}
+                    </strong>
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    disabled={bookingLoading}
+                    onClick={handleRequestBooking}
+                    leftIcon={bookingLoading ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />}
+                    id="btn-confirm-seat-request"
+                    style={{ width: '100%' }}
+                  >
+                    {bookingLoading ? 'Submitting Request...' : `Request ${requestedSeats} Seat${requestedSeats > 1 ? 's' : ''}`}
+                  </Button>
+
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="md"
                     type="button"
                     onClick={() => handleShareWhatsApp(selectedRide)}
-                    leftIcon={<Share2 size={15} style={{ color: '#15803d' }} />}
+                    leftIcon={<Share2 size={16} style={{ color: '#15803d' }} />}
                     id="btn-modal-share-whatsapp"
-                    style={{ borderColor: '#bbf7d0', color: '#15803d' }}
+                    style={{ width: '100%', borderColor: '#bbf7d0', color: '#15803d' }}
                   >
-                    Share via WhatsApp
+                    Share {isCab ? 'Cab' : 'Ride'} via WhatsApp
                   </Button>
                 </div>
+              )}
+
+              {/* Privacy notice invariant */}
+              <div style={{ padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Lock size={12} style={{ color: '#64748b', flexShrink: 0 }} />
+                <span>
+                  <strong>Campus Privacy:</strong> Landmark pickup/dropoff descriptions and {isCab ? 'organiser' : 'driver'} contact details are securely disclosed only after confirmation.
+                </span>
               </div>
-            ) : selectedRide.availableSeats <= 0 ? (
-              <div style={{ padding: '14px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 600 }}>
-                This ride has no seats remaining.
-              </div>
-            ) : bookingSuccess ? (
-              <div style={{ padding: '16px', backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px' }}>
-                  <CheckCircle2 size={18} /> Request Submitted!
-                </div>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#14532d' }}>{bookingSuccess}</p>
-                <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
-                  <Link to="/bookings?tab=passenger">
-                    <Button variant="primary" size="sm">
-                      View in My Bookings
-                    </Button>
-                  </Link>
-                  <Button variant="outline" size="sm" onClick={() => setSelectedRide(null)}>
-                    Done
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {bookingError && (
-                  <div style={{ padding: '10px 14px', backgroundColor: '#fee2e2', border: '1px solid #fecaca', borderRadius: '6px', color: '#991b1b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <AlertCircle size={14} style={{ flexShrink: 0 }} />
-                      <span>{bookingError}</span>
-                    </div>
-                    {bookingError.includes('already have an active booking') && (
-                      <Link to="/bookings?tab=passenger">
-                        <Button variant="outline" size="sm">
-                          Go to Bookings
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                )}
-
-                {/* Seat Counter */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block' }}>Number of Seats</label>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {selectedRide.availableSeats} {selectedRide.availableSeats === 1 ? 'seat' : 'seats'} currently available
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button
-                      type="button"
-                      disabled={requestedSeats <= 1}
-                      onClick={() => setRequestedSeats((p) => Math.max(1, p - 1))}
-                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--border-medium)', background: '#fff', cursor: requestedSeats <= 1 ? 'not-allowed' : 'pointer', fontWeight: 700 }}
-                      aria-label="Decrease requested seats"
-                    >
-                      -
-                    </button>
-                    <span style={{ fontWeight: 700, fontSize: '1rem', minWidth: '20px', textAlign: 'center' }}>
-                      {requestedSeats}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={requestedSeats >= selectedRide.availableSeats}
-                      onClick={() => setRequestedSeats((p) => Math.min(selectedRide.availableSeats, p + 1))}
-                      style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--border-medium)', background: '#fff', cursor: requestedSeats >= selectedRide.availableSeats ? 'not-allowed' : 'pointer', fontWeight: 700 }}
-                      aria-label="Increase requested seats"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {/* Fuel Contribution Breakdown */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '10px 14px', backgroundColor: 'var(--bg-page)', borderRadius: '6px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Estimated Fuel Contribution:</span>
-                  <strong>₹{(selectedRide.costPerSeat ?? 0) * requestedSeats} ({requestedSeats} × ₹{selectedRide.costPerSeat ?? 0})</strong>
-                </div>
-
-                <Button
-                  variant="primary"
-                  size="lg"
-                  disabled={bookingLoading}
-                  onClick={handleRequestBooking}
-                  leftIcon={bookingLoading ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />}
-                  id="btn-confirm-seat-request"
-                  style={{ width: '100%' }}
-                >
-                  {bookingLoading ? 'Submitting Request...' : `Request ${requestedSeats} Seat${requestedSeats > 1 ? 's' : ''}`}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="md"
-                  type="button"
-                  onClick={() => handleShareWhatsApp(selectedRide)}
-                  leftIcon={<Share2 size={16} style={{ color: '#15803d' }} />}
-                  id="btn-modal-share-whatsapp"
-                  style={{ width: '100%', borderColor: '#bbf7d0', color: '#15803d' }}
-                >
-                  Share Ride via WhatsApp
-                </Button>
-              </div>
-            )}
-
-            {/* Privacy notice invariant */}
-            <div style={{ padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Lock size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-              <span>
-                <strong>Campus Privacy:</strong> Landmark pickup/dropoff descriptions and driver phone contacts are securely disclosed only after the driver confirms your booking request.
-              </span>
             </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
 
       {/* Detailed Filter & Refine Modal */}
       <Modal

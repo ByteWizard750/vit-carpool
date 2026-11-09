@@ -18,6 +18,8 @@ import {
   SlidersHorizontal,
   ChevronRight,
   ShieldCheck,
+  IndianRupee,
+  Info,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
@@ -35,6 +37,7 @@ import {
   getTomorrowPresetKolkata,
   parseKolkataDateTimeInput,
   generateIdempotencyKey,
+  calculateCabFareSplit,
 } from '@vit-carpool/contracts';
 
 export const OfferRidePage: React.FC = () => {
@@ -50,6 +53,26 @@ export const OfferRidePage: React.FC = () => {
     if (urlMode === 'custom') return 'custom';
     return 'quick';
   });
+
+  // Ride Category: 'VEHICLE' (default) or 'CAB_SHARE'
+  const [rideCategory, setRideCategory] = useState<'VEHICLE' | 'CAB_SHARE'>(() => {
+    return searchParams.get('category') === 'cab' ? 'CAB_SHARE' : 'VEHICLE';
+  });
+
+  // Cab Share Form State
+  const [cabOrigin, setCabOrigin] = useState('');
+  const [cabOriginLocation, setCabOriginLocation] = useState<LocationSuggestionDto | null>(null);
+  const [cabDestination, setCabDestination] = useState('');
+  const [cabDestLocation, setCabDestLocation] = useState<LocationSuggestionDto | null>(null);
+  const [cabDepartureTime, setCabDepartureTime] = useState<string>('');
+  const [cabBookingDeadline, setCabBookingDeadline] = useState<string>('');
+  const [cabTotalCapacity, setCabTotalCapacity] = useState<number>(4);
+  const [cabEstimatedTotalFare, setCabEstimatedTotalFare] = useState<string>('800');
+  const [cabService, setCabService] = useState<string>('');
+  const [cabPickupDescription, setCabPickupDescription] = useState<string>('');
+  const [cabDropoffDescription, setCabDropoffDescription] = useState<string>('');
+  const [cabMaxDetourMinutes, setCabMaxDetourMinutes] = useState<number>(15);
+  const cabAttemptRef = useRef<{ key: string; payloadStr: string } | null>(null);
 
   const [vehicles, setVehicles] = useState<VehicleResponseDto[]>([]);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
@@ -242,7 +265,7 @@ export const OfferRidePage: React.FC = () => {
     const fetchTemplates = async () => {
       setLoadingTemplates(true);
       try {
-        const res = await fetch('/rides/quick-templates', {
+        const res = await fetch('/api/rides/quick-templates', {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -308,7 +331,7 @@ export const OfferRidePage: React.FC = () => {
     const fetchRideToEdit = async () => {
       setLoadingRide(true);
       try {
-        const res = await fetch(`/rides/mine`, {
+        const res = await fetch(`/api/rides/mine`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -316,7 +339,7 @@ export const OfferRidePage: React.FC = () => {
           const target = myRides.find((r) => r.id === editRideId);
           if (target) {
             setEditingRide(target);
-            setSelectedVehicleId(target.vehicleId);
+            setSelectedVehicleId(target.vehicleId ?? '');
             setOrigin(target.origin);
             setDestination(target.destination);
             setPickupDescription(target.pickupDescription || '');
@@ -456,7 +479,7 @@ export const OfferRidePage: React.FC = () => {
         quickAttemptRef.current = { key, payloadStr };
       }
 
-      const res = await fetch('/rides', {
+      const res = await fetch('/api/rides', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -563,7 +586,7 @@ export const OfferRidePage: React.FC = () => {
         payload.dropoffDescription = dropoffDescription.trim();
       }
 
-      const url = editRideId ? `/rides/${editRideId}` : '/rides';
+      const url = editRideId ? `/api/rides/${editRideId}` : '/api/rides';
       const method = editRideId ? 'PATCH' : 'POST';
 
       const payloadStr = JSON.stringify(payload);
@@ -611,6 +634,131 @@ export const OfferRidePage: React.FC = () => {
     }
   };
 
+  // Handle Cab Share publishing
+  const handleCabSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!cabOrigin.trim()) {
+      setError('Please provide a pickup origin for the cab share.');
+      return;
+    }
+
+    if (!cabDestination.trim()) {
+      setError('Please provide a drop-off destination for the cab share.');
+      return;
+    }
+
+    if (!cabDepartureTime) {
+      setError('Please select a departure date and time.');
+      return;
+    }
+
+    const depDate = parseKolkataDateTimeInput(cabDepartureTime);
+    if (isNaN(depDate.getTime()) || depDate.getTime() <= Date.now() + 10 * 60 * 1000) {
+      setError('Departure time must be scheduled at least 10 minutes in the future.');
+      return;
+    }
+
+    if (!cabBookingDeadline) {
+      setError('Please choose a booking deadline.');
+      return;
+    }
+
+    const deadlineDate = parseKolkataDateTimeInput(cabBookingDeadline);
+    if (isNaN(deadlineDate.getTime())) {
+      setError('Please provide a valid booking deadline.');
+      return;
+    }
+
+    if (deadlineDate.getTime() > depDate.getTime()) {
+      setError('Booking deadline must be before or equal to departure time.');
+      return;
+    }
+
+    if (cabTotalCapacity < 2 || cabTotalCapacity > 8) {
+      setError('Total cab capacity must be between 2 and 8 seats (including organiser).');
+      return;
+    }
+
+    const fareNum = Number(cabEstimatedTotalFare);
+    if (isNaN(fareNum) || fareNum < 50 || fareNum > 20000) {
+      setError('Estimated total fare must be between ₹50 and ₹20,000.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload: any = {
+        origin: cabOrigin.trim(),
+        destination: cabDestination.trim(),
+        departureTime: depDate.toISOString(),
+        bookingDeadline: deadlineDate.toISOString(),
+        totalCapacity: cabTotalCapacity,
+        estimatedTotalFare: Math.round(fareNum),
+      };
+
+      if (cabOriginLocation?.address || cabOrigin.trim()) {
+        payload.originAddress = cabOriginLocation?.address || cabOrigin.trim();
+      }
+      if (cabOriginLocation?.latitude !== undefined && cabOriginLocation?.longitude !== undefined) {
+        payload.originLatitude = cabOriginLocation.latitude;
+        payload.originLongitude = cabOriginLocation.longitude;
+        payload.originPlaceId = cabOriginLocation.id;
+      }
+
+      if (cabDestLocation?.address || cabDestination.trim()) {
+        payload.destinationAddress = cabDestLocation?.address || cabDestination.trim();
+      }
+      if (cabDestLocation?.latitude !== undefined && cabDestLocation?.longitude !== undefined) {
+        payload.destinationLatitude = cabDestLocation.latitude;
+        payload.destinationLongitude = cabDestLocation.longitude;
+        payload.destinationPlaceId = cabDestLocation.id;
+      }
+
+      if (cabService.trim()) payload.cabService = cabService.trim();
+      if (cabPickupDescription.trim()) payload.pickupDescription = cabPickupDescription.trim();
+      if (cabDropoffDescription.trim()) payload.dropoffDescription = cabDropoffDescription.trim();
+      if (cabMaxDetourMinutes) payload.maxDetourMinutes = cabMaxDetourMinutes;
+
+      const payloadStr = JSON.stringify(payload);
+      let key: string;
+      if (cabAttemptRef.current && cabAttemptRef.current.payloadStr === payloadStr) {
+        key = cabAttemptRef.current.key;
+      } else {
+        key = generateIdempotencyKey();
+        cabAttemptRef.current = { key, payloadStr };
+      }
+
+      const res = await fetch('/api/rides/cab-share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          'Idempotency-Key': key,
+        },
+        body: payloadStr,
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || `Cab share publishing failed (${res.status})`);
+      }
+
+      cabAttemptRef.current = null;
+      setSuccessMsg('Shared Cab successfully published! Eligible campus peers can now join and split the fare.');
+      setTimeout(() => {
+        navigate('/my-rides');
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'Unable to publish shared cab. Please verify your details.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const activeVehicle = vehicles.find((v) => v.id === (mode === 'quick' ? quickVehicleId : selectedVehicleId));
   const isSelectedVehicleDeleted = selectedTemplate && !vehicles.some((v) => v.id === selectedTemplate.vehicleId);
 
@@ -621,8 +769,479 @@ export const OfferRidePage: React.FC = () => {
         description="Share your daily commute with verified peers in your campus community. Split fuel costs, skip the solo drive."
       />
 
-      {/* Mode Switcher Tabs (Only visible when not editing an existing ride) */}
+      {/* Primary Category Selector: My Vehicle vs Shared Cab */}
       {!editRideId && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            backgroundColor: '#f1f5f9',
+            padding: '4px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            gap: '6px',
+            border: '1px solid var(--border-light, #e2e8f0)',
+          }}
+          role="tablist"
+          id="ride-category-tabs"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rideCategory === 'VEHICLE'}
+            onClick={() => {
+              setRideCategory('VEHICLE');
+              setError(null);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '11px 16px',
+              fontSize: '0.9rem',
+              fontWeight: rideCategory === 'VEHICLE' ? 700 : 500,
+              color: rideCategory === 'VEHICLE' ? 'var(--color-brand-700, #1d4ed8)' : 'var(--text-secondary, #64748b)',
+              backgroundColor: rideCategory === 'VEHICLE' ? '#ffffff' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              boxShadow: rideCategory === 'VEHICLE' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+            id="tab-category-vehicle"
+          >
+            <Car size={16} />
+            <span>My Vehicle</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rideCategory === 'CAB_SHARE'}
+            onClick={() => {
+              setRideCategory('CAB_SHARE');
+              setError(null);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '11px 16px',
+              fontSize: '0.9rem',
+              fontWeight: rideCategory === 'CAB_SHARE' ? 700 : 500,
+              color: rideCategory === 'CAB_SHARE' ? '#92400e' : 'var(--text-secondary, #64748b)',
+              backgroundColor: rideCategory === 'CAB_SHARE' ? '#ffffff' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              boxShadow: rideCategory === 'CAB_SHARE' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+            id="tab-category-cab-share"
+          >
+            <Users size={16} />
+            <span>Shared Cab</span>
+            <span
+              style={{
+                fontSize: '0.7rem',
+                backgroundColor: rideCategory === 'CAB_SHARE' ? '#fef3c7' : '#e2e8f0',
+                color: rideCategory === 'CAB_SHARE' ? '#92400e' : '#475569',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontWeight: 700,
+              }}
+            >
+              No Car Needed
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Shared Cab Publishing Form (No Vehicle Required) */}
+      {rideCategory === 'CAB_SHARE' && !editRideId ? (
+        <form
+          onSubmit={handleCabSubmit}
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            border: '1px solid var(--border-light, #e2e8f0)',
+            padding: '24px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            marginBottom: '40px',
+          }}
+          id="cab-share-publish-form"
+        >
+          {/* Explanation Banner */}
+          <div
+            style={{
+              padding: '16px',
+              backgroundColor: '#fffbeb',
+              borderRadius: '10px',
+              border: '1px solid #fde68a',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-start',
+            }}
+          >
+            <Info size={20} style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#92400e', marginBottom: '2px' }}>
+                Organise a Shared Cab (Uber / Ola / Taxi)
+              </div>
+              <p style={{ margin: 0, fontSize: '0.825rem', color: '#78350f', lineHeight: 1.45 }}>
+                No vehicle ownership required! As the organiser, you automatically occupy <strong>1 seat</strong> as a passenger. Other verified campus peers travelling the same corridor can join and split the actual cab bill with you.
+              </p>
+            </div>
+          </div>
+
+          {/* Route Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              1. Cab Corridor &amp; Route
+            </div>
+            <div className="responsive-two-col" style={{ gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MapPin size={14} style={{ color: '#2563eb' }} /> Pickup Origin *
+                </label>
+                <LocationAutocomplete
+                  id="cab-origin-input"
+                  value={cabOrigin}
+                  onChange={(val, loc) => {
+                    setCabOrigin(val);
+                    setCabOriginLocation(loc || null);
+                  }}
+                  selectedLocation={cabOriginLocation}
+                  placeholder="e.g. Tambaram Railway Station"
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Navigation size={14} style={{ color: '#16a34a' }} /> Destination *
+                </label>
+                <LocationAutocomplete
+                  id="cab-destination-input"
+                  value={cabDestination}
+                  onChange={(val, loc) => {
+                    setCabDestination(val);
+                    setCabDestLocation(loc || null);
+                  }}
+                  selectedLocation={cabDestLocation}
+                  placeholder="e.g. VIT Chennai Campus"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Schedule Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              2. Schedule &amp; Deadlines
+            </div>
+            <div className="responsive-two-col" style={{ gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={14} style={{ color: '#2563eb' }} /> Departure Date &amp; Time *
+                </label>
+                <input
+                  type="datetime-local"
+                  id="cab-departure-time"
+                  value={cabDepartureTime}
+                  onChange={(e) => {
+                    setCabDepartureTime(e.target.value);
+                    if (!cabBookingDeadline && e.target.value) {
+                      const dep = parseKolkataDateTimeInput(e.target.value);
+                      if (!isNaN(dep.getTime())) {
+                        const dline = new Date(dep.getTime() - 60 * 60 * 1000);
+                        setCabBookingDeadline(toKolkataInputString(dline));
+                      }
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.875rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={14} style={{ color: '#d97706' }} /> Booking Deadline *
+                </label>
+                <input
+                  type="datetime-local"
+                  id="cab-booking-deadline"
+                  value={cabBookingDeadline}
+                  onChange={(e) => setCabBookingDeadline(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.875rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Cutoff time after which new booking requests cannot be submitted.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Capacity and Fare Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              3. Cab Capacity &amp; Estimated Fare
+            </div>
+            <div className="responsive-two-col" style={{ gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Users size={14} style={{ color: '#2563eb' }} /> Total Cab Capacity (Seats) *
+                </label>
+                <select
+                  id="cab-total-capacity"
+                  value={cabTotalCapacity}
+                  onChange={(e) => setCabTotalCapacity(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.875rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <option value={2}>2 Persons (1 Organiser + 1 Passenger Seat)</option>
+                  <option value={3}>3 Persons (1 Organiser + 2 Passenger Seats)</option>
+                  <option value={4}>4 Persons (Standard Sedan - 1 Organiser + 3 Passenger Seats)</option>
+                  <option value={5}>5 Persons (1 Organiser + 4 Passenger Seats)</option>
+                  <option value={6}>6 Persons (SUV / XL - 1 Organiser + 5 Passenger Seats)</option>
+                  <option value={7}>7 Persons (1 Organiser + 6 Passenger Seats)</option>
+                  <option value={8}>8 Persons (Max Mini-Van - 1 Organiser + 7 Passenger Seats)</option>
+                </select>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Organiser occupies 1 seat. Remaining {cabTotalCapacity - 1} seats open for booking.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <IndianRupee size={14} style={{ color: '#16a34a' }} /> Estimated Total Cab Fare (₹) *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    id="cab-estimated-fare"
+                    value={cabEstimatedTotalFare}
+                    onChange={(e) => setCabEstimatedTotalFare(e.target.value)}
+                    min={50}
+                    max={20000}
+                    step={10}
+                    placeholder="e.g. 800"
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px 9px 28px',
+                      fontSize: '0.875rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: '#ffffff',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dynamic Fare Preview Card */}
+            {Number(cabEstimatedTotalFare) > 0 && (() => {
+              const split = calculateCabFareSplit(Math.max(0, Number(cabEstimatedTotalFare) || 0), cabTotalCapacity, 0);
+              return (
+                <div
+                  style={{
+                    padding: '16px',
+                    backgroundColor: '#f0fdf4',
+                    borderRadius: '10px',
+                    border: '1px solid #bbf7d0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                  id="cab-fare-preview-card"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 700 }}>
+                      Transparent Fare Split Preview
+                    </div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#15803d' }}>
+                      ~₹{split.estimatedPerPersonIfFull} <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>/ person (if full)</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#166534', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <span>&bull; Total Fare: <strong>₹{cabEstimatedTotalFare}</strong></span>
+                    <span>&bull; Capacity: <strong>{cabTotalCapacity} seats</strong> (1 Organiser + {cabTotalCapacity - 1} Passengers)</span>
+                    <span>&bull; Your Share: <strong>₹{split.estimatedPerPersonIfFull}</strong></span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#15803d', fontStyle: 'italic' }}>
+                    Fares are divided strictly integer-rupee among all confirmed participants. If fewer passengers join, the cost is split among the confirmed group.
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Optional Details */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              4. Additional Details (Optional)
+            </div>
+            <div className="responsive-two-col" style={{ gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
+                  Cab Service / App
+                </label>
+                <input
+                  type="text"
+                  id="cab-service-input"
+                  value={cabService}
+                  onChange={(e) => setCabService(e.target.value)}
+                  placeholder="e.g. Uber XL, Ola Prime, Fast Track"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.825rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
+                  Max Detour Tolerance
+                </label>
+                <select
+                  id="cab-max-detour"
+                  value={cabMaxDetourMinutes}
+                  onChange={(e) => setCabMaxDetourMinutes(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.825rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <option value={5}>5 minutes</option>
+                  <option value={10}>10 minutes</option>
+                  <option value={15}>15 minutes (Standard)</option>
+                  <option value={20}>20 minutes</option>
+                  <option value={30}>30 minutes</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="responsive-two-col" style={{ gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
+                  Pickup Landmark Note
+                </label>
+                <input
+                  type="text"
+                  id="cab-pickup-notes"
+                  value={cabPickupDescription}
+                  onChange={(e) => setCabPickupDescription(e.target.value)}
+                  placeholder="e.g. Near Station Gate 2 auto stand"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.825rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px', display: 'block' }}>
+                  Dropoff Landmark Note
+                </label>
+                <input
+                  type="text"
+                  id="cab-dropoff-notes"
+                  value={cabDropoffDescription}
+                  onChange={(e) => setCabDropoffDescription(e.target.value)}
+                  placeholder="e.g. Main Gate / Library Circle"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: '0.825rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-medium)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Submit Actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              onClick={() => navigate('/my-rides')}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={submitting}
+              leftIcon={submitting ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />}
+              id="publish-cab-share-submit-btn"
+            >
+              {submitting ? 'Publishing Cab Share...' : 'Publish Shared Cab'}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          {/* Mode Switcher Tabs (Only visible when not editing an existing ride) */}
+          {!editRideId && (
         <div
           style={{
             display: 'flex',
@@ -1572,6 +2191,8 @@ export const OfferRidePage: React.FC = () => {
             </Button>
           </div>
         </form>
+      )}
+        </>
       )}
     </PageShell>
   );

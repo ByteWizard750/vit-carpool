@@ -690,11 +690,13 @@ export class AdminService {
         email: r.driver.email,
         audience: r.driver.audience,
       },
-      vehicle: {
-        make: r.vehicle.make,
-        model: r.vehicle.model,
-        registrationNumber: r.vehicle.registrationNumber,
-      },
+      vehicle: r.vehicle
+        ? {
+            make: r.vehicle.make,
+            model: r.vehicle.model,
+            registrationNumber: r.vehicle.registrationNumber,
+          }
+        : null,
       bookingsCount: r._count.bookings,
       reportsCount: r._count.reports,
       createdAt: r.createdAt.toISOString(),
@@ -1032,12 +1034,19 @@ export class AdminService {
     }
 
     const emailStatus = this.emailService.isEmailConfigured ? 'HEALTHY' : 'DEGRADED';
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const emailMessage = this.emailService.isEmailConfigured
-      ? 'Gmail SMTP transport configured and ready.'
+      ? `SMTP transport active via ${smtpHost}.`
       : 'Email SMTP not configured (using mock delivery).';
 
-    const uploadsDir = path.resolve(process.cwd(), 'uploads');
-    const storageHealthy = fs.existsSync(uploadsDir);
+    const isS3 = process.env.STORAGE_PROVIDER === 's3' && Boolean(process.env.S3_BUCKET_NAME);
+    const uploadsDir = path.resolve(process.env.UPLOADS_DIR || path.resolve(process.cwd(), 'uploads'));
+    const storageHealthy = isS3 || fs.existsSync(uploadsDir);
+    const storageMessage = isS3
+      ? `AWS S3 private bucket storage active (${process.env.S3_BUCKET_NAME}).`
+      : storageHealthy
+        ? 'Local storage mounted.'
+        : 'Uploads directory created on demand.';
 
     const now = new Date().toISOString();
     const overallStatus: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' =
@@ -1068,7 +1077,7 @@ export class AdminService {
         },
         storage: {
           status: storageHealthy ? 'HEALTHY' : 'DEGRADED',
-          message: storageHealthy ? 'Local storage mounted.' : 'Uploads directory created on demand.',
+          message: storageMessage,
           lastChecked: now,
         },
       },

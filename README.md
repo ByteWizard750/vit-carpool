@@ -1,172 +1,182 @@
 # VIT Chennai Carpooling Platform (RideShare VIT)
 
-A trusted, mobile-first community carpooling platform built specifically and exclusively for the **VIT Chennai** campus community (students and faculty).
+A trusted, high-performance, mobile-first community carpooling and cab-sharing platform engineered exclusively for the **VIT Chennai** campus community (students and faculty).
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-10.0-E0234E.svg)](https://nestjs.com/)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB.svg)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16_PostGIS_3.6-336791.svg)](https://www.postgresql.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748.svg)](https://www.prisma.io/)
+[![pnpm](https://img.shields.io/badge/pnpm-9.x-orange.svg)](https://pnpm.io/)
 
 ---
 
-## 1. Overview & Vision
+## 1. Overview & Core Philosophy
 
-Daily commuting to and from the VIT Chennai Kelambakkam campus poses significant logistical and financial challenges for students and faculty members alike. Many spend substantial amounts on solo cabs, autos, or personal fuel. 
+Daily commuting to and from the VIT Chennai Kelambakkam campus poses major logistical, safety, and financial challenges. Students and faculty frequently spend significant amounts on solo cabs, autos, or personal fuel along major Chennai commute arteries (GST Road, OMR, Velachery Main Road, Vandalur-Kelambakkam Road).
 
-This platform connects verified members of the VIT Chennai community traveling along similar routes to share car journeys, split operating costs, reduce traffic congestion, and travel safely with trusted peers.
+**VIT Carpool** connects verified campus members traveling along identical commute corridors to share journeys, split travel expenses, reduce regional carbon footprint, and commute safely with verified peers.
 
-### Key Philosophy
-* **Campus-Exclusive & Verified**: Accessible only to verified VIT Chennai members.
-* **Strict Audience Isolation**: Students only ride with students; faculty only ride with faculty.
-* **Driver-Led**: Only car owners publish scheduled rides; passengers search, request seats, or configure ride alerts.
-* **Request & Approve**: No instant booking. Every booking requires explicit driver approval with atomic concurrency guarantees.
-* **Cost Sharing**: Non-commercial expense contribution sharing.
-* **Safety & Privacy**: Privacy-preserving location tolerances; zero residential doxxing.
-* **Production-Grade Architecture**: One unified codebase, single modular backend, single database, strict database-level constraints.
+### Strict Non-Negotiable Invariants
+1. **Absolute Audience Isolation**: Strict institutional separation between `STUDENT` (`@vitstudent.ac.in`) and `FACULTY` (`@vit.ac.in`). Students only discover, match, and ride with students; faculty only with faculty. Cross-audience discovery, bookings, or notifications are blocked at the database, API, and UI layers.
+2. **Server-Enforced Identity**: The client can **never** self-select or alter its audience or verification status. Identity is derived strictly from institutional email patterns and cryptographic RS256 JWT tokens.
+3. **Atomic Concurrency & Seat Integrity**: Pending booking requests do not hold seats. Seats are committed only upon explicit approval via PostgreSQL atomic row locks (`SELECT ... FOR UPDATE`). Overbooking is mathematically impossible.
+4. **Privacy-Preserving Geospatial Boundaries**: Exact residential addresses are shielded; searches operate within privacy-safe radius bands (500m–2km) and corridor bounding boxes.
 
 ---
 
-## 2. Core Architecture Summary
+## 2. Key Capabilities & Feature Modules
 
-| Layer | Technology | Key Responsibility |
-| :--- | :--- | :--- |
-| **Frontend** | React 19 / Vite / TypeScript / Vanilla CSS | Mobile-first Progressive Web App (PWA), TanStack Query, accessible forms |
-| **Backend API** | NestJS / TypeScript | Authoritative REST API, OpenAPI/Swagger, JWT authentication, authorization guards |
-| **Database** | PostgreSQL 16+ / PostGIS | Authoritative state, spatial indexing, composite foreign key constraints |
-| **ORM & Migrations** | Prisma + Reviewed Raw SQL Migrations | Type-safe access + raw migrations for PostGIS geometries, check constraints, triggers |
-| **Authentication** | Supabase Auth (or institutional SSO/JWT) | Server-side JWT verification; trusted audience & status loaded from DB |
-| **Asynchronous Jobs** | `pg-boss` (PostgreSQL job queue) | Recurring ride materialization, alert matching, notification delivery |
-| **Geospatial & Maps**| MapLibre GL / OpenStreetMap / Valhalla or OSRM | Decoupled mapping interface; PostGIS pre-filtering before routing engine calls |
+### 🚗 Vehicle Carpooling (Driver-Led)
+- **Ride Publishing**: Verified car owners publish scheduled one-time or recurring rides with designated pickup points, intermediate corridor stops, seat capacity, and regulated cost contributions.
+- **Recurring Commutes**: Materializes recurring daily/weekly schedules over a rolling IST horizon using `pg-boss` background jobs.
+- **Boarding Verification**: Secure boarding confirmation code/token validation preventing unauthorized passenger pickups.
 
----
+### 🚕 Cab Sharing (Organiser-Led)
+- **Zero-Vehicle Registration**: Students and faculty without personal vehicles can organise shared cabs (Ola, Uber, Fastrack, prepaid campus cabs).
+- **Dynamic Cost-Splitting**: Live fare-per-person estimation ($\text{Estimated Total Fare} \div \text{Total Occupants}$ including the organiser).
+- **Fare Revision Lifecycle**: Organisers can update final metered fares before journey completion. If a material fare revision occurs ($>1$), passengers receive instant notifications and must acknowledge the revised amount on `/bookings`.
+- **Booking Deadlines**: Configurable booking cutoff times; requests and approvals are locked once the departure deadline passes.
 
-## 3. Strict Non-Negotiable Invariants
+### 📍 Intelligent Route Discovery & Location Autocomplete
+- **Corridor Matching**: PostGIS spatial indexing (`ST_DWithin`, line buffers) matches passengers whose pickup and dropoff points align along a published driving route geometry.
+- **Transit-First Autocomplete**: Authoritative local Chennai transit catalog (suburban railway stations, bus terminuses, campus gates, metro stops) prioritized over commercial retail noise.
+- **Responsive Dropdown**: Expands up to **580px** on desktop and tablet with dynamic boundary clamping to prevent off-screen overflow, featuring multi-line wrapping and zero truncated addresses.
 
-1. **Audience Separation**: Absolute isolation between `STUDENT` and `FACULTY`. No discovery, search, bookings, notifications, or database linkages can cross audience boundaries. Enforced at DB, API, and UI layers.
-2. **Audience Immutability**: The client can **never** set or alter its audience. Audience is assigned solely by a trusted server-side verification process.
-3. **Seat Integrity**: Pending booking requests do not hold seats. Seats are only consumed upon driver approval via an atomic database transaction. Overbooking is impossible.
-4. **Cars Only**: MVP supports four-wheeler passenger cars only.
+### 💬 Real-Time Communication & Notifications
+- **In-App Messaging**: Real-time WebSocket messaging threads for confirmed passengers and organisers/drivers.
+- **Multi-Channel Alerts**: Web Push (VAPID) notifications, in-app notification center, and corridor-based ride alert matching.
 
-For the full security charter, see [SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
-
----
-
-## 4. Documentation Index
-
-The platform documentation is organized in the `docs/` directory:
-
-* 🏛️ [Architecture Specification](docs/ARCHITECTURE.md) - System architecture, components, API boundaries, and network topology.
-* 🛡️ [Security Invariants & Rules](docs/SECURITY-INVARIANTS.md) - Non-negotiable security, isolation, and concurrency rules.
-* 🗄️ [Database Design & Schema](docs/DATABASE-DESIGN.md) - Entity models, constraints, state machines, and PostGIS strategies.
-* 🔄 [Recurring Commutes](docs/RECURRING-COMMUTES.md) - Driver recurring commutes, IST scheduling, and rolling horizon materialization.
-* 🔔 [Ride Alerts & Notifications](docs/RIDE-ALERTS-AND-NOTIFICATIONS.md) - Geospatial ride corridor alert matching and in-app notifications.
-* 🚀 [Production Deployment Readiness](docs/DEPLOYMENT-READINESS.md) - Infrastructure prerequisites, least-privilege credentials, RS256 key management, and operational checklist.
-* 🗺️ [Development & Milestone Plan](docs/DEVELOPMENT-PLAN.md) - Structured roadmap from Milestone 0 through Milestone 7.
-* 📋 [Decisions & Open Questions (ADRs)](docs/DECISIONS.md) - Architectural decisions and tracking of unresolved requirements.
+### 🛡️ Safety, Ratings & Admin Operations
+- **Reputation & Moderation**: Bilateral post-ride ratings, star reviews, user blocking, and confidential safety incident reports.
+- **Admin Safety Console (`/admin`)**: 2FA-protected operations dashboard for platform health monitoring, user account audits, ride moderation, and emergency account suspensions.
 
 ---
 
-## 5. Development Environment & Setup Instructions
+## 3. Monorepo Architecture & Technology Stack
+
+The project is structured as a high-performance monorepo using **pnpm workspaces**:
+
+```
+Vit-Carpool/
+├── apps/
+│   ├── api/                    # NestJS 10 REST API, WebSockets, PostGIS Services
+│   │   ├── src/modules/
+│   │   │   ├── admin/          # Admin moderation, safety audits, metrics
+│   │   │   ├── auth/           # RS256 JWT, institutional auth guards, rate limiters
+│   │   │   ├── bookings/       # Atomic booking workflows, fare acknowledgements
+│   │   │   ├── locations/      # Transit catalog, Mapbox search, corridor fallback
+│   │   │   ├── rides/          # Vehicle & Cab Share lifecycle, PostGIS corridor matcher
+│   │   │   └── users/          # Profiles, verification, audience checks
+│   │   └── test/               # E2E test suites (620+ passing integration tests)
+│   └── web/                    # Vite + React 19 PWA
+│       ├── src/components/     # Design system primitives, Navbar, BottomNav, Modals
+│       ├── src/features/       # Auth, Ride Booking, Notifications, Tracking
+│       ├── src/pages/          # 18 responsive pages (Landing, Rides, MyRides, Admin, etc.)
+│       └── e2e/                # Playwright responsive & browser verification specs
+├── packages/
+│   ├── contracts/              # Shared TypeScript interfaces, Zod schemas, DTOs
+│   └── db/                     # Prisma schema, PostGIS extensions, SQL migrations
+└── docs/                       # Specifications, security invariants, QA audit evidence
+```
+
+### Technology Summary
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 19, Vite, TypeScript, TanStack Query, React Router 7, Lucide Icons, CSS Design System |
+| **Backend API** | NestJS 10, Fastify/Express, Passport JWT (RS256), `@nestjs/websockets`, `@nestjs/throttler` |
+| **Database** | PostgreSQL 16 + PostGIS 3.6 extension, Prisma ORM, Raw PostGIS SQL Migrations |
+| **Background Jobs** | `pg-boss` (PostgreSQL-backed transactional queue), IST cron schedules |
+| **Geospatial & Maps** | PostGIS `geography(Point, 4326)` & `LineString`, Mapbox Search Box API & Directions API |
+| **Testing** | Jest, Supertest, Playwright (Chromium browser automation) |
+
+---
+
+## 4. Development Environment & Setup Instructions
 
 ### Prerequisites
-* **macOS**: Apple Silicon (`arm64`) or Intel (`x86_64`)
-* **Node.js**: `v22.12.0`+
-* **Package Manager**: `pnpm` (v12.15+)
-* **Docker & Docker Compose**: Docker Desktop or OrbStack running
+- **Node.js**: `v22.12.0` or higher
+- **Package Manager**: `pnpm` (v9.x or v10.x)
+- **Docker & Docker Compose**: Container runtime for PostgreSQL with PostGIS
 
-### 1. Environment Configuration
-Copy the environment template:
+### 1. Clone & Configure Environment
 ```bash
+git clone https://github.com/ByteWizard750/vit-carpool.git
+cd vit-carpool
 cp .env.example .env
 ```
-> [!NOTE]
-> The database runs on port `5433` by default to avoid conflicts with any native Homebrew PostgreSQL service running on `5432`.
 
-### 2. Start PostgreSQL with PostGIS
-Launch the containerized PostgreSQL 16 + PostGIS 3 instance:
+Ensure `.env` contains your development keys (PostgreSQL credentials, Mapbox access token, JWT secrets).
+
+### 2. Launch PostGIS Database
+Boot the containerized PostgreSQL 16 instance with PostGIS 3.6 pre-installed:
 ```bash
 docker compose up -d --build
 ```
-This automatically boots:
-* Development DB: `vit_carpool_dev` (with PostGIS 3.6 enabled)
-* Test DB: `vit_carpool_test` (isolated for automated testing)
-* Shadow DB: `vit_carpool_shadow` (used by Prisma Migrate)
+> [!NOTE]
+> The database runs on port `5433` by default to avoid conflicts with native PostgreSQL services running on `5432`.
 
 ### 3. Install Monorepo Dependencies
 ```bash
 pnpm install
 ```
 
-### 4. Generate Prisma Client & Sync Database
+### 4. Run Migrations & Generate Clients
 ```bash
 pnpm db:generate
 pnpm --filter @vit-carpool/db db:push
 ```
 
-### 5. Run Development Servers
-Start both backend API and frontend PWA concurrently:
+### 5. Start Development Servers
+Start both the backend API and frontend web application concurrently:
 ```bash
 pnpm dev
 ```
-Or run each service independently:
+Or run each service in separate terminal windows:
 ```bash
-# Terminal 1: Backend API (NestJS on port 3000)
+# Terminal 1: NestJS API server (http://localhost:3000)
 pnpm dev:api
 
-# Terminal 2: Mobile Web Frontend (Vite on port 5173)
+# Terminal 2: Vite Web application (http://localhost:5173)
 pnpm dev:web
 ```
 
-### 6. Verify Service Endpoints
-* **Web App (PWA)**: [http://localhost:5173](http://localhost:5173)
-* **API Health Check**: [http://localhost:3000/health](http://localhost:3000/health)
-* **OpenAPI / Swagger UI**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+---
 
-### 7. Run Verification & Tests
+## 5. Verification, Testing & Build
+
+### Monorepo Typecheck
+Typechecks all workspace packages (`@vit-carpool/contracts`, `@vit-carpool/db`, `@vit-carpool/api`, `@vit-carpool/web`):
 ```bash
-# Typecheck across all workspace packages
 pnpm typecheck
+```
 
-# Run automated integration tests (verifies PostGIS DB connection)
-pnpm test
+### Automated API Integration & Product Tests
+Executes the comprehensive suite of 620+ integration tests covering concurrency, cab sharing, corridor matching, and security invariants:
+```bash
+pnpm --filter @vit-carpool/api test
+```
 
-# Build all packages
+### Production Build
+Builds optimized production distributions across all packages:
+```bash
 pnpm build
 ```
 
 ---
 
-## 6. Milestone 1 Verification & Test Baseline
+## 6. Service Endpoints & Documentation
 
-The foundation has been verified and confirmed against the running Docker database:
-
-| Test / Check | Command | Verified Result |
-| :--- | :--- | :--- |
-| **PostgreSQL & PostGIS Version** | `SELECT PostGIS_Full_Version();` | `POSTGIS="3.6.4 94d984b" [EXTENSION] PGSQL="160" GEOS="3.11.1" PROJ="9.8.1"` |
-| **Database Isolation** | `\l` inside container | `vit_carpool_dev`, `vit_carpool_test`, `vit_carpool_shadow` created with PostGIS |
-| **Volume Persistence** | `docker compose restart` test | Verified; temporary test table and records survived restart |
-| **Monorepo Typecheck** | `pnpm typecheck` | Passed across 4 projects (`contracts`, `db`, `web`, `api`) in 1.4s with 0 errors |
-| **Automated E2E Test** | `pnpm --filter @vit-carpool/api test` | Passed (`GET /health` returned 200 OK with connected PostGIS DB in 65ms) |
-| **REST Health Endpoint** | `curl http://localhost:3000/health` | HTTP 200: `{"status":"ok","database":{"connected":true,"postgisInstalled":true}}` |
-| **Swagger OpenAPI Docs** | `curl http://localhost:3000/api/docs` | HTTP 200 OK |
-| **PWA Web App** | Browser subagent on `http://localhost:5173` | UI rendered cleanly, live health card connected, interactive refetch verified |
+- **Web Application**: [http://localhost:5173](http://localhost:5173)
+- **API Health Check**: [http://localhost:3000/api/health](http://localhost:3000/api/health)
+- **Swagger / OpenAPI Documentation**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+- **Manual QA Audit Reports**:
+  - [Cab Sharing & Corridor Discovery Manual QA Report](docs/MANUAL_QA_REPORT.md)
+  - [Supplementary QA Verification Report](docs/MANUAL_QA_SUPPLEMENTARY_REPORT.md)
+  - [Security Invariants Charter](docs/SECURITY-INVARIANTS.md)
 
 ---
 
-## 7. Frontend Architecture, Design System & Current Limitations
+## 7. License
 
-The frontend application (`apps/web`) establishes a production-grade, consumer-facing carpooling experience with a modern light-themed aesthetic inspired by Uber, BlaBlaCar, and Airbnb.
-
-### Design System & Component Architecture
-* **Color Palette & Tokens**: Warm slate background (`#F8FAFC`), pure white surface cards (`#FFFFFF`), high-contrast charcoal typography (`#0F172A` / `#334155`), restrained primary blue (`#2563EB`), and subtle green verification accents (`#16A34A`). Defined centrally in `src/styles/tokens.css` and `src/styles/components.css`.
-* **Clean SVG Iconography**: Consistent iconography using `lucide-react` (zero emoji substitute icons).
-* **Modular UI Primitives**: Reusable `Button` (with variants, sizes, loading states), `Card`, `Input` (accessible labels, icons, error/helper text), `Modal` (accessible dialog with focus trap and escape handling), and `Badge` components in `src/components/common/`.
-* **Responsive Layout**: Designed for mobile (`375px–390px`), tablet (`768px`), and desktop (`1280px–1440px`) with accessible touch targets (44px+) and collapsible mobile navigation.
-
-### Developer Diagnostics Relocation
-* **Environment-Gated Visibility**: Developer diagnostics (live PostgreSQL connection, PostGIS 3.6 status, query latency benchmark, and architecture checklist) are rendered in an on-demand slide-over drawer (`DevDiagnosticsDrawer.tsx`).
-* **Production Exclusion**: The floating status pill and footer diagnostics launcher are guarded by `import.meta.env.DEV` and are completely excluded from normal production builds.
-
-### Current Implementation Status & Roadmap Boundaries
-To maintain absolute product truthfulness, the interface clearly separates current operational features from upcoming milestone capabilities:
-1. **Illustrative Planning Corridors**: Commute route cards (Tambaram, OMR, Velachery, Guindy, Central, Kelambakkam) are explicitly presented as non-binding planning benchmarks. No live rides, drivers, or completed bookings are simulated.
-2. **Ride Search Status (Milestone 3 Roadmap)**: The ride search panel dynamically calculates the user's local date (`src/utils/date.ts`) and stores search parameters locally. It displays an honest coming-soon empty state explaining that live route discovery will connect to PostGIS spatial queries in Milestone 3.
-3. **Institutional Authentication (Milestone 2.2 Roadmap)**: The sign-in modal is an informational preview. It reinforces the project's non-negotiable security invariant: **zero user self-selection** of audience. Actual authentication and verification logic will be deployed in Milestone 2.2 once VIT Chennai institutional email patterns are confirmed.
-4. **Driver Ride Publishing (Milestone 4 Roadmap)**: The offer-a-ride modal previews the planned four-wheeler publishing workflow. No personal, vehicle, or licensing data is collected or persisted.
-
-
+This repository is maintained for the **VIT Chennai** community. All rights reserved. Unauthorized commercial exploitation or deployment outside institutional guidelines is strictly prohibited.

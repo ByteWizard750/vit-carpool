@@ -77,7 +77,7 @@ export const BookingsModal: React.FC<BookingsModalProps> = ({
     setPassengerError(null);
 
     try {
-      const res = await fetch('/bookings/mine', {
+      const res = await fetch('/api/bookings/mine', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -105,7 +105,7 @@ export const BookingsModal: React.FC<BookingsModalProps> = ({
     setDriverError(null);
 
     try {
-      const res = await fetch('/bookings/driver', {
+      const res = await fetch('/api/bookings/driver', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -144,7 +144,7 @@ export const BookingsModal: React.FC<BookingsModalProps> = ({
     setActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/cancel`, {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -182,7 +182,7 @@ export const BookingsModal: React.FC<BookingsModalProps> = ({
     setActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/approve`, {
+      const res = await fetch(`/api/bookings/${bookingId}/approve`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -219,7 +219,7 @@ export const BookingsModal: React.FC<BookingsModalProps> = ({
     setActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/reject`, {
+      const res = await fetch(`/api/bookings/${bookingId}/reject`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

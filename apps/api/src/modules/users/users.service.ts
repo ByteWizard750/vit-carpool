@@ -150,11 +150,15 @@ export class UsersService {
     newRole: UserRole,
     reason: string,
   ): Promise<User> {
-    if (adminActor.role !== UserRole.ADMIN) {
+    if (adminActor.role !== UserRole.ADMIN && adminActor.role !== UserRole.SUPER_ADMIN) {
       throw new BadRequestException('Only active administrators can modify user roles.');
     }
 
-    if (adminActor.id === targetUserId && newRole !== UserRole.ADMIN) {
+    if (
+      adminActor.id === targetUserId &&
+      newRole !== UserRole.ADMIN &&
+      newRole !== UserRole.SUPER_ADMIN
+    ) {
       throw new BadRequestException('Administrators cannot revoke their own admin role.');
     }
 

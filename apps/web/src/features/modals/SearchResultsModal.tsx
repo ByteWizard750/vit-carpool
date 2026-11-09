@@ -93,7 +93,7 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
     setBookingError(null);
 
     try {
-      const res = await fetch('/bookings', {
+      const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -193,7 +193,7 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
         queryParams.set('limit', '10');
         queryParams.set('sortOrder', 'asc');
 
-        const res = await fetch(`/rides?${queryParams.toString()}`, {
+        const res = await fetch(`/api/rides?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
@@ -242,7 +242,7 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
     if (token && user?.verificationStatus === 'VERIFIED') {
       setLoading(true);
       setError(null);
-      fetch('/rides?minSeats=1&page=1&limit=10&sortOrder=asc', {
+      fetch('/api/rides?minSeats=1&page=1&limit=10&sortOrder=asc', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -1203,6 +1203,62 @@ export const SearchResultsModal: React.FC<SearchResultsModalProps> = ({
                     tabIndex={0}
                     id={`ride-card-${ride.id}`}
                   >
+                    {/* Corridor Match Indicator */}
+                    {ride.match && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.675rem',
+                            fontWeight: 700,
+                            padding: '1px 7px',
+                            borderRadius: '9999px',
+                            backgroundColor:
+                              ride.match.isFallbackGeometry
+                                ? '#fffbeb'
+                                : ride.match.matchType === 'EXACT'
+                                ? '#ecfdf5'
+                                : ride.match.matchType === 'ALONG_ROUTE'
+                                ? '#eff6ff'
+                                : '#f8fafc',
+                            color:
+                              ride.match.isFallbackGeometry
+                                ? '#b45309'
+                                : ride.match.matchType === 'EXACT'
+                                ? '#047857'
+                                : ride.match.matchType === 'ALONG_ROUTE'
+                                ? '#1d4ed8'
+                                : '#475569',
+                            border: `1px solid ${
+                              ride.match.isFallbackGeometry
+                                ? '#fde68a'
+                                : ride.match.matchType === 'EXACT'
+                                ? '#a7f3d0'
+                                : ride.match.matchType === 'ALONG_ROUTE'
+                                ? '#bfdbfe'
+                                : '#e2e8f0'
+                            }`,
+                          }}
+                        >
+                          <Navigation size={10} />
+                          {ride.match.isFallbackGeometry
+                            ? 'Estimated Corridor'
+                            : ride.match.matchType === 'EXACT'
+                            ? 'Exact Route'
+                            : ride.match.matchType === 'ALONG_ROUTE'
+                            ? 'Along Your Route'
+                            : 'Endpoint Match'}
+                        </span>
+                        {ride.match.matchReasons && ride.match.matchReasons.length > 0 && (
+                          <span style={{ fontSize: '0.675rem', color: '#64748b', fontWeight: 500 }}>
+                            {ride.match.matchReasons[0]}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Route & Departure Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>

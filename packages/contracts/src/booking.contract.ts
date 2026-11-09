@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { AudienceTypeSchema } from './audience.contract';
 import { RideStatusSchema } from './ride.contract';
 import { PublicVehicleSummarySchema } from './vehicle.contract';
+import {
+  RideTypeSchema,
+  CabSharePublicSummarySchema,
+  CabShareDetailSchema,
+} from './cab-share.contract';
 
 export const BookingStatusSchema = z.enum([
   'PENDING',
@@ -88,10 +93,12 @@ export const PassengerBookingResponseSchema = z.object({
   rejectedAt: z.string().datetime().nullable(),
   cancelledAt: z.string().datetime().nullable(),
   cancellationReason: z.string().nullable(),
+  fareRevisionAcknowledged: z.number().int().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   ride: z.object({
     id: z.string().uuid(),
+    rideType: RideTypeSchema.optional().default('VEHICLE_RIDE'),
     origin: z.string(),
     destination: z.string(),
     departureTime: z.string().datetime(),
@@ -105,6 +112,7 @@ export const PassengerBookingResponseSchema = z.object({
     pickupDescription: z.string().nullable().optional(),
     dropoffDescription: z.string().nullable().optional(),
     vehicle: PublicVehicleSummarySchema.optional(),
+    cabShare: CabSharePublicSummarySchema.nullable().optional(),
   }),
 });
 
@@ -140,12 +148,14 @@ export const DriverBookingResponseSchema = z.object({
   updatedAt: z.string().datetime(),
   ride: z.object({
     id: z.string().uuid(),
+    rideType: RideTypeSchema.optional().default('VEHICLE_RIDE'),
     origin: z.string(),
     destination: z.string(),
     departureTime: z.string().datetime(),
     availableSeats: z.number().int(),
     totalSeats: z.number().int(),
     status: RideStatusSchema,
+    cabShare: CabShareDetailSchema.nullable().optional(),
   }),
 });
 
@@ -165,7 +175,7 @@ export const BoardingOtpResponseSchema = z.object({
   cooldownSecondsRemaining: z.number().int(),
   regenCountRemaining: z.number().int(),
   driverName: z.string(),
-  vehiclePlate: z.string(),
+  vehiclePlate: z.string().nullable().optional(),
   pickupAddress: z.string().nullable().optional(),
 });
 

@@ -21,6 +21,7 @@ import {
   Info,
   MessageSquare,
   Radio,
+  IndianRupee,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
@@ -65,13 +66,20 @@ export const MyRidesPage: React.FC = () => {
   const [rejectingBookingId, setRejectingBookingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('');
 
+  // Final Cab Fare Modal State
+  const [fareModalRide, setFareModalRide] = useState<DriverRideResponseDto | null>(null);
+  const [newFinalFare, setNewFinalFare] = useState<number | ''>('');
+  const [fareRevisionReason, setFareRevisionReason] = useState<string>('');
+  const [updatingFare, setUpdatingFare] = useState(false);
+  const [fareModalError, setFareModalError] = useState<string | null>(null);
+
   const fetchMyRides = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/rides/mine', {
+      const res = await fetch('/api/rides/mine', {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -103,7 +111,7 @@ export const MyRidesPage: React.FC = () => {
     setRequestActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/driver?rideId=${rideId}`, {
+      const res = await fetch(`/api/bookings/driver?rideId=${rideId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -146,7 +154,7 @@ export const MyRidesPage: React.FC = () => {
     setRequestActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/approve`, {
+      const res = await fetch(`/api/bookings/${bookingId}/approve`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -195,7 +203,7 @@ export const MyRidesPage: React.FC = () => {
     setRequestActionMessage(null);
 
     try {
-      const res = await fetch(`/bookings/${bookingId}/reject`, {
+      const res = await fetch(`/api/bookings/${bookingId}/reject`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -238,7 +246,7 @@ export const MyRidesPage: React.FC = () => {
     setCancelError(null);
 
     try {
-      const res = await fetch(`/rides/${rideToCancel.id}/cancel`, {
+      const res = await fetch(`/api/rides/${rideToCancel.id}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -270,7 +278,7 @@ export const MyRidesPage: React.FC = () => {
     setActionSuccess(null);
 
     try {
-      const res = await fetch(`/rides/${rideId}/complete`, {
+      const res = await fetch(`/api/rides/${rideId}/complete`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -290,6 +298,58 @@ export const MyRidesPage: React.FC = () => {
       alert(err.message || 'Error occurred while completing ride.');
     } finally {
       setCompletingId(null);
+    }
+  };
+
+  const handleOpenFareModal = (ride: DriverRideResponseDto) => {
+    setFareModalRide(ride);
+    setNewFinalFare(ride.cabShare?.finalTotalFare ?? ride.cabShare?.estimatedTotalFare ?? '');
+    setFareRevisionReason('');
+    setFareModalError(null);
+  };
+
+  const handleUpdateCabFare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fareModalRide || !token) return;
+    const fareNum = Number(newFinalFare);
+    if (isNaN(fareNum) || fareNum < 50 || fareNum > 20000) {
+      setFareModalError('Please enter a valid total fare between ₹50 and ₹20,000.');
+      return;
+    }
+    if (!fareRevisionReason || fareRevisionReason.trim().length < 3) {
+      setFareModalError('Please enter an explanation of at least 3 characters for the fare update.');
+      return;
+    }
+
+    setUpdatingFare(true);
+    setFareModalError(null);
+
+    try {
+      const res = await fetch(`/api/rides/${fareModalRide.id}/cab-fare`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          finalTotalFare: fareNum,
+          reason: fareRevisionReason.trim(),
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || `Failed to update cab fare (${res.status})`);
+      }
+
+      setActionSuccess(`Final cab fare updated to ₹${fareNum}. Affected confirmed passengers have been notified.`);
+      setFareModalRide(null);
+      await fetchMyRides();
+    } catch (err: any) {
+      setFareModalError(err.message || 'Unable to update cab fare.');
+    } finally {
+      setUpdatingFare(false);
     }
   };
 
@@ -630,7 +690,7 @@ export const MyRidesPage: React.FC = () => {
                       marginBottom: '14px',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <StatusBadge
                         status={
                           ride.status === 'CANCELLED'
@@ -643,6 +703,26 @@ export const MyRidesPage: React.FC = () => {
                         }
                         domain="ride"
                       />
+
+                      {ride.rideType === 'CAB_SHARE' && (
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            backgroundColor: '#fef3c7',
+                            color: '#92400e',
+                            border: '1px solid #fde68a',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          id={`badge-cab-share-${ride.id}`}
+                        >
+                          <Users size={11} /> CAB SHARE
+                        </span>
+                      )}
 
                       {hasPending && (
                         <span
@@ -663,12 +743,23 @@ export const MyRidesPage: React.FC = () => {
                       )}
                     </div>
 
-                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
-                      ₹{ride.costPerSeat ?? 0}{' '}
-                      <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
-                        /seat
+                    {ride.rideType === 'CAB_SHARE' && ride.cabShare ? (
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#92400e' }}>
+                          ₹{ride.cabShare.finalTotalFare ?? ride.cabShare.estimatedTotalFare}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)', display: 'block' }}>
+                          {ride.cabShare.finalTotalFare ? 'Final total fare' : 'Est. total fare'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-brand-700)' }}>
+                        ₹{ride.costPerSeat ?? 0}{' '}
+                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                          /seat
+                        </span>
                       </span>
-                    </span>
+                    )}
                   </div>
 
                   {/* Route Spine Display */}
@@ -694,29 +785,41 @@ export const MyRidesPage: React.FC = () => {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Clock size={14} style={{ color: 'var(--color-brand-600)' }} />
+                      <Clock size={14} style={{ color: ride.rideType === 'CAB_SHARE' ? '#d97706' : 'var(--color-brand-600)' }} />
                       <span style={{ fontWeight: 600 }}>{formatDeparture(ride.departureTime)}</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
-                      <span>
-                        {ride.vehicle ? (
-                          <>
-                            <strong>{ride.vehicle.color} {ride.vehicle.make} {ride.vehicle.model}</strong>{' '}
-                            <span style={{ color: 'var(--text-muted)' }}>({ride.vehicle.registrationNumber})</span>
-                          </>
-                        ) : (
-                          'Registered Campus Vehicle'
-                        )}
-                      </span>
-                    </div>
+                    {ride.rideType === 'CAB_SHARE' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Users size={14} style={{ color: '#d97706' }} />
+                        <span>
+                          <strong>{ride.cabShare?.cabService || 'Commercial Shared Cab'}</strong>{' '}
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            ({ride.cabShare?.totalCapacity ?? ride.totalSeats} seats cap, you occupy 1)
+                          </span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Car size={14} style={{ color: 'var(--color-brand-600)' }} />
+                        <span>
+                          {ride.vehicle ? (
+                            <>
+                              <strong>{ride.vehicle.color} {ride.vehicle.make} {ride.vehicle.model}</strong>{' '}
+                              <span style={{ color: 'var(--text-muted)' }}>({ride.vehicle.registrationNumber})</span>
+                            </>
+                          ) : (
+                            'Registered Campus Vehicle'
+                          )}
+                        </span>
+                      </div>
+                    )}
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '4px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Users size={14} style={{ color: 'var(--color-brand-600)' }} />
+                        <Users size={14} style={{ color: ride.rideType === 'CAB_SHARE' ? '#d97706' : 'var(--color-brand-600)' }} />
                         <span>
-                          <strong>{ride.availableSeats}</strong> of {ride.totalSeats} seats open
+                          <strong>{ride.availableSeats}</strong> of {ride.rideType === 'CAB_SHARE' && ride.cabShare ? ride.cabShare.totalCapacity - 1 : ride.totalSeats} passenger seats open
                         </span>
                       </div>
 
@@ -724,6 +827,13 @@ export const MyRidesPage: React.FC = () => {
                         {confirmedCount} confirmed
                       </span>
                     </div>
+
+                    {ride.rideType === 'CAB_SHARE' && ride.cabShare && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px dashed var(--border-light)', fontSize: '0.78rem', color: '#92400e' }}>
+                        <span>Current split ({confirmedCount + 1} pax):</span>
+                        <strong>~₹{Math.ceil((ride.cabShare.finalTotalFare ?? ride.cabShare.estimatedTotalFare) / (confirmedCount + 1))} / person</strong>
+                      </div>
+                    )}
                   </div>
 
                   {/* 15-Minute Edit Lock Notice */}
@@ -794,6 +904,20 @@ export const MyRidesPage: React.FC = () => {
                         </span>
                       )}
                     </button>
+
+                    {/* Update Final Cab Fare Button (Organiser only) */}
+                    {ride.rideType === 'CAB_SHARE' && ride.status !== 'CANCELLED' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenFareModal(ride)}
+                        leftIcon={<IndianRupee size={13} style={{ color: '#d97706' }} />}
+                        id={`btn-update-fare-${ride.id}`}
+                        style={{ borderColor: '#fde68a', color: '#92400e', backgroundColor: '#fffbeb' }}
+                      >
+                        {ride.cabShare?.finalTotalFare ? 'Revise Fare' : 'Update Final Fare'}
+                      </Button>
+                    )}
 
                     {/* Edit Ride Button */}
                     {ride.status === 'SCHEDULED' && activeTab === 'UPCOMING' && (
@@ -1205,7 +1329,7 @@ export const MyRidesPage: React.FC = () => {
         <Modal
           isOpen={Boolean(rideToCancel)}
           onClose={() => setRideToCancel(null)}
-          title="Cancel Published Ride"
+          title={rideToCancel.rideType === 'CAB_SHARE' ? 'Cancel Shared Cab Journey' : 'Cancel Published Ride'}
           maxWidth="460px"
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1222,19 +1346,19 @@ export const MyRidesPage: React.FC = () => {
             >
               <AlertTriangle size={18} style={{ color: '#dc2626', marginTop: '2px', flexShrink: 0 }} />
               <div style={{ fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.4' }}>
-                Are you sure you want to cancel your ride from <strong>{rideToCancel.origin}</strong> to <strong>{rideToCancel.destination}</strong> scheduled for <strong>{formatDeparture(rideToCancel.departureTime)}</strong>?
+                Are you sure you want to cancel your {rideToCancel.rideType === 'CAB_SHARE' ? 'shared cab journey' : 'ride'} from <strong>{rideToCancel.origin}</strong> to <strong>{rideToCancel.destination}</strong> scheduled for <strong>{formatDeparture(rideToCancel.departureTime)}</strong>?
               </div>
             </div>
 
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            <div style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
               <strong>Cancellation Consequences:</strong>
               <ul style={{ margin: '6px 0 0', paddingLeft: '18px' }}>
-                <li>This ride will be removed from campus search corridors immediately.</li>
-                <li>Any pending passenger requests will be declined.</li>
-                <li>Confirmed riders will receive a cancellation notice.</li>
+                <li>This {rideToCancel.rideType === 'CAB_SHARE' ? 'shared cab' : 'ride'} will be removed from campus search corridors immediately.</li>
+                <li>Any pending passenger requests will be automatically declined.</li>
+                <li>Confirmed riders will receive an immediate cancellation notice.</li>
                 <li>This action is permanent and cannot be undone.</li>
               </ul>
-            </p>
+            </div>
 
             {cancelError && (
               <div
@@ -1266,6 +1390,117 @@ export const MyRidesPage: React.FC = () => {
               </Button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* =========================================================================
+          MODAL 3: UPDATE FINAL CAB FARE MODAL
+          ========================================================================= */}
+      {fareModalRide && (
+        <Modal
+          isOpen={Boolean(fareModalRide)}
+          onClose={() => setFareModalRide(null)}
+          title="Update Final Cab Fare"
+          maxWidth="480px"
+        >
+          <form onSubmit={handleUpdateCabFare} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ padding: '12px 14px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a', fontSize: '0.85rem', color: '#92400e' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                {fareModalRide.origin} &rarr; {fareModalRide.destination}
+              </div>
+              <div>
+                Current Total: <strong>₹{fareModalRide.cabShare?.finalTotalFare ?? fareModalRide.cabShare?.estimatedTotalFare}</strong> (Revision #{fareModalRide.cabShare?.fareRevision ?? 1})
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                Actual Final Cab Fare (₹) <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type="number"
+                min="50"
+                max="20000"
+                required
+                value={newFinalFare}
+                onChange={(e) => setNewFinalFare(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="e.g. 520"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.95rem',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                From driver meter or commercial app receipt (Uber, Ola, etc.)
+              </span>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                Reason for Revision <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <textarea
+                required
+                rows={2}
+                value={fareRevisionReason}
+                onChange={(e) => setFareRevisionReason(e.target.value)}
+                placeholder="e.g. Driver meter was ₹520 due to peak traffic / toll charges."
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.85rem',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+
+            {/* Live split calculation preview */}
+            {(() => {
+              const fareNum = Number(newFinalFare);
+              const confirmedRiders = (fareModalRide.confirmedBookingsCount || 0);
+              const totalParticipants = confirmedRiders + 1; // organiser + confirmed riders
+              const perPersonEst = fareNum > 0 ? Math.ceil(fareNum / totalParticipants) : 0;
+
+              return (
+                <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0', fontSize: '0.8rem', color: '#166534' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                    Fare Split Preview:
+                  </div>
+                  <div>
+                    {totalParticipants} participant{totalParticipants > 1 ? 's' : ''} (You + {confirmedRiders} confirmed passenger{confirmedRiders === 1 ? '' : 's'})
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, marginTop: '4px', color: '#15803d' }}>
+                    ~₹{perPersonEst} / person
+                  </div>
+                  <div style={{ fontSize: '0.725rem', color: '#166534', marginTop: '4px' }}>
+                    Confirmed passengers will receive an instant notification and must acknowledge this updated fare in their bookings.
+                  </div>
+                </div>
+              );
+            })()}
+
+            {fareModalError && (
+              <div style={{ padding: '8px 12px', backgroundColor: '#fee2e2', border: '1px solid #fecaca', borderRadius: '6px', color: '#991b1b', fontSize: '0.8rem' }}>
+                {fareModalError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+              <Button variant="outline" size="sm" type="button" onClick={() => setFareModalRide(null)} disabled={updatingFare}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" type="submit" disabled={updatingFare}>
+                {updatingFare ? 'Submitting...' : 'Confirm Fare Update'}
+              </Button>
+            </div>
+          </form>
         </Modal>
       )}
     </PageShell>

@@ -69,7 +69,7 @@ describe('Milestone 2.2: Identity, Auth & Verification Security Review (e2e)', (
         authUserId: '77777777-7777-4777-8777-777777777777',
         email: 'super.admin@vit.ac.in',
         fullName: 'Super Admin',
-        role: UserRole.ADMIN,
+        role: UserRole.SUPER_ADMIN,
         verificationStatus: VerificationStatus.VERIFIED,
         audience: Audience.FACULTY,
         verificationMethod: VerificationMethod.ADMIN_OVERRIDE,

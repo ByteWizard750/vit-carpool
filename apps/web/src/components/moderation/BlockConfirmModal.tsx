@@ -32,7 +32,7 @@ export const BlockConfirmModal: React.FC<BlockConfirmModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch(`/moderation/blocks/${targetUserId}`, {
+      const res = await fetch(`/api/moderation/blocks/${targetUserId}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

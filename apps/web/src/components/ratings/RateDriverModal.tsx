@@ -49,7 +49,7 @@ export const RateDriverModal: React.FC<RateDriverModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await fetch('/ratings', {
+      const res = await fetch('/api/ratings', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

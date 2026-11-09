@@ -90,22 +90,22 @@ export const DashboardPage: React.FC = () => {
     setLoading(true);
     try {
       const [bookingsRes, ridesRes, vehiclesRes, notifsRes, alertsRes, pendingRes] = await Promise.all([
-        fetch('/bookings/mine', {
+        fetch('/api/bookings/mine', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : [])),
-        fetch('/rides/mine', {
+        fetch('/api/rides/mine', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : [])),
-        fetch('/vehicles', {
+        fetch('/api/vehicles', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : [])),
-        fetch('/notifications/unread-count', {
+        fetch('/api/notifications/unread-count', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : { unreadCount: 0 })),
-        fetch('/ride-alerts', {
+        fetch('/api/ride-alerts', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : [])),
-        fetch('/bookings/driver?status=PENDING', {
+        fetch('/api/bookings/driver?status=PENDING', {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         }).then((r) => (r.ok ? r.json() : [])),
       ]);
@@ -173,7 +173,7 @@ export const DashboardPage: React.FC = () => {
     setActionLoadingId(bookingId);
     setActionFeedback(null);
     try {
-      const res = await fetch(`/bookings/${bookingId}/approve`, {
+      const res = await fetch(`/api/bookings/${bookingId}/approve`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
@@ -195,7 +195,7 @@ export const DashboardPage: React.FC = () => {
     setActionLoadingId(bookingId);
     setActionFeedback(null);
     try {
-      const res = await fetch(`/bookings/${bookingId}/reject`, {
+      const res = await fetch(`/api/bookings/${bookingId}/reject`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
