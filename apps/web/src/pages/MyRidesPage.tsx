@@ -1275,7 +1275,7 @@ export const MyRidesPage: React.FC = () => {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', marginTop: '4px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', marginTop: '4px' }}>
                               {!hasEnoughSeats && (
                                 <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, marginRight: 'auto' }}>
                                   ⚠️ Insufficient seats ({selectedRideForRequests.availableSeats} available)

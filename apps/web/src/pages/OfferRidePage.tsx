@@ -863,12 +863,8 @@ export const OfferRidePage: React.FC = () => {
       {rideCategory === 'CAB_SHARE' && !editRideId ? (
         <form
           onSubmit={handleCabSubmit}
+          className="form-card-responsive"
           style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            border: '1px solid var(--border-light, #e2e8f0)',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             display: 'flex',
             flexDirection: 'column',
             gap: '20px',
@@ -1577,12 +1573,8 @@ export const OfferRidePage: React.FC = () => {
               {selectedTemplate && (
                 <form
                   onSubmit={handleQuickSubmit}
+                  className="form-card-responsive"
                   style={{
-                    padding: '24px',
-                    backgroundColor: '#ffffff',
-                    borderRadius: '16px',
-                    border: '1px solid var(--border-light)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '20px',
@@ -1915,12 +1907,8 @@ export const OfferRidePage: React.FC = () => {
       {(mode === 'custom' || editRideId) && (
         <form
           onSubmit={handleCustomSubmit}
+          className="form-card-responsive"
           style={{
-            padding: '28px',
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            border: '1px solid var(--border-light)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
             display: 'flex',
             flexDirection: 'column',
             gap: '20px',

@@ -587,26 +587,10 @@ export const AdminDashboardPage: React.FC = () => {
   ]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        minHeight: 'calc(100vh - 64px)',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc',
-      }}
-    >
+    <div className="admin-layout-wrapper">
       {/* ── Sidebar Navigation ──────────────────────────────────────────────── */}
-      <aside
-        style={{
-          width: '260px',
-          backgroundColor: '#1e293b',
-          borderRight: '1px solid #334155',
-          display: 'flex',
-          flexDirection: 'column',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ padding: '20px 18px', borderBottom: '1px solid #334155' }}>
+      <aside className="admin-sidebar">
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid #334155' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
@@ -648,6 +632,7 @@ export const AdminDashboardPage: React.FC = () => {
 
         <nav style={{ padding: '12px 10px', flex: 1, overflowY: 'auto' }}>
           <div
+            className="admin-nav-category-header"
             style={{
               fontSize: '0.675rem',
               fontWeight: 700,
@@ -697,6 +682,7 @@ export const AdminDashboardPage: React.FC = () => {
           {isAdminOrSuper && (
             <>
               <div
+                className="admin-nav-category-header"
                 style={{
                   fontSize: '0.675rem',
                   fontWeight: 700,
@@ -744,6 +730,7 @@ export const AdminDashboardPage: React.FC = () => {
           {isSuperAdmin && (
             <>
               <div
+                className="admin-nav-category-header"
                 style={{
                   fontSize: '0.675rem',
                   fontWeight: 700,
@@ -851,16 +838,7 @@ export const AdminDashboardPage: React.FC = () => {
       </aside>
 
       {/* ── Main Dashboard Workspace ────────────────────────────────────────── */}
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          overflowY: 'auto',
-          padding: '28px 32px',
-        }}
-      >
+      <main className="admin-workspace">
         {/* Action feedback alert banner */}
         {actionFeedback && (
           <div
@@ -1216,15 +1194,8 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             {/* Users Table */}
-            <div
-              style={{
-                backgroundColor: '#1e293b',
-                borderRadius: '12px',
-                border: '1px solid #334155',
-                overflow: 'hidden',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="admin-table-container">
+              <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>USER</th>
@@ -1425,15 +1396,8 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             {/* Rides Table */}
-            <div
-              style={{
-                backgroundColor: '#1e293b',
-                borderRadius: '12px',
-                border: '1px solid #334155',
-                overflow: 'hidden',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="admin-table-container">
+              <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>ROUTE</th>
@@ -1613,15 +1577,8 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             {/* Bookings Table */}
-            <div
-              style={{
-                backgroundColor: '#1e293b',
-                borderRadius: '12px',
-                border: '1px solid #334155',
-                overflow: 'hidden',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="admin-table-container">
+              <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>PASSENGER</th>
@@ -1974,15 +1931,8 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div
-              style={{
-                backgroundColor: '#1e293b',
-                borderRadius: '12px',
-                border: '1px solid #334155',
-                overflow: 'hidden',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="admin-table-container">
+              <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>TIMESTAMP</th>
@@ -2303,16 +2253,8 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             {/* Administrators Table */}
-            <div
-              style={{
-                backgroundColor: '#1e293b',
-                borderRadius: '12px',
-                border: '1px solid #334155',
-                overflow: 'hidden',
-                marginBottom: '28px',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="admin-table-container" style={{ marginBottom: '28px' }}>
+              <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>STAFF MEMBER</th>
@@ -2384,15 +2326,8 @@ export const AdminDashboardPage: React.FC = () => {
                 <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginBottom: '12px' }}>
                   Pending Single-Use Invitations ({pendingInvitations.length})
                 </h3>
-                <div
-                  style={{
-                    backgroundColor: '#1e293b',
-                    borderRadius: '12px',
-                    border: '1px solid #334155',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <div className="admin-table-container">
+                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#0f172a' }}>
                         <th style={{ padding: '10px 16px', fontSize: '0.75rem', color: '#94a3b8' }}>INVITED EMAIL</th>

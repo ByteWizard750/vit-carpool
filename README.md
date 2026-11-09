@@ -170,7 +170,9 @@ pnpm build
 - **Web Application**: [http://localhost:5173](http://localhost:5173)
 - **API Health Check**: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 - **Swagger / OpenAPI Documentation**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
-- **Manual QA Audit Reports**:
+- **Manual QA & Mobile Responsiveness Reports**:
+  - [Mobile Responsiveness Audit & UI/UX Remediation Report](docs/MOBILE_RESPONSIVENESS_AUDIT.md)
+  - [Mobile Responsiveness & Multi-Device Test Matrix](docs/MOBILE_RESPONSIVENESS_TEST_MATRIX.md)
   - [Cab Sharing & Corridor Discovery Manual QA Report](docs/MANUAL_QA_REPORT.md)
   - [Supplementary QA Verification Report](docs/MANUAL_QA_SUPPLEMENTARY_REPORT.md)
   - [Security Invariants Charter](docs/SECURITY-INVARIANTS.md)
