@@ -85,6 +85,10 @@ jobs:
       - name: Build database package (Prisma client & declarations)
         run: pnpm build:db
 
+      - name: Provision app_user role in test database
+        run: |
+          echo "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN CREATE ROLE app_user WITH LOGIN PASSWORD 'app_user_test_pw'; END IF; END \$\$;" | pnpm --filter @vit-carpool/db exec prisma db execute --stdin --url="$DATABASE_URL"
+
       - name: Apply Prisma migrations to isolated test database
         run: pnpm --filter @vit-carpool/db exec prisma migrate deploy
 
