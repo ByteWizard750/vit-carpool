@@ -26,6 +26,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../moderation/moderation.service';
 import { TrackingGateway } from '../tracking/tracking.gateway';
 import { BoardingOtpService } from './boarding-otp.service';
+import { EventsService } from '../events/events.service';
+import { APP_SOCKET_EVENTS } from '@vit-carpool/contracts';
 
 @Injectable()
 export class BookingsService {
@@ -38,6 +40,7 @@ export class BookingsService {
     private readonly moderationService: ModerationService,
     private readonly boardingOtpService: BoardingOtpService,
     @Optional() private readonly trackingGateway?: TrackingGateway,
+    @Optional() private readonly eventsService?: EventsService,
   ) {}
 
   /**
@@ -108,6 +111,7 @@ export class BookingsService {
         availableSeats: booking.ride.availableSeats,
         costPerSeat: booking.ride.costPerSeat,
         status: booking.ride.status,
+        driverId: booking.ride.driverId,
         driverName: booking.ride.driver?.fullName || 'Verified Driver',
         driverAvatarUrl: booking.ride.driver?.avatarUrl ?? null,
         // Privacy protection: Landmark notes and contact info disclosed ONLY if confirmed
@@ -354,6 +358,28 @@ export class BookingsService {
         });
       } catch (err) {
         this.logger.error(`[BookingsService] Failed to notify driver of booking request: ${err}`);
+      }
+
+      // Real-time broadcast: notify driver instantly and update seat availability across feeds
+      try {
+        this.eventsService?.emitToUser(ride!.driverId, APP_SOCKET_EVENTS.BOOKING_CREATED, {
+          bookingId: result.id,
+          rideId: ride!.id,
+          passengerId: user.id,
+          driverId: ride!.driverId,
+          seatsBooked: dto.requestedSeats,
+          status: result.status,
+        });
+        this.eventsService?.emitToRide(ride!.id, APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+          rideId: ride!.id,
+          availableSeats: ride!.availableSeats,
+        });
+        this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+          rideId: ride!.id,
+          availableSeats: ride!.availableSeats,
+        });
+      } catch (err) {
+        this.logger.warn(`[BookingsService] Real-time event emission warning: ${err}`);
       }
 
       return result;
@@ -613,6 +639,34 @@ export class BookingsService {
       this.logger.error(`[BookingsService] Failed to notify passenger of booking approval: ${err}`);
     }
 
+    // Real-time broadcast: notify passenger & driver immediately of confirmation
+    try {
+      this.eventsService?.emitToUser(result.passengerId, APP_SOCKET_EVENTS.BOOKING_UPDATED, {
+        bookingId: result.id,
+        rideId: result.rideId,
+        passengerId: result.passengerId,
+        driverId: user.id,
+        status: 'CONFIRMED',
+      });
+      this.eventsService?.emitToUser(user.id, APP_SOCKET_EVENTS.BOOKING_UPDATED, {
+        bookingId: result.id,
+        rideId: result.rideId,
+        passengerId: result.passengerId,
+        driverId: user.id,
+        status: 'CONFIRMED',
+      });
+      this.eventsService?.emitToRide(result.rideId, APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+        rideId: result.rideId,
+        availableSeats: result.ride?.availableSeats,
+      });
+      this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+        rideId: result.rideId,
+        availableSeats: result.ride?.availableSeats,
+      });
+    } catch (err) {
+      this.logger.warn(`[BookingsService] Real-time event emission warning: ${err}`);
+    }
+
     return result;
   }
 
@@ -704,6 +758,26 @@ export class BookingsService {
       await this.notificationsService.createNotification(notificationData);
     } catch (err) {
       this.logger.error(`[BookingsService] Failed to notify passenger of booking rejection: ${err}`);
+    }
+
+    // Real-time broadcast: notify passenger & driver immediately of rejection
+    try {
+      this.eventsService?.emitToUser(result.passengerId, APP_SOCKET_EVENTS.BOOKING_UPDATED, {
+        bookingId: result.id,
+        rideId: result.rideId,
+        passengerId: result.passengerId,
+        driverId: user.id,
+        status: 'REJECTED',
+      });
+      this.eventsService?.emitToUser(user.id, APP_SOCKET_EVENTS.BOOKING_UPDATED, {
+        bookingId: result.id,
+        rideId: result.rideId,
+        passengerId: result.passengerId,
+        driverId: user.id,
+        status: 'REJECTED',
+      });
+    } catch (err) {
+      this.logger.warn(`[BookingsService] Real-time event emission warning: ${err}`);
     }
 
     return result;
@@ -847,6 +921,35 @@ export class BookingsService {
       await this.trackingGateway?.revokePassengerAccess(result.rideId, user.id, 'BOOKING_CANCELLED');
     } catch (err) {
       this.logger.warn(`Failed to revoke tracking access for cancelled passenger: ${err}`);
+    }
+
+    // Real-time broadcast: notify passenger & driver immediately of cancellation
+    try {
+      this.eventsService?.emitToUser(user.id, APP_SOCKET_EVENTS.BOOKING_CANCELLED, {
+        bookingId: result.id,
+        rideId: result.rideId,
+        passengerId: user.id,
+        status: 'CANCELLED',
+      });
+      if (result.ride?.driverId) {
+        this.eventsService?.emitToUser(result.ride.driverId, APP_SOCKET_EVENTS.BOOKING_CANCELLED, {
+          bookingId: result.id,
+          rideId: result.rideId,
+          passengerId: user.id,
+          driverId: result.ride.driverId,
+          status: 'CANCELLED',
+        });
+      }
+      this.eventsService?.emitToRide(result.rideId, APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+        rideId: result.rideId,
+        availableSeats: result.ride?.availableSeats,
+      });
+      this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_SEATS_CHANGED, {
+        rideId: result.rideId,
+        availableSeats: result.ride?.availableSeats,
+      });
+    } catch (err) {
+      this.logger.warn(`[BookingsService] Real-time event emission warning: ${err}`);
     }
 
     return result;

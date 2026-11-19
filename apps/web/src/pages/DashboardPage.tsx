@@ -22,6 +22,7 @@ import {
 import { Button } from '../components/common/Button';
 import { RouteSpine } from '../components/common/RouteSpine';
 import { PageShell } from '../components/layout/PageShell';
+import { useDataSync } from '../hooks/useDataSync';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PassengerBookingResponseDto,
@@ -132,6 +133,11 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  // Real-time synchronization across browser tabs and devices
+  useDataSync(() => {
+    fetchDashboardData();
+  }, 7000);
 
   // Check Web Push subscription on mount
   useEffect(() => {
@@ -284,17 +290,48 @@ export const DashboardPage: React.FC = () => {
                   gap: '4px',
                   padding: '3px 10px',
                   borderRadius: '12px',
-                  backgroundColor: user?.audience === 'FACULTY' ? '#f3e8ff' : '#dcfce7',
-                  color: user?.audience === 'FACULTY' ? '#6b21a8' : '#15803d',
+                  backgroundColor:
+                    user?.role === 'SUPER_ADMIN'
+                      ? '#fef3c7'
+                      : user?.role === 'ADMIN'
+                      ? '#e0e7ff'
+                      : user?.audience === 'FACULTY'
+                      ? '#f3e8ff'
+                      : '#dcfce7',
+                  color:
+                    user?.role === 'SUPER_ADMIN'
+                      ? '#92400e'
+                      : user?.role === 'ADMIN'
+                      ? '#3730a3'
+                      : user?.audience === 'FACULTY'
+                      ? '#6b21a8'
+                      : '#15803d',
                   fontSize: '0.75rem',
                   fontWeight: 700,
+                  border:
+                    user?.role === 'SUPER_ADMIN'
+                      ? '1px solid #fde68a'
+                      : user?.role === 'ADMIN'
+                      ? '1px solid #c7d2fe'
+                      : 'none',
                 }}
+                id="badge-user-identity"
               >
                 <ShieldCheck size={13} />
-                {user?.audience === 'FACULTY' ? 'Faculty Verified' : 'Student Verified'}
+                {user?.role === 'SUPER_ADMIN'
+                  ? 'Global Admin'
+                  : user?.role === 'ADMIN'
+                  ? 'Operations Admin'
+                  : user?.audience === 'FACULTY'
+                  ? 'Faculty Verified'
+                  : 'Student Verified'}
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                VIT Chennai Campus &bull; {user?.audience === 'FACULTY' ? 'Faculty Circle' : 'Student Circle'}
+                {user?.role === 'SUPER_ADMIN'
+                  ? 'VIT Chennai Platform • Global Operations Authority'
+                  : user?.role === 'ADMIN'
+                  ? 'VIT Chennai Operations Team'
+                  : `VIT Chennai Campus • ${user?.audience === 'FACULTY' ? 'Faculty Circle' : 'Student Circle'}`}
               </span>
               {pushEnabled ? (
                 <span
@@ -348,6 +385,19 @@ export const DashboardPage: React.FC = () => {
 
           {/* Top Quick Actions */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {['SUPER_ADMIN', 'ADMIN', 'MODERATOR'].includes(user?.role || '') && (
+              <Link to="/admin" style={{ textDecoration: 'none' }}>
+                <Button
+                  variant="primary"
+                  size="md"
+                  leftIcon={<ShieldCheck size={16} />}
+                  style={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#38bdf8' }}
+                  id="btn-dashboard-admin-centre"
+                >
+                  Admin Control Centre
+                </Button>
+              </Link>
+            )}
             <Link to="/" style={{ textDecoration: 'none' }}>
               <Button variant="outline" size="md" leftIcon={<Home size={16} />}>
                 Home
@@ -468,7 +518,11 @@ export const DashboardPage: React.FC = () => {
           <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Campus Audience</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
-              {user?.audience || 'COMMUNITY'}
+              {user?.role === 'SUPER_ADMIN'
+                ? 'GLOBAL ADMIN'
+                : user?.role === 'ADMIN'
+                ? 'OPERATIONS ADMIN'
+                : user?.audience || 'COMMUNITY'}
             </div>
           </div>
         </div>
@@ -992,8 +1046,9 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             {loading ? (
-              <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading upcoming rides...
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
+                <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
               </div>
             ) : upcomingDrivingRides.length === 0 ? (
               <div
@@ -1099,8 +1154,9 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             {loading ? (
-              <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading bookings...
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
+                <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
               </div>
             ) : upcomingPassengerBookings.length === 0 ? (
               <div

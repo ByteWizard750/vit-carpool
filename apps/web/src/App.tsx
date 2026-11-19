@@ -20,6 +20,8 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { RideAlertsPage } from './pages/RideAlertsPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { SafetyPage } from './pages/SafetyPage';
+import { TermsPage } from './pages/TermsPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { RideTrackingPage } from './pages/RideTrackingPage';
@@ -37,6 +39,8 @@ export const App: React.FC = () => {
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/safety" element={<SafetyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/rides" element={<RidesPage />} />
 
           {/* Authenticated Routes */}

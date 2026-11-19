@@ -16,6 +16,7 @@ import {
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';
+import { searchFallbackLandmarks } from '../../components/common/chennai-landmarks.data';
 import { useAuth } from '../auth/AuthContext';
 import {
   DriverRideResponseDto,
@@ -229,17 +230,28 @@ export const OfferRideModal: React.FC<OfferRideModalProps> = ({
       const url = isEdit ? `/api/rides/${editingRideId}` : '/api/rides';
       const method = isEdit ? 'PATCH' : 'POST';
 
+      let effOriginLoc = originLocation;
+      if (!effOriginLoc && origin.trim()) {
+        const fallback = searchFallbackLandmarks(origin.trim(), 1);
+        if (fallback.length > 0) effOriginLoc = fallback[0];
+      }
+      let effDestLoc = destLocation;
+      if (!effDestLoc && destination.trim()) {
+        const fallback = searchFallbackLandmarks(destination.trim(), 1);
+        if (fallback.length > 0) effDestLoc = fallback[0];
+      }
+
       const payload: Record<string, any> = {
         origin: origin.trim(),
-        originAddress: originLocation?.address || null,
-        originLatitude: originLocation?.latitude ?? null,
-        originLongitude: originLocation?.longitude ?? null,
-        originPlaceId: originLocation?.id ?? null,
+        originAddress: effOriginLoc?.address || null,
+        originLatitude: effOriginLoc?.latitude ?? null,
+        originLongitude: effOriginLoc?.longitude ?? null,
+        originPlaceId: effOriginLoc?.id ?? null,
         destination: destination.trim(),
-        destinationAddress: destLocation?.address || null,
-        destinationLatitude: destLocation?.latitude ?? null,
-        destinationLongitude: destLocation?.longitude ?? null,
-        destinationPlaceId: destLocation?.id ?? null,
+        destinationAddress: effDestLoc?.address || null,
+        destinationLatitude: effDestLoc?.latitude ?? null,
+        destinationLongitude: effDestLoc?.longitude ?? null,
+        destinationPlaceId: effDestLoc?.id ?? null,
         pickupDescription: pickupDescription.trim() || null,
         dropoffDescription: dropoffDescription.trim() || null,
         departureTime: new Date(departureTime).toISOString(),

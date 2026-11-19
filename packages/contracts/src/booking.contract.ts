@@ -105,6 +105,7 @@ export const PassengerBookingResponseSchema = z.object({
     availableSeats: z.number().int(),
     costPerSeat: z.number().int().nullable(),
     status: RideStatusSchema,
+    driverId: z.string().uuid().optional(),
     driverName: z.string(),
     driverAvatarUrl: z.string().nullable().optional(),
     // Strictly confidential: Only exposed if status === 'CONFIRMED'

@@ -24,6 +24,8 @@ import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
+import { PublicProfileModal } from '../components/profile/PublicProfileModal';
+import { useDataSync, triggerAppSync } from '../hooks/useDataSync';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PassengerBookingResponseDto,
@@ -66,6 +68,9 @@ export const BookingsPage: React.FC = () => {
 
   // Cab fare revision acknowledgement state
   const [acknowledgingBookingId, setAcknowledgingBookingId] = useState<string | null>(null);
+
+  // View public profile state
+  const [viewProfileUserId, setViewProfileUserId] = useState<string | null>(null);
 
   // Fetch passenger bookings
   const fetchPassengerBookings = useCallback(async () => {
@@ -141,6 +146,14 @@ export const BookingsPage: React.FC = () => {
     }
   }, [token, fetchPassengerBookings, fetchDriverBookings]);
 
+  // Real-time synchronization: re-sync quietly on visibility change, focus, and every 6 seconds
+  useDataSync(() => {
+    if (token) {
+      fetchPassengerBookings();
+      fetchDriverBookings();
+    }
+  }, 6000);
+
   // Check rating status for completed confirmed passenger bookings
   useEffect(() => {
     if (!token || passengerBookings.length === 0) return;
@@ -197,6 +210,7 @@ export const BookingsPage: React.FC = () => {
       });
       setBookingToCancel(null);
       fetchPassengerBookings();
+      triggerAppSync();
     } catch (err: any) {
       setActionMessage({
         type: 'error',
@@ -257,6 +271,12 @@ export const BookingsPage: React.FC = () => {
     setActionLoadingId(bookingId);
     setActionMessage(null);
 
+    // Optimistic UI update: instantly update request status in local view
+    const previousBookings = [...driverBookings];
+    setDriverBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status } : b)),
+    );
+
     try {
       const endpoint = status === 'CONFIRMED' ? `/api/bookings/${bookingId}/approve` : `/api/bookings/${bookingId}/reject`;
       const res = await fetch(endpoint, {
@@ -271,6 +291,8 @@ export const BookingsPage: React.FC = () => {
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // Rollback optimistic update on server error
+        setDriverBookings(previousBookings);
         throw new Error(body.message || `Action failed with status ${res.status}`);
       }
 
@@ -279,6 +301,7 @@ export const BookingsPage: React.FC = () => {
         text: status === 'CONFIRMED' ? 'Passenger request approved! Seat reserved.' : 'Passenger request declined.',
       });
       fetchDriverBookings();
+      triggerAppSync();
     } catch (err: any) {
       setActionMessage({
         type: 'error',
@@ -416,9 +439,32 @@ export const BookingsPage: React.FC = () => {
           )}
 
           {loadingPassenger ? (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px' }} />
-              <div>Loading your carpool bookings...</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {[1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '24px',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '16px',
+                    border: '1px solid var(--border-light, #e2e8f0)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="skeleton" style={{ width: '120px', height: '24px', borderRadius: '12px' }} />
+                    <div className="skeleton" style={{ width: '80px', height: '20px', borderRadius: '6px' }} />
+                  </div>
+                  <div className="skeleton" style={{ width: '70%', height: '20px', borderRadius: '4px' }} />
+                  <div className="skeleton" style={{ width: '45%', height: '16px', borderRadius: '4px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                    <div className="skeleton" style={{ width: '110px', height: '36px', borderRadius: '8px' }} />
+                    <div className="skeleton" style={{ width: '90px', height: '36px', borderRadius: '8px' }} />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : passengerBookings.length === 0 ? (
             <div
@@ -561,7 +607,19 @@ export const BookingsPage: React.FC = () => {
                           gap: '6px',
                         }}
                       >
-                        <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => {
+                            if (b.ride.driverId) setViewProfileUserId(b.ride.driverId);
+                          }}
+                          title="View Verified Profile"
+                        >
                           {b.ride.driverAvatarUrl ? (
                             <img
                               src={b.ride.driverAvatarUrl}
@@ -571,7 +629,9 @@ export const BookingsPage: React.FC = () => {
                           ) : (
                             <CheckCircle2 size={15} style={{ color: isCab ? '#d97706' : '#16a34a' }} />
                           )}
-                          <span>{isCab ? 'Confirmed Journey Organiser:' : 'Confirmed Driver Contact:'} {b.ride.driverName}</span>
+                          <span style={{ textDecoration: 'underline', textDecorationColor: '#cbd5e1' }}>
+                            {isCab ? 'Confirmed Journey Organiser:' : 'Confirmed Driver Contact:'} {b.ride.driverName}
+                          </span>
                         </div>
                         {b.ride.pickupDescription && (
                           <div>
@@ -816,9 +876,28 @@ export const BookingsPage: React.FC = () => {
           )}
 
           {loadingDriver ? (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px' }} />
-              <div>Loading passenger seat requests...</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {[1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '24px',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '16px',
+                    border: '1px solid var(--border-light, #e2e8f0)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="skeleton" style={{ width: '120px', height: '24px', borderRadius: '12px' }} />
+                    <div className="skeleton" style={{ width: '80px', height: '20px', borderRadius: '6px' }} />
+                  </div>
+                  <div className="skeleton" style={{ width: '70%', height: '20px', borderRadius: '4px' }} />
+                  <div className="skeleton" style={{ width: '45%', height: '16px', borderRadius: '4px' }} />
+                </div>
+              ))}
             </div>
           ) : filteredDriverBookings.length === 0 ? (
             <div
@@ -863,7 +942,11 @@ export const BookingsPage: React.FC = () => {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', cursor: 'pointer' }}
+                          onClick={() => setViewProfileUserId(req.passengerId)}
+                          title="View Passenger Profile"
+                        >
                           {req.passengerAvatarUrl ? (
                             <img
                               src={req.passengerAvatarUrl}
@@ -889,7 +972,7 @@ export const BookingsPage: React.FC = () => {
                               {req.passengerName.charAt(0)}
                             </div>
                           )}
-                          <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', textDecoration: 'underline', textDecorationColor: '#cbd5e1' }}>
                             {req.passengerName}
                           </span>
                           <span
@@ -1040,6 +1123,13 @@ export const BookingsPage: React.FC = () => {
           }}
         />
       )}
+      {/* Public Profile View Modal */}
+      <PublicProfileModal
+        userId={viewProfileUserId}
+        isOpen={Boolean(viewProfileUserId)}
+        onClose={() => setViewProfileUserId(null)}
+        token={token}
+      />
     </PageShell>
   );
 };

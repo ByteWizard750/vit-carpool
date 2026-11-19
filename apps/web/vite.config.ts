@@ -13,6 +13,7 @@ const apiProxy: ProxyOptions = {
 };
 
 export default defineConfig({
+  envDir: path.resolve(__dirname, '../../'),
   plugins: [react()],
   resolve: {
     alias: {
@@ -45,6 +46,10 @@ export default defineConfig({
         ws: true,
       },
       '/tracking': {
+        target: 'http://localhost:3000',
+        ws: true,
+      },
+      '/events': {
         target: 'http://localhost:3000',
         ws: true,
       },

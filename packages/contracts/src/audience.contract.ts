@@ -100,3 +100,21 @@ export const UpdateUserProfileSchema = z
   })
   .strict();
 export type UpdateUserProfileDto = z.infer<typeof UpdateUserProfileSchema>;
+
+export const PublicUserProfileSchema = z.object({
+  id: z.string(),
+  fullName: z.string(),
+  avatarUrl: z.string().nullable().optional(),
+  audience: AudienceTypeSchema.nullable(),
+  verificationStatus: VerificationStatusSchema,
+  memberSince: z.string(),
+  driverRating: z.object({
+    averageRating: z.number().nullable(),
+    totalReviews: z.number(),
+  }),
+  stats: z.object({
+    ridesOffered: z.number(),
+    ridesCompleted: z.number(),
+  }),
+});
+export type PublicUserProfileDto = z.infer<typeof PublicUserProfileSchema>;

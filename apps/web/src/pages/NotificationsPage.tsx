@@ -111,24 +111,25 @@ export const NotificationsPage: React.FC = () => {
     fetchChatUnread();
   }, [fetchNotifications, fetchChatUnread]);
 
-  // Periodic polling every 15s and on window focus
+  // Real-time event listener + periodic fallback
   useEffect(() => {
     if (!token) return;
 
-    const interval = setInterval(() => {
-      fetchNotifications(true);
-      fetchChatUnread();
-    }, 15000);
-
-    const handleFocus = () => {
+    const handleSync = () => {
       fetchNotifications(true);
       fetchChatUnread();
     };
 
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener('app:notification_new', handleSync);
+    window.addEventListener('app:sync_data', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    const interval = setInterval(handleSync, 30000);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('app:notification_new', handleSync);
+      window.removeEventListener('app:sync_data', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
   }, [token, fetchNotifications, fetchChatUnread]);
 

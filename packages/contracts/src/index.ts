@@ -28,6 +28,8 @@ export {
   type UserProfileResponseDto,
   UpdateUserProfileSchema,
   type UpdateUserProfileDto,
+  PublicUserProfileSchema,
+  type PublicUserProfileDto,
 } from './audience.contract';
 
 export {
@@ -128,6 +130,9 @@ export {
 } from './location.contract';
 
 export {
+  CURRENT_TERMS_VERSION,
+  CURRENT_PRIVACY_VERSION,
+  GLOBAL_ADMIN_RESERVED_EMAIL,
   AuthIntentSchema,
   type AuthIntent,
   RequestOtpSchema,
@@ -136,6 +141,10 @@ export {
   type VerifyOtpDto,
   ResendOtpSchema,
   type ResendOtpDto,
+  AcceptTermsSchema,
+  type AcceptTermsDto,
+  ConsentStatusResponseSchema,
+  type ConsentStatusResponseDto,
   AuthResponseSchema,
   type AuthResponseDto,
 } from './auth.contract';
@@ -253,5 +262,6 @@ export {
 } from './tracking.contract';
 
 export * from './admin.contract';
+export * from './events.contract';
 
 

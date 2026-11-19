@@ -33,8 +33,19 @@ export const BottomNav: React.FC = () => {
     };
 
     fetchCounts();
-    const interval = setInterval(fetchCounts, 10000);
-    return () => clearInterval(interval);
+
+    const handleSync = () => fetchCounts();
+    window.addEventListener('app:notification_new', handleSync);
+    window.addEventListener('app:chat_unread', handleSync);
+    window.addEventListener('app:sync_data', handleSync);
+
+    const interval = setInterval(fetchCounts, 30000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('app:notification_new', handleSync);
+      window.removeEventListener('app:chat_unread', handleSync);
+      window.removeEventListener('app:sync_data', handleSync);
+    };
   }, [user, token]);
 
   const isHomeActive = user

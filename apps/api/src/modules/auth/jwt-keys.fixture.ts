@@ -58,6 +58,7 @@ export function signTestJwt(payload: {
   sub: string;
   email: string;
   role?: string;
+  tokenVersion?: number | null;
   aud?: string;
   iss?: string;
   exp?: string | number;
@@ -81,11 +82,17 @@ export function signTestJwt(payload: {
     options.keyid = payload.kid;
   }
 
+  const claims: Record<string, unknown> = {
+    email: payload.email,
+    role: payload.role ?? 'authenticated',
+  };
+
+  if (payload.tokenVersion !== null) {
+    claims.tokenVersion = typeof payload.tokenVersion === 'number' ? payload.tokenVersion : 1;
+  }
+
   return jwt.sign(
-    {
-      email: payload.email,
-      role: payload.role ?? 'authenticated',
-    },
+    claims,
     privateKey,
     options,
   );

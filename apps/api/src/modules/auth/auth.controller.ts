@@ -4,6 +4,7 @@ import {
   Get,
   Req,
   Body,
+  Param,
   Headers,
   UnauthorizedException,
   Logger,
@@ -12,14 +13,16 @@ import {
   ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { Public } from './decorators/public.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { VerificationService } from '../verification/verification.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Audience, VerificationStatus, VerificationMethod, UserRole } from '@vit-carpool/db';
+import { Audience, VerificationStatus, VerificationMethod, UserRole, User } from '@vit-carpool/db';
+import { CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '@vit-carpool/contracts';
 import { signTestJwt } from './jwt-keys.fixture';
 import { AuthRateLimiterGuard } from './guards/auth-rate-limiter.guard';
 import { JwksService } from './jwks.service';
@@ -29,6 +32,8 @@ import {
   RequestOtpSchema,
   VerifyOtpSchema,
   ResendOtpSchema,
+  AcceptTermsSchema,
+  ConsentStatusResponseDto,
   AuthResponseDto,
 } from '@vit-carpool/contracts';
 
@@ -62,13 +67,47 @@ export class AuthController {
   @UseGuards(AuthRateLimiterGuard)
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify email OTP and return authenticated session' })
-  async verifyOtp(@Body() body: unknown): Promise<AuthResponseDto> {
+  async verifyOtp(@Req() req: Request, @Body() body: unknown): Promise<AuthResponseDto> {
     const parseResult = VerifyOtpSchema.safeParse(body);
     if (!parseResult.success) {
       const errorMsg = parseResult.error.issues.map((i) => i.message).join(', ');
       throw new BadRequestException(errorMsg || 'Invalid verification payload');
     }
-    return this.authService.verifyOtp(parseResult.data);
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || undefined;
+    const userAgent = (req.headers['user-agent'] as string) || undefined;
+    return this.authService.verifyOtp(parseResult.data, clientIp, userAgent);
+  }
+
+  @Get('consent-status')
+  @ApiOperation({ summary: 'Check if user has accepted the latest Terms & Conditions' })
+  async getConsentStatus(@CurrentUser() user: User): Promise<ConsentStatusResponseDto> {
+    return this.authService.getConsentStatus(user);
+  }
+
+  @Post('accept-terms')
+  @ApiOperation({ summary: 'Explicitly accept updated Terms & Conditions' })
+  async acceptTerms(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    const parseResult = AcceptTermsSchema.safeParse(body);
+    if (!parseResult.success) {
+      const errorMsg = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new BadRequestException(errorMsg || 'Invalid consent payload');
+    }
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || undefined;
+    const userAgent = (req.headers['user-agent'] as string) || undefined;
+    return this.authService.acceptTerms(user, parseResult.data, clientIp, userAgent);
+  }
+
+  @Get('consents/:userId')
+  @ApiOperation({ summary: 'Audit user consent acceptance history (admin only)' })
+  async getUserConsents(
+    @CurrentUser() adminUser: User,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.authService.getUserConsentsForAdmin(adminUser, targetUserId);
   }
 
   @Public()
@@ -94,7 +133,8 @@ export class AuthController {
   @Public()
   @Post('logout')
   @ApiOperation({ summary: 'End authenticated session' })
-  async logout(): Promise<{ message: string }> {
+  async logout(@Req() req: Request): Promise<{ message: string }> {
+    await this.authService.logout(req.headers.authorization);
     return { message: 'Logged out successfully' };
   }
 
@@ -195,7 +235,27 @@ export class AuthController {
       });
     }
 
-    const token = signTestJwt({ sub: user.authUserId, email: user.email });
+    // Ensure dev-login test accounts have current consent recorded so automated test flows aren't blocked by terms modal
+    const existingConsent = await this.prisma.userConsent.findFirst({
+      where: { userId: user.id, termsVersion: CURRENT_TERMS_VERSION },
+    });
+    if (!existingConsent) {
+      await this.prisma.userConsent.create({
+        data: {
+          userId: user.id,
+          termsVersion: CURRENT_TERMS_VERSION,
+          privacyVersion: CURRENT_PRIVACY_VERSION,
+          userAgent: 'Dev Login Helper',
+        },
+      });
+    }
+
+    const token = this.authService.signSessionJwt({
+      sub: user.authUserId,
+      email: user.email,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+    });
     return {
       token,
       user: {

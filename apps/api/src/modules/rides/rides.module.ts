@@ -8,6 +8,7 @@ import { RatingsModule } from '../ratings/ratings.module';
 import { RideAlertsModule } from '../ride-alerts/ride-alerts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TrackingModule } from '../tracking/tracking.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { TrackingModule } from '../tracking/tracking.module';
     RatingsModule,
     RideAlertsModule,
     NotificationsModule,
+    EventsModule,
     forwardRef(() => TrackingModule),
   ],
   controllers: [RidesController],

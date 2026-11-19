@@ -5,6 +5,7 @@ import {
   Post,
   Delete,
   Body,
+  Param,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -17,6 +18,7 @@ import { User } from '@vit-carpool/db';
 import {
   UserProfileResponseDto,
   UpdateUserProfileSchema,
+  PublicUserProfileDto,
 } from '@vit-carpool/contracts';
 import { UsersService } from './users.service';
 
@@ -31,6 +33,15 @@ export class UsersController {
   @ApiOperation({ summary: 'Get current authenticated user profile and verification status' })
   getProfile(@CurrentUser() user: User): UserProfileResponseDto {
     return this.usersService.mapToUserProfileDto(user);
+  }
+
+  @Get('public/:id')
+  @ApiOperation({ summary: 'Get another user public profile (privacy-safe, no phone/email)' })
+  async getPublicProfile(
+    @CurrentUser() user: User,
+    @Param('id') targetUserId: string,
+  ): Promise<PublicUserProfileDto> {
+    return this.usersService.getPublicProfile(user, targetUserId);
   }
 
   @Patch('me')

@@ -517,6 +517,12 @@ export class AdminService {
       throw new NotFoundException(`User with ID ${targetUserId} not found.`);
     }
 
+    if (targetUser.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'CANNOT_SUSPEND_SUPER_ADMIN: Super Administrator accounts cannot be suspended.',
+      );
+    }
+
     if (targetUser.isSuspended) {
       throw new BadRequestException('This account is already suspended.');
     }

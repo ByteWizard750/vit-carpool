@@ -33,10 +33,14 @@ import { ModerationService } from '../moderation/moderation.service';
 import { TrackingGateway } from '../tracking/tracking.gateway';
 import { RouteService } from './route.service';
 import { CorridorMatcherService } from './corridor-matcher.service';
+import { EventsService } from '../events/events.service';
+import { MockLocationProvider } from '../locations/providers/mock-location.provider';
+import { APP_SOCKET_EVENTS } from '@vit-carpool/contracts';
 
 @Injectable()
 export class RidesService {
   private readonly logger = new Logger(RidesService.name);
+  private readonly transitCatalog = new MockLocationProvider();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -48,7 +52,89 @@ export class RidesService {
     private readonly routeService: RouteService,
     private readonly corridorMatcher: CorridorMatcherService,
     @Optional() private readonly trackingGateway?: TrackingGateway,
+    @Optional() private readonly eventsService?: EventsService,
   ) {}
+
+  /**
+   * Auto-resolves geographic coordinates from authoritative transit catalog if omitted.
+   */
+  private async resolveCoordinatesIfMissing(
+    locationName?: string | null,
+    lat?: number | null,
+    lon?: number | null,
+    address?: string | null,
+  ): Promise<{ latitude: number | null; longitude: number | null; address: string | null }> {
+    if (lat != null && lon != null) {
+      return { latitude: lat, longitude: lon, address: address ?? null };
+    }
+    if (!locationName || !locationName.trim()) {
+      return { latitude: null, longitude: null, address: address ?? null };
+    }
+    try {
+      const suggestions = await this.transitCatalog.search(locationName.trim(), 1);
+      if (suggestions && suggestions.length > 0) {
+        const top = suggestions[0];
+        return {
+          latitude: top.latitude,
+          longitude: top.longitude,
+          address: address || top.address || null,
+        };
+      }
+    } catch (err) {
+      this.logger.debug(`[RidesService] Could not auto-resolve coords for '${locationName}': ${err}`);
+    }
+    return { latitude: null, longitude: null, address: address ?? null };
+  }
+
+  /**
+   * Expands location query strings to include known transit aliases, phonetic variations,
+   * and corridor synonyms for robust text fallback matching.
+   */
+  private getSearchTextVariants(text?: string | null): string[] {
+    if (!text || !text.trim()) return [];
+    const raw = text.trim().toLowerCase();
+    const variants = new Set<string>([raw]);
+
+    // Handle common synonyms and spelling variations
+    if (/kandigai|kadigai|kandikai/.test(raw)) {
+      variants.add('kandigai');
+      variants.add('kadigai');
+      variants.add('kandikai');
+      variants.add('kandigai junction');
+      variants.add('kadigai junction');
+    }
+    if (/vit\b|vit chennai|vit campus|melakottaiyur/.test(raw)) {
+      variants.add('vit');
+      variants.add('vit chennai');
+      variants.add('vit campus');
+      variants.add('vit chennai campus');
+      variants.add('melakottaiyur');
+    }
+    if (/tambaram/.test(raw)) {
+      variants.add('tambaram');
+      variants.add('tambaram west');
+      variants.add('tambaram east');
+      variants.add('tambaram station');
+    }
+    if (/kelambakkam/.test(raw)) {
+      variants.add('kelambakkam');
+      variants.add('kelambakkam junction');
+    }
+    if (/vandalur/.test(raw)) {
+      variants.add('vandalur');
+      variants.add('vandalur station');
+      variants.add('vandalur zoo');
+    }
+    if (/rathinamangalam/.test(raw)) {
+      variants.add('rathinamangalam');
+    }
+    if (/mambakkam/.test(raw)) {
+      variants.add('mambakkam');
+      variants.add('mambakkam junction');
+    }
+
+    return Array.from(variants);
+  }
 
   /**
    * Helper to format internal Ride entity with Vehicle to DriverRideResponseDto
@@ -339,20 +425,34 @@ export class RidesService {
           }
         }
 
+        const originCoords = await this.resolveCoordinatesIfMissing(
+          dto.origin,
+          dto.originLatitude,
+          dto.originLongitude,
+          dto.originAddress,
+        );
+        const destCoords = await this.resolveCoordinatesIfMissing(
+          dto.destination,
+          dto.destinationLatitude,
+          dto.destinationLongitude,
+          dto.destinationAddress,
+        );
+        const hasCoords = originCoords.latitude != null && destCoords.latitude != null;
+
         const ride = await tx.ride.create({
           data: {
             driverId: user.id,
             vehicleId: vehicle.id,
             audience: user.audience!,
             origin: dto.origin.trim(),
-            originAddress: dto.originAddress?.trim() || null,
-            originLatitude: dto.originLatitude ?? null,
-            originLongitude: dto.originLongitude ?? null,
+            originAddress: originCoords.address,
+            originLatitude: originCoords.latitude,
+            originLongitude: originCoords.longitude,
             originPlaceId: dto.originPlaceId?.trim() || null,
             destination: dto.destination.trim(),
-            destinationAddress: dto.destinationAddress?.trim() || null,
-            destinationLatitude: dto.destinationLatitude ?? null,
-            destinationLongitude: dto.destinationLongitude ?? null,
+            destinationAddress: destCoords.address,
+            destinationLatitude: destCoords.latitude,
+            destinationLongitude: destCoords.longitude,
             destinationPlaceId: dto.destinationPlaceId?.trim() || null,
             pickupDescription: dto.pickupDescription?.trim() || null,
             dropoffDescription: dto.dropoffDescription?.trim() || null,
@@ -362,9 +462,7 @@ export class RidesService {
             costPerSeat: dto.costPerSeat ?? null,
             status: RideStatus.SCHEDULED,
             maxDetourMinutes: dto.maxDetourMinutes ?? null,
-            routeStatus: (dto.originLatitude != null && dto.destinationLatitude != null)
-              ? RouteStatus.PENDING
-              : RouteStatus.NONE,
+            routeStatus: hasCoords ? RouteStatus.PENDING : RouteStatus.NONE,
           },
           include: {
             vehicle: true,
@@ -427,6 +525,19 @@ export class RidesService {
             this.logger.error(`[RidesService] Background route generation failed for ${publishedRide.id}: ${err.message}`);
           });
         }
+      }
+
+      // Real-time broadcast: notify rides feed of newly published ride
+      try {
+        this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_CREATED, {
+          rideId: result.id,
+          origin: result.origin,
+          destination: result.destination,
+          departureTime: result.departureTime,
+          availableSeats: result.availableSeats,
+        });
+      } catch (err) {
+        this.logger.warn(`[RidesService] Real-time ride created emission warning: ${err}`);
       }
 
       return result;
@@ -493,7 +604,19 @@ export class RidesService {
 
     const availableSeats = dto.totalCapacity - 1;
     const initialCostPerSeat = Math.ceil(dto.estimatedTotalFare / dto.totalCapacity);
-    const hasCoordinates = dto.originLatitude != null && dto.destinationLatitude != null;
+    const originCoords = await this.resolveCoordinatesIfMissing(
+      dto.origin,
+      dto.originLatitude,
+      dto.originLongitude,
+      dto.originAddress,
+    );
+    const destCoords = await this.resolveCoordinatesIfMissing(
+      dto.destination,
+      dto.destinationLatitude,
+      dto.destinationLongitude,
+      dto.destinationAddress,
+    );
+    const hasCoordinates = originCoords.latitude != null && destCoords.latitude != null;
 
     let newlyCreatedRide: any = null;
 
@@ -505,14 +628,14 @@ export class RidesService {
           rideType: RideType.CAB_SHARE,
           audience: user.audience!,
           origin: dto.origin.trim(),
-          originAddress: dto.originAddress?.trim() || null,
-          originLatitude: dto.originLatitude ?? null,
-          originLongitude: dto.originLongitude ?? null,
+          originAddress: originCoords.address,
+          originLatitude: originCoords.latitude,
+          originLongitude: originCoords.longitude,
           originPlaceId: dto.originPlaceId?.trim() || null,
           destination: dto.destination.trim(),
-          destinationAddress: dto.destinationAddress?.trim() || null,
-          destinationLatitude: dto.destinationLatitude ?? null,
-          destinationLongitude: dto.destinationLongitude ?? null,
+          destinationAddress: destCoords.address,
+          destinationLatitude: destCoords.latitude,
+          destinationLongitude: destCoords.longitude,
           destinationPlaceId: dto.destinationPlaceId?.trim() || null,
           pickupDescription: dto.pickupDescription?.trim() || null,
           dropoffDescription: dto.dropoffDescription?.trim() || null,
@@ -574,6 +697,19 @@ export class RidesService {
           this.logger.error(`[RidesService] Background route generation failed for cab share ${newlyCreatedRide.id}: ${err.message}`);
         });
       }
+    }
+
+    // Real-time broadcast: notify rides feed of newly published cab share
+    try {
+      this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_CREATED, {
+        rideId: result.id,
+        origin: result.origin,
+        destination: result.destination,
+        departureTime: result.departureTime,
+        availableSeats: result.availableSeats,
+      });
+    } catch (err) {
+      this.logger.warn(`[RidesService] Real-time cab share created emission warning: ${err}`);
     }
 
     return result;
@@ -770,8 +906,27 @@ export class RidesService {
       }
     }
 
+    // 0. Auto-resolve missing coordinates for search origin & destination from transit catalog
+    if ((dto.originLat === undefined || dto.originLon === undefined) && dto.origin?.trim()) {
+      const resolved = await this.resolveCoordinatesIfMissing(dto.origin);
+      if (resolved.latitude != null && resolved.longitude != null) {
+        dto.originLat = resolved.latitude;
+        dto.originLon = resolved.longitude;
+      }
+    }
+    if ((dto.destLat === undefined || dto.destLon === undefined) && dto.destination?.trim()) {
+      const resolved = await this.resolveCoordinatesIfMissing(dto.destination);
+      if (resolved.latitude != null && resolved.longitude != null) {
+        dto.destLat = resolved.latitude;
+        dto.destLon = resolved.longitude;
+      }
+    }
+
     const originRadiusKm = dto.originRadiusKm ?? dto.radiusKm ?? 3.0;
     const destRadiusKm = dto.destRadiusKm ?? dto.radiusKm ?? 3.0;
+
+    const originVariants = this.getSearchTextVariants(dto.origin);
+    const destVariants = this.getSearchTextVariants(dto.destination);
 
     const spatialConditions: Prisma.Sql[] = [];
     if (dto.originLat !== undefined && dto.originLon !== undefined) {
@@ -785,7 +940,17 @@ export class RidesService {
             ${radiusMeters}
           ))
           ${
-            originPattern
+            originVariants.length > 0
+              ? Prisma.sql`OR (
+                  r.origin_geom IS NULL AND (
+                    EXISTS (
+                      SELECT 1 FROM unnest(${originVariants}::text[]) v
+                      WHERE r.origin ILIKE ('%' || v || '%')
+                         OR (r.origin_address IS NOT NULL AND r.origin_address ILIKE ('%' || v || '%'))
+                    )
+                  )
+                )`
+              : originPattern
               ? Prisma.sql`OR (
                   r.origin_geom IS NULL AND (
                     r.origin ILIKE ${originPattern}
@@ -809,7 +974,17 @@ export class RidesService {
             ${radiusMeters}
           ))
           ${
-            destPattern
+            destVariants.length > 0
+              ? Prisma.sql`OR (
+                  r.destination_geom IS NULL AND (
+                    EXISTS (
+                      SELECT 1 FROM unnest(${destVariants}::text[]) v
+                      WHERE r.destination ILIKE ('%' || v || '%')
+                         OR (r.destination_address IS NOT NULL AND r.destination_address ILIKE ('%' || v || '%'))
+                    )
+                  )
+                )`
+              : destPattern
               ? Prisma.sql`OR (
                   r.destination_geom IS NULL AND (
                     r.destination ILIKE ${destPattern}
@@ -1011,28 +1186,35 @@ export class RidesService {
       };
     }
 
-    // If spatial search was NOT applied for origin, fallback to case-insensitive text search
+    // If spatial search was NOT applied for origin, fallback to case-insensitive text search with alias expansion
     if (
       (dto.originLat === undefined || dto.originLon === undefined) &&
       dto.origin &&
       dto.origin.trim().length > 0
     ) {
-      where.origin = {
-        contains: dto.origin.trim(),
-        mode: 'insensitive',
-      };
+      const originVars = this.getSearchTextVariants(dto.origin);
+      where.OR = originVars.flatMap((v) => [
+        { origin: { contains: v, mode: 'insensitive' as const } },
+        { originAddress: { contains: v, mode: 'insensitive' as const } },
+      ]);
     }
 
-    // If spatial search was NOT applied for destination, fallback to case-insensitive text search
+    // If spatial search was NOT applied for destination, fallback to case-insensitive text search with alias expansion
     if (
       (dto.destLat === undefined || dto.destLon === undefined) &&
       dto.destination &&
       dto.destination.trim().length > 0
     ) {
-      where.destination = {
-        contains: dto.destination.trim(),
-        mode: 'insensitive',
-      };
+      const destVars = this.getSearchTextVariants(dto.destination);
+      where.AND = [
+        ...((where.AND as any[]) || []),
+        {
+          OR: destVars.flatMap((v) => [
+            { destination: { contains: v, mode: 'insensitive' as const } },
+            { destinationAddress: { contains: v, mode: 'insensitive' as const } },
+          ]),
+        },
+      ];
     }
 
     let orderBy: Prisma.RideOrderByWithRelationInput[];
@@ -1660,6 +1842,14 @@ export class RidesService {
       await this.trackingGateway?.revokeRideAccess(rideId, 'RIDE_CANCELLED');
     } catch (err) {
       this.logger.warn(`Failed to revoke tracking room access on ride cancellation: ${err}`);
+    }
+
+    // Real-time broadcast: notify ride room and rides feed of cancellation
+    try {
+      this.eventsService?.emitToRide(rideId, APP_SOCKET_EVENTS.RIDE_CANCELLED, { rideId });
+      this.eventsService?.emitToFeed(APP_SOCKET_EVENTS.RIDE_CANCELLED, { rideId });
+    } catch (err) {
+      this.logger.warn(`[RidesService] Real-time ride cancellation emission warning: ${err}`);
     }
 
     return result;

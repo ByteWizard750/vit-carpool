@@ -20,6 +20,7 @@ import { RideAlertsModule } from './modules/ride-alerts/ride-alerts.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { EventsModule } from './modules/events/events.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     NotificationsModule,
     RideAlertsModule,
     TrackingModule,
+    EventsModule,
     HealthModule,
   ],
 })

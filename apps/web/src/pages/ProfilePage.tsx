@@ -20,6 +20,7 @@ import { Button } from '../components/common/Button';
 import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
 import { VerificationRequestModal } from '../features/modals/VerificationRequestModal';
+import { AvatarPickerModal } from '../components/profile/AvatarPickerModal';
 import { useAuth } from '../features/auth/AuthContext';
 import { DriverRatingSummaryDto, BlockResponseDto } from '@vit-carpool/contracts';
 
@@ -34,6 +35,7 @@ export const ProfilePage: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
 
@@ -243,8 +245,8 @@ export const ProfilePage: React.FC = () => {
               <button
                 type="button"
                 id="btn-upload-avatar-badge"
-                title="Upload Profile Picture"
-                onClick={() => fileInputRef.current?.click()}
+                title="Change Profile Picture"
+                onClick={() => setAvatarPickerOpen(true)}
                 disabled={avatarUploading}
                 style={{
                   position: 'absolute',
@@ -608,6 +610,99 @@ export const ProfilePage: React.FC = () => {
         </p>
       </div>
 
+      {/* About, Safety & Campus Legal Guidelines */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid var(--border-light)',
+          padding: '24px 28px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        }}
+      >
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 12px', color: 'var(--text-primary)' }}>
+          Platform & Safety Guidelines
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+          <Link
+            to="/safety"
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid var(--border-light)',
+              textDecoration: 'none',
+              color: '#1e293b',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            🛡️ Safety &amp; Trust
+          </Link>
+          <Link
+            to="/how-it-works"
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid var(--border-light)',
+              textDecoration: 'none',
+              color: '#1e293b',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            📖 How It Works
+          </Link>
+          <Link
+            to="/safety#terms"
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid var(--border-light)',
+              textDecoration: 'none',
+              color: '#1e293b',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            ⚖️ Terms of Use
+          </Link>
+          <a
+            href="mailto:support@vitcarpool.app"
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid var(--border-light)',
+              textDecoration: 'none',
+              color: '#1e293b',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            💬 Contact Support
+          </a>
+        </div>
+        <div style={{ marginTop: '14px', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+          VIT Chennai Carpool • Independent Student Initiative • Strictly Cars Only • Zero Platform Fees
+        </div>
+      </div>
+
       {/* Logout Action Card */}
       <div
         style={{
@@ -648,6 +743,19 @@ export const ProfilePage: React.FC = () => {
         onClose={() => {
           setVerificationModalOpen(false);
           refreshProfile();
+        }}
+      />
+
+      {/* Profile picture picker (Live Camera, Gallery, Remove) */}
+      <AvatarPickerModal
+        isOpen={avatarPickerOpen}
+        onClose={() => setAvatarPickerOpen(false)}
+        hasExistingAvatar={Boolean(user?.avatarUrl)}
+        token={token}
+        onUploadSuccess={async () => {
+          setAvatarSuccess('Profile photo updated successfully!');
+          await refreshProfile();
+          setTimeout(() => setAvatarSuccess(null), 3000);
         }}
       />
     </PageShell>

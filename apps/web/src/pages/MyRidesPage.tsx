@@ -30,6 +30,7 @@ import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { MyTripsTabs } from '../components/navigation/MyTripsTabs';
+import { useDataSync } from '../hooks/useDataSync';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   DriverRideResponseDto,
@@ -103,6 +104,11 @@ export const MyRidesPage: React.FC = () => {
   useEffect(() => {
     fetchMyRides();
   }, [fetchMyRides]);
+
+  // Real-time synchronization
+  useDataSync(() => {
+    fetchMyRides();
+  }, 7000);
 
   // Fetch booking requests for selected ride
   const fetchRideRequests = useCallback(async (rideId: string) => {
@@ -609,9 +615,32 @@ export const MyRidesPage: React.FC = () => {
 
       {/* Main Content Area */}
       {loading ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <Loader2 size={36} className="animate-spin" style={{ margin: '0 auto 12px', color: 'var(--color-brand-600)' }} />
-          <div style={{ fontSize: '0.95rem', fontWeight: 500 }}>Loading your driver rides...</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                padding: '24px',
+                backgroundColor: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid var(--border-light, #e2e8f0)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="skeleton" style={{ width: '130px', height: '24px', borderRadius: '12px' }} />
+                <div className="skeleton" style={{ width: '90px', height: '20px', borderRadius: '6px' }} />
+              </div>
+              <div className="skeleton" style={{ width: '75%', height: '20px', borderRadius: '4px' }} />
+              <div className="skeleton" style={{ width: '40%', height: '16px', borderRadius: '4px' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                <div className="skeleton" style={{ width: '120px', height: '36px', borderRadius: '8px' }} />
+                <div className="skeleton" style={{ width: '100px', height: '36px', borderRadius: '8px' }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : displayedRides.length === 0 ? (
         <div

@@ -40,11 +40,18 @@ export class AdminAuthService {
     private readonly config: ConfigService,
   ) {
     this.nodeEnv = this.config.get<string>('NODE_ENV') || 'development';
-    this.otpSecret =
-      this.config.get<string>('OTP_HMAC_SECRET') ||
-      (this.nodeEnv === 'test'
-        ? 'deterministic-test-hmac-secret-for-test-isolation-only'
-        : 'dev-secret-change-in-production-must-be-long-and-secure');
+    const configuredSecret = this.config.get<string>('OTP_HMAC_SECRET');
+    if (!configuredSecret || !configuredSecret.trim()) {
+      if (this.nodeEnv === 'test') {
+        this.otpSecret = 'deterministic-test-hmac-secret-for-test-isolation-only';
+      } else {
+        throw new Error(
+          '[SecurityError] OTP_HMAC_SECRET is required. Refusing to start with missing cryptographic secret.',
+        );
+      }
+    } else {
+      this.otpSecret = configuredSecret.trim();
+    }
   }
 
   private computeVerifier(email: string, code: string, salt: string): string {
@@ -62,7 +69,7 @@ export class AdminAuthService {
     email: string,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<{ message: string; requiresMfa: boolean }> {
+  ): Promise<{ message: string; requiresMfa: boolean; cooldownSeconds?: number; devOtp?: string }> {
     const normalizedEmail = email.trim().toLowerCase();
 
     const user = await this.prisma.user.findUnique({
@@ -100,18 +107,28 @@ export class AdminAuthService {
       });
     }
 
-    // Generate cryptographic 6-digit MFA challenge code
-    const otpCode =
-      this.nodeEnv === 'production'
-        ? crypto.randomInt(100000, 999999).toString()
-        : '123456';
+    // Rate-limiting / cooldown check
+    const existingOtp = await this.prisma.otpVerification.findUnique({
+      where: { email: normalizedEmail },
+    });
 
-    this.logger.log(`[Admin MFA Challenge] Code for ${normalizedEmail}: ${otpCode}`);
+    if (existingOtp && existingOtp.cooldownUntil && Date.now() < existingOtp.cooldownUntil.getTime()) {
+      const waitSeconds = Math.ceil((existingOtp.cooldownUntil.getTime() - Date.now()) / 1000);
+      throw new BadRequestException(
+        `Please wait ${waitSeconds} second(s) before requesting a new verification code.`,
+      );
+    }
+
+    // Generate cryptographic 6-digit MFA challenge code [100000, 999999]
+    // Strictly random in production and development; never a fixed demonstration code
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
+
+    this.logger.log(`[Admin MFA Challenge] Challenge dispatched for ${normalizedEmail}`);
 
     const salt = crypto.randomBytes(16).toString('hex');
     const verifierHash = this.computeVerifier(normalizedEmail, otpCode, salt);
     const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MS);
-    const cooldownUntil = new Date(Date.now() + 15 * 1000); // 15s cooldown
+    const cooldownUntil = new Date(Date.now() + 30 * 1000); // 30s cooldown
 
     await this.prisma.otpVerification.upsert({
       where: { email: normalizedEmail },
@@ -157,6 +174,8 @@ export class AdminAuthService {
     return {
       message: 'Administrative two-factor authentication challenge dispatched.',
       requiresMfa: true,
+      cooldownSeconds: 30,
+      devOtp: this.nodeEnv === 'development' ? otpCode : undefined,
     };
   }
 
@@ -262,6 +281,7 @@ export class AdminAuthService {
       sub: user.authUserId,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
 
     return {
@@ -367,6 +387,7 @@ export class AdminAuthService {
         sub: user.authUserId,
         email: user.email,
         role: user.role,
+        tokenVersion: user.tokenVersion,
       });
 
       return {

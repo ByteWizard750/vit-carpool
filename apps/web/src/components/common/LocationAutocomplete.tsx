@@ -252,18 +252,17 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
 
   const handleBlur = () => {
     // Graceful landmark auto-matching if user typed without clicking dropdown
-    if (!selectedLocation && inputValue.trim().length >= 3) {
+    if (!selectedLocation && inputValue.trim().length >= 2) {
       const trimmed = inputValue.trim().toLowerCase();
       const matched = searchFallbackLandmarks(trimmed, 1);
       if (matched.length > 0) {
         const top = matched[0];
-        if (
-          top.name.toLowerCase() === trimmed ||
-          top.name.toLowerCase().includes(trimmed) ||
-          trimmed.includes(top.name.toLowerCase())
-        ) {
-          onChange(inputValue, top);
-        }
+        onChange(inputValue, top);
+        return;
+      }
+      if (suggestions.length > 0) {
+        const top = suggestions[0];
+        onChange(inputValue, top);
       }
     }
   };
@@ -303,6 +302,9 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
         if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
           e.preventDefault();
           handleSelectSuggestion(suggestions[highlightedIndex]);
+        } else if (suggestions.length > 0) {
+          e.preventDefault();
+          handleSelectSuggestion(suggestions[0]);
         }
         break;
       case 'Escape':

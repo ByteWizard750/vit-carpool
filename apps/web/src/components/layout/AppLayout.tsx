@@ -7,16 +7,19 @@ import { Footer } from './Footer';
 import { BottomNav } from './BottomNav';
 import { DevDiagnosticsDrawer } from '../dev/DevDiagnosticsDrawer';
 import { VerificationRequestModal } from '../../features/modals/VerificationRequestModal';
+import { TermsUpdateModal } from '../auth/TermsUpdateModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ShieldAlert, AlertTriangle } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const isMessagesPage = location.pathname.startsWith('/messages');
-  const isAuthPage = location.pathname === '/auth';
   const [devDrawerOpen, setDevDrawerOpen] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+
+  // Footer is intentionally restored strictly on Home (/) and Dashboard (/dashboard)
+  // Internal mobile app screens retain their clean, native appearance.
+  const isHomeOrDashboard = location.pathname === '/' || location.pathname === '/dashboard';
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['system-health'],
@@ -33,8 +36,8 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="app-wrapper">
-      {/* Account Verification Status Alert Banner */}
-      {user && user.verificationStatus === 'PENDING' && (
+      {/* Account Verification Status Alert Banner (ordinary campus users only; admins are exempt) */}
+      {user && !['SUPER_ADMIN', 'ADMIN'].includes(user.role) && user.verificationStatus === 'PENDING' && (
         <div
           style={{
             backgroundColor: '#fef3c7',
@@ -102,7 +105,8 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {!isMessagesPage && !isAuthPage && <Footer onOpenDevStatus={() => setDevDrawerOpen(true)} />}
+      {/* Modern footer rendered on Home (/) and Dashboard (/dashboard) */}
+      {isHomeOrDashboard && <Footer onOpenDevStatus={() => setDevDrawerOpen(true)} />}
 
       <DevDiagnosticsDrawer
         isOpen={devDrawerOpen}
@@ -118,6 +122,8 @@ export const AppLayout: React.FC = () => {
         isOpen={verificationModalOpen}
         onClose={() => setVerificationModalOpen(false)}
       />
+
+      <TermsUpdateModal />
 
       <BottomNav />
     </div>

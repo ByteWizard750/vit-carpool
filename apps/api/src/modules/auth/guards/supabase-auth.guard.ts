@@ -17,6 +17,7 @@ import { JwksService } from '../jwks.service';
 interface DecodedTokenPayload extends jwt.JwtPayload {
   sub: string;
   email?: string;
+  tokenVersion?: number;
 }
 
 @Injectable()
@@ -152,6 +153,11 @@ export class SupabaseAuthGuard implements CanActivate {
       email,
       fullName: fullNameClaim,
     });
+
+    // Enforce server-side session invalidation via database-backed token versioning
+    if (typeof decoded.tokenVersion !== 'number' || decoded.tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedException('Session has expired due to logout. Please sign in again.');
+    }
 
     // Enforce immediate, server-side account suspension across all authenticated routes,
     // except those explicitly decorated with @AllowSuspended() (e.g. GET /users/me).

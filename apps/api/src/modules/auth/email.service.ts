@@ -29,6 +29,9 @@ export class EmailService {
           user,
           pass,
         },
+        connectionTimeout: 3500,
+        greetingTimeout: 3500,
+        socketTimeout: 4000,
       });
       this.logger.log(`[EmailService] SMTP transporter configured for ${user} via ${host}:${port}`);
     } else {

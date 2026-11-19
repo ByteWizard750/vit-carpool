@@ -16,7 +16,9 @@ import {
 import {
   NotificationResponseDto,
   NotificationsListResponseDto,
+  APP_SOCKET_EVENTS,
 } from '@vit-carpool/contracts';
+import { EventsService } from '../events/events.service';
 
 export interface CreateNotificationParams {
   recipientId: string;
@@ -38,6 +40,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly webPushService?: WebPushService,
+    @Optional() private readonly eventsService?: EventsService,
   ) {}
 
   /**
@@ -90,6 +93,13 @@ export class NotificationsService {
       });
 
       const dto = this.toDto(notification);
+
+      // Real-time WebSocket delivery
+      try {
+        this.eventsService?.emitToUser(params.recipientId, APP_SOCKET_EVENTS.NOTIFICATION_NEW, dto);
+      } catch (err) {
+        this.logger.debug(`[Notifications] WebSocket notification emission warning: ${err}`);
+      }
 
       // Decoupled Web Push delivery for real-time mobile/browser alerts
       if (this.webPushService) {

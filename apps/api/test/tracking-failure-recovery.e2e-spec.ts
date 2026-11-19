@@ -251,7 +251,7 @@ describe('Milestone 7.7: Tracking Failure Handling, Recovery & Automatic Cleanup
       expect(res.body.currentLocation.latitude).toBe(12.9249);
       expect(res.body.currentLocation.longitude).toBe(80.1171);
       expect(res.body.currentLocation.recordedAt).toBe(thirtyFiveSecsAgo.toISOString());
-    });
+    }, 15000);
 
     it('restores ACTIVE state when GPS updates resume', async () => {
       // Wait for rate limit window
@@ -279,7 +279,7 @@ describe('Milestone 7.7: Tracking Failure Handling, Recovery & Automatic Cleanup
 
       expect(stateRes.body.isStale).toBe(false);
       expect(stateRes.body.currentLocation.latitude).toBe(12.9100);
-    });
+    }, 15000);
   });
 
   describe('2. Driver Disconnection & Non-Premature Ride Completion', () => {

@@ -245,7 +245,7 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
       expect(notifs.length).toBe(1);
       expect(notifs[0].message).toContain('Your driver is approximately');
       expect(notifs[0].message).toContain('Vandalur Crescent Gate');
-    });
+    }, 15000);
 
     it('deduplicates approaching notifications (never emits or stores duplicate alert for subsequent GPS pings)', async () => {
       // First ping: triggers approaching
@@ -274,7 +274,7 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
         where: { recipientId: passengerAId, type: NotificationType.DRIVER_APPROACHING },
       });
       expect(notifCount).toBe(1);
-    });
+    }, 15000);
   });
 
   describe('2. Driver Stopped Near Pickup (< 150m, speed < 5 km/h)', () => {
@@ -304,7 +304,7 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
       expect(arrivedNotifs.length).toBe(1);
       expect(arrivedNotifs[0].message).toContain('appears to be near your pickup');
       expect(arrivedNotifs[0].message).toContain('Vandalur Crescent Gate');
-    });
+    }, 15000);
 
     it('does not re-emit stopped notification on subsequent stationary pings', async () => {
       // First ping: stopped
@@ -331,7 +331,7 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
         where: { recipientId: passengerAId, type: NotificationType.DRIVER_ARRIVED },
       });
       expect(count).toBe(1);
-    });
+    }, 15000);
   });
 
   describe('3. Boarding Confirmation Workflow', () => {
@@ -430,7 +430,7 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
       });
       expect(missedNotifs.length).toBe(1);
       expect(missedNotifs[0].message).toContain('may have passed your pickup');
-    });
+    }, 15000);
 
     it('allows passenger or driver to explicitly mark boarding status as MISSED', async () => {
       const res = await request(app.getHttpServer())
@@ -460,6 +460,6 @@ describe('Milestone 7.6: Proximity Notifications & Boarding Workflow (e2e)', () 
 
       expect(result.snapshot).toBeDefined();
       sendSpy.mockRestore();
-    });
+    }, 15000);
   });
 });

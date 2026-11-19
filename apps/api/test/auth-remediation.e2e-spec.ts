@@ -131,7 +131,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Verify OTP with default test code '123456'
@@ -159,7 +159,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Guesses 1 through 4: Should return 400 with remaining attempts countdown
@@ -204,7 +204,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName: 'Resend Student', intent: 'signup' })
+        .send({ email, fullName: 'Resend Student', intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Make 2 failed guesses
@@ -245,7 +245,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       // Instance A creates OTP
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Verify that instance B (direct DB inspection / transaction) sees the exact same HMAC verifier
@@ -310,7 +310,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Fire 5 simultaneous parallel guesses with incorrect codes
@@ -350,7 +350,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Fire 2 simultaneous parallel verification requests with the valid code ('123456')
@@ -384,7 +384,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Submit valid OTP with mismatched intent 'signin'
@@ -416,7 +416,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       // Provision user via initial signup so signin request is allowed
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
       await request(app.getHttpServer())
         .post('/auth/verify-otp')
@@ -451,7 +451,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({ email, fullName, intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // Fast-forward cooldown in DB
@@ -686,23 +686,23 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email: 'spam1@vitstudent.ac.in', fullName: 'Spam 1', intent: 'signup' })
+        .send({ email: 'spam1@vitstudent.ac.in', fullName: 'Spam 1', intent: 'signup', termsAccepted: true })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email: 'spam2@vitstudent.ac.in', fullName: 'Spam 2', intent: 'signup' })
+        .send({ email: 'spam2@vitstudent.ac.in', fullName: 'Spam 2', intent: 'signup', termsAccepted: true })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email: 'spam3@vitstudent.ac.in', fullName: 'Spam 3', intent: 'signup' })
+        .send({ email: 'spam3@vitstudent.ac.in', fullName: 'Spam 3', intent: 'signup', termsAccepted: true })
         .expect(201);
 
       // 4th request exceeds effective limit of 3 for request-otp and returns 429
       const res = await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email: 'spam4@vitstudent.ac.in', fullName: 'Spam 4', intent: 'signup' })
+        .send({ email: 'spam4@vitstudent.ac.in', fullName: 'Spam 4', intent: 'signup', termsAccepted: true })
         .expect(429);
 
       expect(res.body.error).toBe('Too Many Requests');
@@ -719,7 +719,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
         await request(app.getHttpServer())
           .post('/auth/request-otp')
           .set('X-Forwarded-For', `203.0.113.${10 + i}`)
-          .send({ email: `spoof${i}@vitstudent.ac.in`, fullName: `Spoof ${i}`, intent: 'signup' })
+          .send({ email: `spoof${i}@vitstudent.ac.in`, fullName: `Spoof ${i}`, intent: 'signup', termsAccepted: true })
           .expect(201);
       }
 
@@ -727,7 +727,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
       const res = await request(app.getHttpServer())
         .post('/auth/request-otp')
         .set('X-Forwarded-For', '203.0.113.99')
-        .send({ email: 'spoof4@vitstudent.ac.in', fullName: 'Spoof 4', intent: 'signup' })
+        .send({ email: 'spoof4@vitstudent.ac.in', fullName: 'Spoof 4', intent: 'signup', termsAccepted: true })
         .expect(429);
 
       expect(res.body.error).toBe('Too Many Requests');
@@ -745,6 +745,7 @@ describe('Security Remediations: Custom OTP, RS256 JWT, Rate Limiting & Privacy 
           email: 'privacy.student@vitstudent.ac.in',
           fullName: 'Privacy Student',
           intent: 'signup',
+          termsAccepted: true,
         })
         .expect(201);
 

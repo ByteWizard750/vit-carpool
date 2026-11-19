@@ -61,7 +61,14 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
         .toUpperCase()
     : 'U';
 
-  const audienceLabel = user.audience === 'FACULTY' ? 'Faculty Circle' : 'Student Circle';
+  const audienceLabel =
+    user.role === 'SUPER_ADMIN'
+      ? 'Global Admin'
+      : user.role === 'ADMIN'
+      ? 'Operations Admin'
+      : user.audience === 'FACULTY'
+      ? 'Faculty Circle'
+      : 'Student Circle';
 
   return (
     <div className="account-menu-container" ref={menuRef} style={{ position: 'relative' }}>
@@ -228,7 +235,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
               <CheckCircle2 size={11} /> {audienceLabel}
             </div>
 
-            {user.verificationStatus === 'PENDING' && onOpenVerification && (
+            {!['SUPER_ADMIN', 'ADMIN'].includes(user.role) && user.verificationStatus === 'PENDING' && onOpenVerification && (
               <button
                 type="button"
                 onClick={() => {
@@ -371,7 +378,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
             <span>How It Works</span>
           </Link>
 
-          {user.role === 'ADMIN' && (
+          {['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(user.role) && (
             <Link
               to="/admin"
               className="account-menu-item"
@@ -392,7 +399,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
               }}
             >
               <ShieldAlert size={15} style={{ color: 'var(--danger-text, #b42318)' }} />
-              <span>Admin Moderation</span>
+              <span>Admin Control Centre</span>
             </Link>
           )}
 

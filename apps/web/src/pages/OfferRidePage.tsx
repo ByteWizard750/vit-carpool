@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
+import { searchFallbackLandmarks } from '../components/common/chennai-landmarks.data';
 import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
+import { triggerAppSync } from '../hooks/useDataSync';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   VehicleResponseDto,
@@ -499,6 +501,7 @@ export const OfferRidePage: React.FC = () => {
       quickAttemptRef.current = null;
 
       setSuccessMsg('Quick Ride successfully published to campus corridors!');
+      triggerAppSync();
       setTimeout(() => {
         navigate('/my-rides');
       }, 1200);
@@ -562,6 +565,17 @@ export const OfferRidePage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      let effOriginLoc = originLocation;
+      if (!effOriginLoc && origin.trim()) {
+        const fallback = searchFallbackLandmarks(origin.trim(), 1);
+        if (fallback.length > 0) effOriginLoc = fallback[0];
+      }
+      let effDestLoc = destLocation;
+      if (!effDestLoc && destination.trim()) {
+        const fallback = searchFallbackLandmarks(destination.trim(), 1);
+        if (fallback.length > 0) effDestLoc = fallback[0];
+      }
+
       const payload: any = {
         vehicleId: selectedVehicleId,
         origin: origin.trim(),
@@ -571,13 +585,13 @@ export const OfferRidePage: React.FC = () => {
         costPerSeat: costNum,
       };
 
-      if (originLocation?.latitude !== undefined && originLocation?.longitude !== undefined) {
-        payload.originLatitude = originLocation.latitude;
-        payload.originLongitude = originLocation.longitude;
+      if (effOriginLoc?.latitude !== undefined && effOriginLoc?.longitude !== undefined) {
+        payload.originLatitude = effOriginLoc.latitude;
+        payload.originLongitude = effOriginLoc.longitude;
       }
-      if (destLocation?.latitude !== undefined && destLocation?.longitude !== undefined) {
-        payload.destinationLatitude = destLocation.latitude;
-        payload.destinationLongitude = destLocation.longitude;
+      if (effDestLoc?.latitude !== undefined && effDestLoc?.longitude !== undefined) {
+        payload.destinationLatitude = effDestLoc.latitude;
+        payload.destinationLongitude = effDestLoc.longitude;
       }
       if (pickupDescription.trim()) {
         payload.pickupDescription = pickupDescription.trim();
@@ -624,6 +638,7 @@ export const OfferRidePage: React.FC = () => {
       }
 
       setSuccessMsg(editRideId ? 'Ride successfully updated!' : 'Ride successfully published to campus corridors!');
+      triggerAppSync();
       setTimeout(() => {
         navigate('/my-rides');
       }, 1200);
@@ -699,22 +714,33 @@ export const OfferRidePage: React.FC = () => {
         estimatedTotalFare: Math.round(fareNum),
       };
 
-      if (cabOriginLocation?.address || cabOrigin.trim()) {
-        payload.originAddress = cabOriginLocation?.address || cabOrigin.trim();
+      let effCabOriginLoc = cabOriginLocation;
+      if (!effCabOriginLoc && cabOrigin.trim()) {
+        const fallback = searchFallbackLandmarks(cabOrigin.trim(), 1);
+        if (fallback.length > 0) effCabOriginLoc = fallback[0];
       }
-      if (cabOriginLocation?.latitude !== undefined && cabOriginLocation?.longitude !== undefined) {
-        payload.originLatitude = cabOriginLocation.latitude;
-        payload.originLongitude = cabOriginLocation.longitude;
-        payload.originPlaceId = cabOriginLocation.id;
+      let effCabDestLoc = cabDestLocation;
+      if (!effCabDestLoc && cabDestination.trim()) {
+        const fallback = searchFallbackLandmarks(cabDestination.trim(), 1);
+        if (fallback.length > 0) effCabDestLoc = fallback[0];
       }
 
-      if (cabDestLocation?.address || cabDestination.trim()) {
-        payload.destinationAddress = cabDestLocation?.address || cabDestination.trim();
+      if (effCabOriginLoc?.address || cabOrigin.trim()) {
+        payload.originAddress = effCabOriginLoc?.address || cabOrigin.trim();
       }
-      if (cabDestLocation?.latitude !== undefined && cabDestLocation?.longitude !== undefined) {
-        payload.destinationLatitude = cabDestLocation.latitude;
-        payload.destinationLongitude = cabDestLocation.longitude;
-        payload.destinationPlaceId = cabDestLocation.id;
+      if (effCabOriginLoc?.latitude !== undefined && effCabOriginLoc?.longitude !== undefined) {
+        payload.originLatitude = effCabOriginLoc.latitude;
+        payload.originLongitude = effCabOriginLoc.longitude;
+        payload.originPlaceId = effCabOriginLoc.id;
+      }
+
+      if (effCabDestLoc?.address || cabDestination.trim()) {
+        payload.destinationAddress = effCabDestLoc?.address || cabDestination.trim();
+      }
+      if (effCabDestLoc?.latitude !== undefined && effCabDestLoc?.longitude !== undefined) {
+        payload.destinationLatitude = effCabDestLoc.latitude;
+        payload.destinationLongitude = effCabDestLoc.longitude;
+        payload.destinationPlaceId = effCabDestLoc.id;
       }
 
       if (cabService.trim()) payload.cabService = cabService.trim();
@@ -749,6 +775,7 @@ export const OfferRidePage: React.FC = () => {
 
       cabAttemptRef.current = null;
       setSuccessMsg('Shared Cab successfully published! Eligible campus peers can now join and split the fare.');
+      triggerAppSync();
       setTimeout(() => {
         navigate('/my-rides');
       }, 1200);

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as webpush from 'web-push';
 import { PrismaService } from '../../prisma/prisma.service';
+import { validatePushEndpoint } from './push-endpoint.validator';
 
 export interface WebPushPayload {
   title: string;
@@ -120,6 +121,7 @@ export class WebPushService implements OnModuleInit {
       for (const sub of subscriptions) {
         if (this.vapidConfigured) {
           try {
+            validatePushEndpoint(sub.endpoint);
             await webpush.sendNotification(
               {
                 endpoint: sub.endpoint,

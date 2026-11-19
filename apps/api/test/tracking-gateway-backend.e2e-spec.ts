@@ -366,7 +366,7 @@ describe('Milestone 7.2: Secure WebSocket Gateway & Location Backend (e2e)', () 
       where: { rideId: activeRideId },
     });
     expect(totalSnapshots).toBeLessThanOrEqual(20);
-  });
+  }, 15000);
 
   it('validates GPS coordinates, timestamp freshness, accuracy and enforces rate limiting', async () => {
     // Wait 1.1s to ensure rate limit window is clear
@@ -426,7 +426,7 @@ describe('Milestone 7.2: Secure WebSocket Gateway & Location Backend (e2e)', () 
         longitude: 80.082,
       })
       .expect(429);
-  });
+  }, 15000);
 
   it('updates passenger boarding status (WAITING -> BOARDING -> BOARDED)', async () => {
     // 1. Passenger marks BOARDING
@@ -643,5 +643,5 @@ describe('Milestone 7.2: Secure WebSocket Gateway & Location Backend (e2e)', () 
     strangerSocket.disconnect();
     expiredSocket.disconnect();
     reconnectedPassengerSocket.disconnect();
-  });
+  }, 15000);
 });

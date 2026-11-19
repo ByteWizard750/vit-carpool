@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   ShieldCheck,
   Mail,
@@ -13,9 +13,11 @@ import {
   Briefcase,
   Lock,
   ChevronLeft,
+  Shield,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
+import { CURRENT_TERMS_VERSION, GLOBAL_ADMIN_RESERVED_EMAIL } from '@vit-carpool/contracts';
 
 type AuthMode = 'signin' | 'signup';
 type AuthStep = 'email' | 'otp';
@@ -31,6 +33,7 @@ export const AuthPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +106,8 @@ export const AuthPage: React.FC = () => {
   const normalizedEmail = email.trim().toLowerCase();
   const isStudent = normalizedEmail.endsWith('@vitstudent.ac.in');
   const isFaculty = normalizedEmail.endsWith('@vit.ac.in') && !isStudent;
-  const isRecognizedDomain = isStudent || isFaculty;
+  const isDesignatedAdmin = normalizedEmail === GLOBAL_ADMIN_RESERVED_EMAIL;
+  const isRecognizedDomain = isStudent || isFaculty || isDesignatedAdmin;
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +116,11 @@ export const AuthPage: React.FC = () => {
 
     if (mode === 'signup' && !fullName.trim()) {
       setError('Please provide your full legal name for campus registration.');
+      return;
+    }
+
+    if (mode === 'signup' && !termsAccepted) {
+      setError('You must review and agree to the Terms & Conditions and acknowledge the Privacy Policy to register.');
       return;
     }
 
@@ -126,16 +135,23 @@ export const AuthPage: React.FC = () => {
     }
 
     setIsLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
       const res = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           email: normalizedEmail,
           intent: mode,
           fullName: mode === 'signup' ? fullName.trim() : undefined,
+          termsAccepted: mode === 'signup' ? termsAccepted : undefined,
+          termsVersion: mode === 'signup' ? CURRENT_TERMS_VERSION : undefined,
         }),
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json().catch(() => ({}));
 
@@ -147,8 +163,16 @@ export const AuthPage: React.FC = () => {
       setStep('otp');
       setCooldown(data.cooldownSeconds || 30);
       setSuccessMsg(data.message || 'Verification code sent to your email.');
-    } catch {
-      setError('Network communication failed. Please check your connection and try again.');
+      if (data.devOtp) {
+        setOtp(data.devOtp);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        setError('Server request timed out. Please check that the local API server is responding.');
+      } else {
+        setError('Network communication failed. Please check your connection and try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +199,8 @@ export const AuthPage: React.FC = () => {
           token,
           intent: mode,
           fullName: mode === 'signup' ? fullName.trim() : undefined,
+          termsAccepted: mode === 'signup' ? termsAccepted : undefined,
+          termsVersion: mode === 'signup' ? CURRENT_TERMS_VERSION : undefined,
         }),
       });
 
@@ -200,13 +226,17 @@ export const AuthPage: React.FC = () => {
     setError(null);
     setSuccessMsg(null);
     setIsLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
       const res = await fetch('/api/auth/resend-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail }),
+        signal: controller.signal,
+        body: JSON.stringify({ email: normalizedEmail, intent: mode }),
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json().catch(() => ({}));
 
@@ -216,9 +246,17 @@ export const AuthPage: React.FC = () => {
       }
 
       setCooldown(data.cooldownSeconds || 30);
-      setSuccessMsg('New verification code sent to your email address.');
-    } catch {
-      setError('Failed to resend code due to network error.');
+      setSuccessMsg(data.message || 'New verification code sent to your email address.');
+      if (data.devOtp) {
+        setOtp(data.devOtp);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        setError('Server request timed out. Please check your connection.');
+      } else {
+        setError('Failed to resend code due to network error.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -430,6 +468,11 @@ export const AuthPage: React.FC = () => {
                         <Briefcase size={13} /> Verified Faculty Pattern (@vit.ac.in)
                       </span>
                     )}
+                    {isDesignatedAdmin && (
+                      <span style={{ color: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <Shield size={13} /> Designated Global Administrator ({GLOBAL_ADMIN_RESERVED_EMAIL})
+                      </span>
+                    )}
                     {!isRecognizedDomain && (
                       <span style={{ color: '#b45309' }}>
                         Must be @vitstudent.ac.in or @vit.ac.in
@@ -439,11 +482,64 @@ export const AuthPage: React.FC = () => {
                 )}
               </div>
 
+              {mode === 'signup' && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '12px 14px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-light, #e2e8f0)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    id="checkbox-terms-consent"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    style={{
+                      marginTop: '2px',
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer',
+                      accentColor: '#2563eb',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <label
+                    htmlFor="checkbox-terms-consent"
+                    style={{ fontSize: '0.825rem', color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}
+                  >
+                    I agree to the{' '}
+                    <Link
+                      to="/terms"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'underline' }}
+                    >
+                      Terms &amp; Conditions
+                    </Link>{' '}
+                    and acknowledge the{' '}
+                    <Link
+                      to="/privacy"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'underline' }}
+                    >
+                      Privacy Policy
+                    </Link>
+                    .
+                  </label>
+                </div>
+              )}
+
               <Button
                 type="submit"
                 variant="primary"
                 size="lg"
-                disabled={isLoading}
+                disabled={isLoading || (mode === 'signup' && !termsAccepted)}
                 rightIcon={isLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                 id="btn-request-otp"
                 style={{ width: '100%', marginTop: '6px' }}

@@ -76,6 +76,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
   const driverMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeCasingRef = useRef<L.Polyline | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
 
   // Framing & Navigation state
@@ -116,16 +117,49 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       attributionControl: false,
     });
 
-    // Clean OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    // Modern mobility app tiles: Mapbox Navigation Day (clean roads, subtle labels, high-contrast routing)
+    // with automatic resilient fallback to OpenStreetMap if token is absent or unreachable
+    const mapboxToken = (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '').trim();
+
+    if (mapboxToken) {
+      let fallbackTriggered = false;
+      const mapboxLayer = L.tileLayer(
+        `https://api.mapbox.com/styles/v1/mapbox/navigation-day-v1/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+        {
+          maxZoom: 19,
+          tileSize: 512,
+          zoomOffset: -1,
+          attribution:
+            '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+        }
+      );
+
+      mapboxLayer.on('tileerror', () => {
+        if (!fallbackTriggered) {
+          fallbackTriggered = true;
+          map.removeLayer(mapboxLayer);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            subdomains: 'abc',
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+          }).addTo(map);
+        }
+      });
+
+      mapboxLayer.addTo(map);
+    } else {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: 'abc',
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+      }).addTo(map);
+    }
 
     // Subtle attribution at bottom right
     L.control
       .attribution({ position: 'bottomright', prefix: false })
-      .addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>')
       .addTo(map);
 
     corridorLayerRef.current = L.layerGroup().addTo(map);
@@ -150,6 +184,9 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     if (mapContainerRef.current) {
       resizeObserver.observe(mapContainerRef.current);
     }
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
 
     return () => {
       resizeObserver.disconnect();
@@ -159,6 +196,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       mapRef.current = null;
       driverMarkerRef.current = null;
       accuracyCircleRef.current = null;
+      routeCasingRef.current = null;
       routeLineRef.current = null;
       corridorLayerRef.current = null;
       initialFitDoneRef.current = false;
@@ -177,30 +215,40 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     corridorLayer.clearLayers();
     const corridorPoints: L.LatLngExpression[] = [];
 
-    // 1. Origin Marker
+    // 1. Origin Marker - Modern pill badge
     if (hasValidCoords(origin)) {
       const originIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
           <div style="
-            background: #1e40af;
-            color: white;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: 800;
-            box-shadow: 0 3px 8px rgba(30,64,175,0.4);
-            border: 2.5px solid white;
+            gap: 6px;
+            background: #ffffff;
+            padding: 4px 10px 4px 6px;
+            border-radius: 20px;
+            border: 2px solid #2563eb;
+            box-shadow: 0 4px 14px rgba(37,99,235,0.25);
+            font-family: inherit;
+            cursor: pointer;
           ">
-            <span>A</span>
+            <div style="
+              background: #2563eb;
+              color: white;
+              border-radius: 50%;
+              width: 20px;
+              height: 20px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 10px;
+              font-weight: 800;
+            ">A</div>
+            <span style="font-size: 11px; font-weight: 700; color: #1e293b; white-space: nowrap;">Origin</span>
           </div>
         `,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15],
+        iconSize: [80, 30],
+        iconAnchor: [40, 15],
       });
 
       L.marker([origin.latitude, origin.longitude], { icon: originIcon })
@@ -209,29 +257,42 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       corridorPoints.push([origin.latitude, origin.longitude]);
     }
 
-    // 2. Destination Marker
+    // 2. Destination Marker - Modern mobility flag pill
     if (hasValidCoords(destination)) {
       const destIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
           <div style="
-            background: #dc2626;
-            color: white;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            font-size: 15px;
-            box-shadow: 0 3px 10px rgba(220,38,38,0.45);
-            border: 2.5px solid white;
+            gap: 6px;
+            background: #0f172a;
+            padding: 4px 10px 4px 6px;
+            border-radius: 20px;
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 14px rgba(15,23,42,0.35);
+            color: #ffffff;
+            font-family: inherit;
+            cursor: pointer;
           ">
-            <span id="destination-marker">🏁</span>
+            <div style="
+              background: #ef4444;
+              color: white;
+              border-radius: 50%;
+              width: 20px;
+              height: 20px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 11px;
+            ">
+              <span id="destination-marker">🏁</span>
+            </div>
+            <span style="font-size: 11px; font-weight: 700; white-space: nowrap;">Destination</span>
           </div>
         `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
+        iconSize: [110, 30],
+        iconAnchor: [55, 15],
       });
 
       L.marker([destination.latitude, destination.longitude], { icon: destIcon })
@@ -246,18 +307,20 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
         className: 'custom-map-icon',
         html: `
           <div id="my-pickup-marker" style="
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             background: #059669;
             color: white;
             border-radius: 20px;
-            padding: 4px 10px 4px 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
+            padding: 4px 12px 4px 8px;
             font-size: 11px;
             font-weight: 700;
             white-space: nowrap;
-            box-shadow: 0 3px 10px rgba(5,150,105,0.4);
+            box-shadow: 0 4px 14px rgba(5,150,105,0.4);
             border: 2px solid white;
+            font-family: inherit;
+            cursor: pointer;
           ">
             <span>📍 Your Pickup</span>
           </div>
@@ -291,7 +354,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
               justify-content: center;
               font-size: 11px;
               font-weight: 700;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+              box-shadow: 0 3px 8px rgba(0,0,0,0.25);
               border: 2px solid white;
             ">${p.label.substring(0, 2).toUpperCase()}</div>
           `,
@@ -306,7 +369,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       }
     });
 
-    // 5. Connect corridor landmarks with high-contrast polyline
+    // 5. Connect corridor landmarks with high-contrast dual-layer polyline
     const polylineCoords: L.LatLngExpression[] = [];
     if (hasValidCoords(origin)) {
       polylineCoords.push([origin.latitude, origin.longitude]);
@@ -324,14 +387,28 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     }
 
     if (polylineCoords.length >= 2) {
+      if (routeCasingRef.current) {
+        try { routeCasingRef.current.remove(); } catch {}
+      }
       if (routeLineRef.current) {
         try { routeLineRef.current.remove(); } catch {}
       }
+      // Outer subtle halo/casing
+      routeCasingRef.current = L.polyline(polylineCoords, {
+        color: '#1e3a8a',
+        weight: 7,
+        opacity: 0.25,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(corridorLayer);
+
+      // Inner crisp electric blue line
       routeLineRef.current = L.polyline(polylineCoords, {
         color: '#2563eb',
         weight: 4,
-        opacity: 0.75,
-        dashArray: '8, 8',
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
       }).addTo(corridorLayer);
     }
 
@@ -340,6 +417,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       if (hasValidCoords(driverLocation)) {
         corridorPoints.push([driverLocation.latitude, driverLocation.longitude]);
       }
+      map.invalidateSize();
       if (corridorPoints.length >= 2) {
         map.fitBounds(L.latLngBounds(corridorPoints), { padding: [50, 50], maxZoom: 15 });
       } else {
@@ -567,8 +645,9 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     >
       <style>{`
         @keyframes driver-radar-pulse {
-          0% { transform: scale(0.6); opacity: 0.8; }
-          100% { transform: scale(1.7); opacity: 0; }
+          0% { transform: scale(0.6); opacity: 0.85; }
+          70% { transform: scale(1.6); opacity: 0.15; }
+          100% { transform: scale(2.0); opacity: 0; }
         }
         .leaflet-container {
           width: 100%;
@@ -580,22 +659,26 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
         .map-floating-btn {
-          background: #ffffff;
-          color: #0f172a;
-          border: 1px solid #cbd5e1;
-          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          color: #1e293b;
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.08);
           transition: all 0.15s ease;
           min-width: 38px;
           min-height: 38px;
         }
         .map-floating-btn:hover {
-          background: #f8fafc;
-          border-color: #94a3b8;
+          background: #ffffff;
+          border-color: #cbd5e1;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+          transform: translateY(-1px);
         }
         .map-floating-btn:active {
           transform: scale(0.96);
@@ -724,14 +807,17 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             data-testid="recenter-driver-btn"
             className="map-floating-btn"
             style={{
-              padding: '8px 16px',
+              padding: '9px 18px',
               gap: '8px',
-              background: '#ffffff',
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
               color: '#047857',
-              borderColor: '#6ee7b7',
+              borderColor: '#a7f3d0',
               fontWeight: 700,
               fontSize: '13px',
-              boxShadow: '0 4px 12px rgba(4,120,87,0.2)',
+              boxShadow: '0 4px 16px rgba(4,120,87,0.22)',
+              borderRadius: '24px',
             }}
           >
             <Navigation size={16} />
@@ -747,17 +833,18 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           bottom: '16px',
           left: '16px',
           zIndex: 1000,
-          background: 'rgba(255, 255, 255, 0.95)',
-          borderRadius: '8px',
-          padding: showLegend ? '8px 12px' : '6px 8px',
-          border: '1px solid #cbd5e1',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          background: 'rgba(255, 255, 255, 0.94)',
+          borderRadius: '12px',
+          padding: showLegend ? '10px 14px' : '6px 10px',
+          border: '1px solid rgba(226, 232, 240, 0.9)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
           fontSize: '11px',
           color: '#334155',
           display: 'flex',
           flexDirection: 'column',
-          gap: '4px',
-          backdropFilter: 'blur(4px)',
+          gap: '6px',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
         }}
       >
         <div

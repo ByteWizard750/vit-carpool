@@ -30,6 +30,29 @@ jobs:
   ci:
     name: Lint, Typecheck & Test
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vit_carpool_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5433/vit_carpool_test?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5433/vit_carpool_test?schema=public
+      LOCATION_PROVIDER: mock
+      NODE_ENV: test
+      JWT_TEST_MODE: 'true'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -59,8 +82,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma Client
-        run: pnpm db:generate
+      - name: Build database package (Prisma client & declarations)
+        run: pnpm build:db
+
+      - name: Apply Prisma migrations to isolated test database
+        run: pnpm --filter @vit-carpool/db exec prisma migrate deploy
 
       - name: Verify TypeScript types across monorepo
         run: pnpm typecheck

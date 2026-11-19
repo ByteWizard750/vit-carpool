@@ -27,6 +27,17 @@ export const AdminLoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+
+  // Countdown timer for MFA resend
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   // If already authenticated with administrative role, redirect to /admin
   useEffect(() => {
@@ -57,10 +68,52 @@ export const AdminLoginPage: React.FC = () => {
         throw new Error(data.message || 'Administrative authentication failed.');
       }
 
-      setMessage('A 6-digit two-factor authentication challenge has been dispatched to your email.');
+      if (data.devOtp) {
+        setDevOtp(data.devOtp);
+        setCode(data.devOtp);
+        setMessage(`Verification code: ${data.devOtp} (Local network blocked outbound SMTP; code auto-filled)`);
+      } else {
+        setMessage('A 6-digit two-factor authentication challenge has been dispatched to your email.');
+      }
+      setCooldown(data.cooldownSeconds || 30);
       setStep('mfa');
     } catch (err: any) {
       setError(err.message || 'Failed to initiate admin authentication.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (cooldown > 0 || loading || !email.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const res = await fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to resend MFA challenge.');
+      }
+
+      if (data.devOtp) {
+        setDevOtp(data.devOtp);
+        setCode(data.devOtp);
+        setMessage(`Fresh verification code: ${data.devOtp} (SMTP blocked by local ISP; code auto-filled)`);
+      } else {
+        setMessage('A fresh 6-digit challenge has been dispatched to your email.');
+      }
+      setCooldown(data.cooldownSeconds || 30);
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification code.');
     } finally {
       setLoading(false);
     }
@@ -329,7 +382,7 @@ export const AdminLoginPage: React.FC = () => {
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
+                  placeholder="••••••"
                   maxLength={6}
                   required
                   autoFocus
@@ -347,9 +400,80 @@ export const AdminLoginPage: React.FC = () => {
                     outline: 'none',
                   }}
                 />
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
-                  Code sent to <strong style={{ color: '#e2e8f0' }}>{email}</strong>
-                </span>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '8px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  <span style={{ color: '#94a3b8' }}>
+                    Code sent to <strong style={{ color: '#e2e8f0' }}>{email}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={cooldown > 0 || loading}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: cooldown > 0 ? '#64748b' : '#38bdf8',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: cooldown > 0 ? 'not-allowed' : 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
+                  </button>
+                </div>
+
+                {devOtp && (
+                  <div
+                    style={{
+                      marginTop: '14px',
+                      padding: '10px 14px',
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      color: '#38bdf8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                    }}
+                    id="banner-dev-otp"
+                  >
+                    <div>
+                      <div>
+                        Dev Mode Security Code: <strong style={{ color: '#ffffff', fontSize: '1.05rem', letterSpacing: '0.1em' }}>{devOtp}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+                        Outbound SMTP is blocked on local network. Code auto-filled above.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCode(devOtp)}
+                      style={{
+                        backgroundColor: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Fill Code
+                    </button>
+                  </div>
+                )}
               </div>
 
               <Button

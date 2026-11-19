@@ -1,14 +1,26 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  const expressApp = app.getHttpAdapter().getInstance();
 
-  // Enable CORS for the mobile web frontend
-  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+  // SEC-04: Disable fingerprinting headers and register Helmet HTTP security headers
+  expressApp.disable('x-powered-by');
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  // Enable CORS for the mobile web frontend (supports both localhost and 127.0.0.1)
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173';
   app.enableCors({
     origin: corsOrigin.split(','),
     credentials: true,
@@ -30,7 +42,8 @@ async function bootstrap() {
       !req.path.startsWith('/health') &&
       !req.path.startsWith('/uploads') &&
       !req.path.startsWith('/socket.io') &&
-      !req.path.startsWith('/tracking')
+      !req.path.startsWith('/tracking') &&
+      !req.path.startsWith('/events')
     ) {
       req.url = '/api' + req.url;
     }
@@ -42,7 +55,6 @@ async function bootstrap() {
   // Passing a string number (e.g. "2") without parsing caused proxy-addr to fail compilation,
   // defaulting client IPs to 127.0.0.1 and locking all users out via rate limiting.
   const trustProxyEnv = process.env.TRUST_PROXY?.trim();
-  const expressApp = app.getHttpAdapter().getInstance();
   if (trustProxyEnv) {
     if (trustProxyEnv === 'false' || trustProxyEnv === '0') {
       expressApp.set('trust proxy', false);
@@ -73,18 +85,21 @@ async function bootstrap() {
     }),
   );
 
-  // OpenAPI (Swagger) Documentation
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('VIT Chennai Carpooling Platform API')
-    .setDescription(
-      'Authoritative backend REST API for the VIT Chennai exclusive community carpooling platform.',
-    )
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
+  // SEC-05: OpenAPI (Swagger) Documentation is restricted to non-production environments
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('VIT Chennai Carpooling Platform API')
+      .setDescription(
+        'Authoritative backend REST API for the VIT Chennai exclusive community carpooling platform.',
+      )
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   // Enable graceful shutdown hooks
   app.enableShutdownHooks();
@@ -92,7 +107,9 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   logger.log(`VIT Carpool API server running on: http://localhost:${port}`);
-  logger.log(`OpenAPI documentation available on: http://localhost:${port}/api/docs`);
+  if (!isProduction) {
+    logger.log(`OpenAPI documentation available on: http://localhost:${port}/api/docs`);
+  }
   logger.log(`Health check endpoint: http://localhost:${port}/health`);
 }
 

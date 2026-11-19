@@ -5,9 +5,10 @@ import { BoardingOtpService } from './boarding-otp.service';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TrackingModule } from '../tracking/tracking.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [AuditModule, NotificationsModule, forwardRef(() => TrackingModule)],
+  imports: [AuditModule, NotificationsModule, EventsModule, forwardRef(() => TrackingModule)],
   controllers: [BookingsController],
   providers: [BookingsService, BoardingOtpService],
   exports: [BookingsService, BoardingOtpService],

@@ -8,6 +8,7 @@ import { JwksService } from '../auth/jwks.service';
 interface DecodedTokenPayload extends jwt.JwtPayload {
   sub: string;
   email?: string;
+  tokenVersion?: number;
 }
 
 @Injectable()
@@ -126,6 +127,10 @@ export class TrackingAuthService {
       email,
       fullName: fullNameClaim,
     });
+
+    if (typeof decoded.tokenVersion !== 'number' || decoded.tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedException('Session has expired due to logout. Please sign in again.');
+    }
 
     if (user.isSuspended) {
       throw new ForbiddenException({

@@ -42,8 +42,10 @@ test-results/
 playwright-report/
 blob-report/
 
-# Temporary files
+# Temporary files and runtime storage
 tmp/
 temp/
 scratch/
-uploads/
+/uploads/
+apps/api/uploads/
+.tmp*

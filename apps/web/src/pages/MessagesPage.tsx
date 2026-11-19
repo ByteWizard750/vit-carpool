@@ -19,6 +19,7 @@ import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
 import { InboxTabs } from '../components/navigation/InboxTabs';
 import { useAuth } from '../features/auth/AuthContext';
+import { useEvents } from '../features/events/EventsContext';
 import {
   ConversationSummaryDto,
   ConversationDetailDto,
@@ -26,6 +27,7 @@ import {
 } from '@vit-carpool/contracts';
 import { ReportModal } from '../components/moderation/ReportModal';
 import { BlockConfirmModal } from '../components/moderation/BlockConfirmModal';
+import { PublicProfileModal } from '../components/profile/PublicProfileModal';
 
 export const MessagesPage: React.FC = () => {
   const { user, token } = useAuth();
@@ -33,6 +35,7 @@ export const MessagesPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const bookingIdQuery = searchParams.get('bookingId');
   const navigate = useNavigate();
+  const { subscribeConversation, unsubscribeConversation } = useEvents();
 
   // Conversations list state
   const [conversations, setConversations] = useState<ConversationSummaryDto[]>([]);
@@ -53,6 +56,7 @@ export const MessagesPage: React.FC = () => {
   // Moderation action modals
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [viewProfileUserId, setViewProfileUserId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
 
@@ -233,22 +237,47 @@ export const MessagesPage: React.FC = () => {
     }
   }, [activeConv?.messages?.length]);
 
-  // Polling for new messages every 5 seconds when conversation is open
+  // Real-time event listener for instant incoming chat messages
   useEffect(() => {
     if (!token || !selectedConvId) return;
 
-    let tick = 0;
-    const interval = setInterval(() => {
-      tick++;
-      fetchActiveConversation(selectedConvId, true);
-      // Only refresh conversations list every 15s to reduce redundant server traffic
-      if (tick % 3 === 0) {
+    // Join room for real-time delivery
+    subscribeConversation(selectedConvId);
+
+    const handleIncomingMessage = (e: Event) => {
+      const msg = (e as CustomEvent).detail;
+      if (!msg) return;
+
+      if (msg.conversationId === selectedConvId) {
+        setActiveConv((prev) => {
+          if (!prev) return prev;
+          if (prev.messages.some((m) => m.id === msg.id)) return prev;
+          return {
+            ...prev,
+            messages: [...prev.messages, msg],
+          };
+        });
+        // Trigger background refresh of conversations list
+        fetchConversations(true);
+      } else {
+        // Message for other conversation
         fetchConversations(true);
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(interval);
-  }, [token, selectedConvId, fetchActiveConversation, fetchConversations]);
+    window.addEventListener('app:chat_message', handleIncomingMessage);
+
+    // Fallback heartbeat (25s) as a quiet safety net
+    const interval = setInterval(() => {
+      fetchActiveConversation(selectedConvId, true);
+    }, 25000);
+
+    return () => {
+      unsubscribeConversation(selectedConvId);
+      window.removeEventListener('app:chat_message', handleIncomingMessage);
+      clearInterval(interval);
+    };
+  }, [token, selectedConvId, subscribeConversation, unsubscribeConversation, fetchActiveConversation, fetchConversations]);
 
   // Dynamic auto-expanding textarea change handler
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -625,38 +654,50 @@ export const MessagesPage: React.FC = () => {
                     <ArrowLeft size={20} />
                   </button>
 
-                  {activeConv.otherParticipant.avatarUrl ? (
-                    <img
-                      src={activeConv.otherParticipant.avatarUrl}
-                      alt={activeConv.otherParticipant.fullName}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                        border: '1px solid var(--border-light, #e2e8f0)',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        backgroundColor: activeConv.otherParticipant.role === 'DRIVER' ? '#dcfce7' : '#f3e8ff',
-                        color: activeConv.otherParticipant.role === 'DRIVER' ? '#166534' : '#6b21a8',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.875rem',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {activeConv.otherParticipant.fullName.charAt(0)}
-                    </div>
-                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                    onClick={() => setViewProfileUserId(activeConv.otherParticipant.id)}
+                    title="View Verified Profile"
+                  >
+                    {activeConv.otherParticipant.avatarUrl ? (
+                      <img
+                        src={activeConv.otherParticipant.avatarUrl}
+                        alt={activeConv.otherParticipant.fullName}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          flexShrink: 0,
+                          border: '1px solid var(--border-light, #e2e8f0)',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          backgroundColor: activeConv.otherParticipant.role === 'DRIVER' ? '#dcfce7' : '#f3e8ff',
+                          color: activeConv.otherParticipant.role === 'DRIVER' ? '#166534' : '#6b21a8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.875rem',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {activeConv.otherParticipant.fullName.charAt(0)}
+                      </div>
+                    )}
+                  </div>
 
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
@@ -667,8 +708,12 @@ export const MessagesPage: React.FC = () => {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        textDecorationColor: '#cbd5e1',
                       }}
-                      title={activeConv.otherParticipant.fullName}
+                      onClick={() => setViewProfileUserId(activeConv.otherParticipant.id)}
+                      title="View Verified Profile"
                     >
                       {activeConv.otherParticipant.fullName.replace(/\s*\((Student Driver|Passenger)\)/i, '')}
                     </div>
@@ -1176,6 +1221,17 @@ export const MessagesPage: React.FC = () => {
               if (selectedConvId) {
                 fetchActiveConversation(selectedConvId);
               }
+            }}
+          />
+
+          <PublicProfileModal
+            userId={viewProfileUserId}
+            isOpen={Boolean(viewProfileUserId)}
+            onClose={() => setViewProfileUserId(null)}
+            token={token}
+            onReportUser={() => {
+              setViewProfileUserId(null);
+              setReportModalOpen(true);
             }}
           />
         </>

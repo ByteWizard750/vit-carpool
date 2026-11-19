@@ -91,6 +91,8 @@ model User {
   adminMfaEnabled    Boolean             @default(false) @map("admin_mfa_enabled")
   adminMfaSecret     String?             @map("admin_mfa_secret") @db.VarChar(128)
   adminMfaVerifiedAt DateTime?           @map("admin_mfa_verified_at") @db.Timestamptz(6)
+  tokenVersion       Int                 @default(1) @map("token_version")
+  invalidatedBefore  DateTime?           @map("invalidated_before") @db.Timestamptz(6)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -121,6 +123,7 @@ model User {
   moderationNotesWritten      ModerationNote[]      @relation("AuthorModerationNotes")
   moderationNotesReceived     ModerationNote[]      @relation("TargetUserModerationNotes")
   cabFareAcknowledgements     CabFareAcknowledgement[]
+  consents                    UserConsent[]         @relation("UserConsents")
 
   @@unique([id, audience])
   @@map("users")
@@ -831,6 +834,23 @@ model CabFareAcknowledgement {
   @@index([bookingId])
   @@index([userId])
   @@map("cab_fare_acknowledgements")
+}
+
+model UserConsent {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  termsVersion   String   @map("terms_version") @db.VarChar(32)
+  privacyVersion String   @map("privacy_version") @db.VarChar(32)
+  acceptedAt     DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  ipAddress      String?  @map("ip_address") @db.VarChar(64)
+  userAgent      String?  @map("user_agent") @db.VarChar(255)
+
+  user           User     @relation("UserConsents", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([termsVersion])
+  @@index([userId, termsVersion])
+  @@map("user_consents")
 }
 
 

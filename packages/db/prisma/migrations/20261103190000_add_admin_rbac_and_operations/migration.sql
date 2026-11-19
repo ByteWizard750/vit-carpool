@@ -1,6 +1,7 @@
 -- 1. Extend user_role_type enum
 ALTER TYPE "user_role_type" ADD VALUE IF NOT EXISTS 'MODERATOR';
 ALTER TYPE "user_role_type" ADD VALUE IF NOT EXISTS 'SUPER_ADMIN';
+COMMIT;
 
 -- 2. Add admin MFA fields to users
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "admin_mfa_enabled" BOOLEAN NOT NULL DEFAULT false;

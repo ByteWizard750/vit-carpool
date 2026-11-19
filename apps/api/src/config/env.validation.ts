@@ -124,8 +124,8 @@ export const EnvSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().optional().or(z.literal('')),
 
   // Route Geometry & Corridor Discovery
-  ROUTE_GEOMETRY_PROVIDER: z.enum(['osrm', 'mapbox', 'straight_line', 'mock']).default('osrm'),
-  CORRIDOR_SEARCH_MODE: z.enum(['ENDPOINT', 'SHADOW', 'CORRIDOR']).default('ENDPOINT'),
+  ROUTE_GEOMETRY_PROVIDER: z.enum(['osrm', 'mapbox', 'straight_line', 'mock']).default('mapbox'),
+  CORRIDOR_SEARCH_MODE: z.enum(['ENDPOINT', 'SHADOW', 'CORRIDOR']).default('CORRIDOR'),
   CORRIDOR_MAX_PICKUP_METERS: z.coerce.number().positive().default(1500),
   CORRIDOR_MAX_DROPOFF_METERS: z.coerce.number().positive().default(1500),
 }).refine(

@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   BadGatewayException,
   ServiceUnavailableException,
   Logger,
@@ -12,11 +13,17 @@ import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { EmailClassifierService } from '../verification/email-classifier.service';
+import { User, UserRole } from '@vit-carpool/db';
 import {
   RequestOtpDto,
   VerifyOtpDto,
   ResendOtpDto,
   AuthResponseDto,
+  AcceptTermsDto,
+  ConsentStatusResponseDto,
+  CURRENT_TERMS_VERSION,
+  CURRENT_PRIVACY_VERSION,
+  GLOBAL_ADMIN_RESERVED_EMAIL,
 } from '@vit-carpool/contracts';
 import { signTestJwt } from './jwt-keys.fixture';
 import { EmailService } from './email.service';
@@ -79,11 +86,18 @@ export class AuthService {
     this.customPrivateKeyPem = rawPrivateKey && rawPrivateKey.trim().length > 0 ? normalizePem(rawPrivateKey) : null;
     this.jwtKeyId = this.config.get<string>('JWT_KEY_ID', 'vit-carpool-jwt-key-1');
 
-    this.otpSecret =
-      this.config.get<string>('OTP_HMAC_SECRET') ||
-      (this.nodeEnv === 'test'
-        ? 'deterministic-test-hmac-secret-for-test-isolation-only'
-        : 'dev-secret-change-in-production-must-be-long-and-secure');
+    const configuredOtpSecret = this.config.get<string>('OTP_HMAC_SECRET');
+    if (!configuredOtpSecret || !configuredOtpSecret.trim()) {
+      if (this.nodeEnv === 'test') {
+        this.otpSecret = 'deterministic-test-hmac-secret-for-test-isolation-only';
+      } else {
+        throw new Error(
+          '[SecurityError] OTP_HMAC_SECRET is required. Refusing to start with missing cryptographic secret.',
+        );
+      }
+    } else {
+      this.otpSecret = configuredOtpSecret.trim();
+    }
 
     this.isSupabaseConfigured = Boolean(
       this.supabaseUrl &&
@@ -112,13 +126,20 @@ export class AuthService {
 
   /**
    * Sign authenticated session JWT using custom RS256 private key (or test fixture in test mode).
+   * Always embeds the user's database-backed tokenVersion for authoritative session invalidation.
    */
-  public signSessionJwt(payload: { sub: string; email: string; role?: string }): string {
+  public signSessionJwt(payload: {
+    sub: string;
+    email: string;
+    role?: string;
+    tokenVersion: number;
+  }): string {
     if (this.customPrivateKeyPem) {
       return jwt.sign(
         {
           email: payload.email,
           role: payload.role ?? 'authenticated',
+          tokenVersion: payload.tokenVersion,
         },
         this.customPrivateKeyPem,
         {
@@ -137,6 +158,7 @@ export class AuthService {
         sub: payload.sub,
         email: payload.email,
         role: payload.role,
+        tokenVersion: payload.tokenVersion,
         iss: this.expectedIssuer,
       });
     }
@@ -148,7 +170,9 @@ export class AuthService {
    * Request a passwordless email OTP for Sign Up or Sign In.
    * State is persisted to PostgreSQL to support multi-instance deployments and atomic cooldowns.
    */
-  async requestOtp(dto: RequestOtpDto): Promise<{ message: string; cooldownSeconds: number }> {
+  async requestOtp(
+    dto: RequestOtpDto,
+  ): Promise<{ message: string; cooldownSeconds: number; devOtp?: string }> {
     const email = dto.email.trim().toLowerCase();
 
     // 1. Check rate-limit cooldown against PostgreSQL persistent state
@@ -179,8 +203,9 @@ export class AuthService {
         );
       }
 
+      const isDesignatedGlobalAdmin = email === GLOBAL_ADMIN_RESERVED_EMAIL;
       const classification = this.classifier.classify(email);
-      if (!classification.isClassified) {
+      if (!classification.isClassified && !isDesignatedGlobalAdmin) {
         throw new BadRequestException(
           'Only institutional email addresses (@vitstudent.ac.in for students, @vit.ac.in for faculty) are eligible for registration.',
         );
@@ -249,7 +274,16 @@ export class AuthService {
         await this.emailService.sendOtpEmail(email, otpCode, resolvedFullName, dto.intent);
         this.logger.log(`[AuthService] OTP verification code dispatched via Gmail SMTP to ${email}`);
       } catch (err: any) {
-        this.logger.error(`[AuthService] Failed to dispatch OTP email to ${email}`);
+        this.logger.error(`[AuthService] Failed to dispatch OTP email to ${email}: ${err?.message}`);
+        // In local development, if SMTP network/port 465 is blocked by ISP/firewall, fall back gracefully to local dev OTP
+        if (this.nodeEnv === 'development') {
+          this.logger.warn(`[AuthService] [DEV FALLBACK] Network blocked SMTP dispatch. Local Dev OTP for ${email}: ${otpCode}`);
+          return {
+            message: `Verification code: ${otpCode} (Local network blocked SMTP; code auto-filled)`,
+            cooldownSeconds: 30,
+            devOtp: otpCode,
+          };
+        }
         throw new BadGatewayException('Failed to dispatch verification email. Please try again.');
       }
     } else if (this.nodeEnv === 'test') {
@@ -259,7 +293,12 @@ export class AuthService {
         'Authentication service is unavailable: Email credentials are not configured.',
       );
     } else {
-      this.logger.debug(`[AuthService] Dev OTP generated for ${email} (Expires in 5m)`);
+      this.logger.log(`[AuthService] [DEV MODE] Local OTP generated for ${email}: ${otpCode}`);
+      return {
+        message: `Verification code: ${otpCode} (Dev mode active)`,
+        cooldownSeconds: 30,
+        devOtp: otpCode,
+      };
     }
 
     return {
@@ -278,7 +317,7 @@ export class AuthService {
    * - Keyed HMAC verification with timing-safe comparison.
    * - Multi-instance synchronized state.
    */
-  async verifyOtp(dto: VerifyOtpDto): Promise<AuthResponseDto> {
+  async verifyOtp(dto: VerifyOtpDto, clientIp?: string, userAgent?: string): Promise<AuthResponseDto> {
     const email = dto.email.trim().toLowerCase();
     const tokenInput = dto.token.trim();
 
@@ -408,10 +447,6 @@ export class AuthService {
     // Authoritative Database Record Synchronization
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     authUserId = existingUser ? existingUser.authUserId : crypto.randomUUID();
-    jwtToken = this.signSessionJwt({
-      sub: authUserId,
-      email,
-    });
 
     let userRecord;
     if (dto.intent === 'signup') {
@@ -421,6 +456,21 @@ export class AuthService {
         email,
         fullName: resolvedFullName,
       });
+
+      // Immutable user consent record created upon successful registration verification
+      try {
+        await this.prisma.userConsent.create({
+          data: {
+            userId: userRecord.id,
+            termsVersion: dto.termsVersion || CURRENT_TERMS_VERSION,
+            privacyVersion: CURRENT_PRIVACY_VERSION,
+            ipAddress: clientIp || null,
+            userAgent: userAgent ? userAgent.substring(0, 255) : null,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to record user consent on signup: ${err}`);
+      }
     } else {
       userRecord = await this.prisma.user.findUnique({ where: { email } });
       if (!userRecord) {
@@ -434,6 +484,13 @@ export class AuthService {
         });
       }
     }
+
+    jwtToken = this.signSessionJwt({
+      sub: userRecord.authUserId,
+      email: userRecord.email,
+      role: userRecord.role,
+      tokenVersion: userRecord.tokenVersion,
+    });
 
     return {
       token: jwtToken,
@@ -523,5 +580,128 @@ export class AuthService {
         },
       })
       .catch(() => {});
+  }
+
+  /**
+   * Invalidate active session for the authenticated user on logout.
+   */
+  async logout(authHeader?: string): Promise<void> {
+    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+      return;
+    }
+
+    const token = authHeader.substring(7).trim();
+    if (!token) return;
+
+    try {
+      const decodedRaw = jwt.decode(token) as { sub?: string; email?: string } | null;
+      if (!decodedRaw) return;
+
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            ...(decodedRaw.sub ? [{ authUserId: decodedRaw.sub }, { id: decodedRaw.sub }] : []),
+            ...(decodedRaw.email ? [{ email: decodedRaw.email.toLowerCase() }] : []),
+          ],
+        },
+      });
+
+      if (user) {
+        const updated = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            tokenVersion: { increment: 1 },
+          },
+        });
+        this.logger.log(
+          `[AuthService] Invalidated active sessions for user ${user.id} (${user.email}). New tokenVersion=${updated.tokenVersion}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`[AuthService] Logout token invalidation encountered an error: ${err}`);
+    }
+  }
+
+  /**
+   * Check whether the user has accepted the latest version of Terms & Conditions.
+   */
+  async getConsentStatus(user: User): Promise<ConsentStatusResponseDto> {
+    const latestConsent = await this.prisma.userConsent.findFirst({
+      where: { userId: user.id },
+      orderBy: { acceptedAt: 'desc' },
+    });
+
+    const hasAcceptedLatest = latestConsent?.termsVersion === CURRENT_TERMS_VERSION;
+
+    return {
+      hasAcceptedLatest,
+      currentTermsVersion: CURRENT_TERMS_VERSION,
+      currentPrivacyVersion: CURRENT_PRIVACY_VERSION,
+      latestAcceptedVersion: latestConsent?.termsVersion ?? null,
+      acceptedAt: latestConsent?.acceptedAt ? latestConsent.acceptedAt.toISOString() : null,
+    };
+  }
+
+  /**
+   * Explicitly record user consent for updated Terms & Conditions (immutable ledger entry).
+   */
+  async acceptTerms(
+    user: User,
+    dto: AcceptTermsDto,
+    clientIp?: string,
+    userAgent?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    if (dto.termsVersion !== CURRENT_TERMS_VERSION) {
+      throw new BadRequestException(
+        `Invalid terms version. Expected ${CURRENT_TERMS_VERSION}, got ${dto.termsVersion}`,
+      );
+    }
+
+    await this.prisma.userConsent.create({
+      data: {
+        userId: user.id,
+        termsVersion: dto.termsVersion,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        ipAddress: clientIp || null,
+        userAgent: userAgent ? userAgent.substring(0, 255) : null,
+      },
+    });
+
+    this.logger.log(`[AuthService] User ${user.id} accepted Terms & Conditions version ${dto.termsVersion}`);
+
+    return {
+      success: true,
+      message: 'Terms & Conditions accepted successfully',
+    };
+  }
+
+  /**
+   * Administrative view of user consent history.
+   * Preserves historical acceptance records without exposing unnecessary private details.
+   */
+  async getUserConsentsForAdmin(adminUser: User, targetUserId: string) {
+    if (adminUser.role !== UserRole.ADMIN && adminUser.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only administrators can inspect consent audit records.');
+    }
+
+    const records = await this.prisma.userConsent.findMany({
+      where: { userId: targetUserId },
+      orderBy: { acceptedAt: 'desc' },
+      select: {
+        id: true,
+        termsVersion: true,
+        privacyVersion: true,
+        acceptedAt: true,
+        ipAddress: true,
+      },
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      termsVersion: r.termsVersion,
+      privacyVersion: r.privacyVersion,
+      acceptedAt: r.acceptedAt.toISOString(),
+      ipAddress: r.ipAddress,
+    }));
   }
 }

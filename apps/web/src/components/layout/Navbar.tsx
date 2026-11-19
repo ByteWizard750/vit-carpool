@@ -76,8 +76,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
         .catch(() => {});
     };
     checkUnread();
-    const interval = setInterval(checkUnread, 8000);
-    return () => clearInterval(interval);
+
+    const handleSync = () => checkUnread();
+    window.addEventListener('app:notification_new', handleSync);
+    window.addEventListener('app:chat_unread', handleSync);
+    window.addEventListener('app:sync_data', handleSync);
+
+    const interval = setInterval(checkUnread, 30000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('app:notification_new', handleSync);
+      window.removeEventListener('app:chat_unread', handleSync);
+      window.removeEventListener('app:sync_data', handleSync);
+    };
   }, [user, token]);
 
   const handleSignOut = () => {
@@ -318,12 +329,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                             textOverflow: 'ellipsis',
                             marginTop: '2px',
                           }}
-                          title={`${user.email} • ${user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}`}
+                          title={`${user.email} • ${
+                            user.role === 'SUPER_ADMIN'
+                              ? 'Global Admin'
+                              : user.role === 'ADMIN'
+                              ? 'Operations Admin'
+                              : user.audience === 'FACULTY'
+                              ? 'Faculty Cohort'
+                              : 'Student Cohort'
+                          }`}
                         >
                           <span>{user.email}</span>
                           <span style={{ margin: '0 4px', opacity: 0.6 }}>&bull;</span>
-                          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                            {user.audience === 'FACULTY' ? 'Faculty Cohort' : 'Student Cohort'}
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: user.role === 'SUPER_ADMIN' ? '#d97706' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {user.role === 'SUPER_ADMIN'
+                              ? 'Global Admin'
+                              : user.role === 'ADMIN'
+                              ? 'Operations Admin'
+                              : user.audience === 'FACULTY'
+                              ? 'Faculty Cohort'
+                              : 'Student Cohort'}
                           </span>
                         </div>
                       </div>
@@ -426,7 +456,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                 <Home size={16} style={{ marginRight: '8px' }} /> How It Works
               </Link>
 
-              {user.role === 'ADMIN' && (
+              {['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(user.role) && (
                 <>
                   <div className="mobile-nav-heading" style={{ color: '#dc2626' }}>Administration</div>
                   <Link
@@ -436,7 +466,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenVerification }) => {
                     id="mobile-drawer-admin"
                     style={{ color: '#dc2626', fontWeight: 700 }}
                   >
-                    <ShieldAlert size={16} style={{ marginRight: '8px' }} /> Admin Console
+                    <ShieldAlert size={16} style={{ marginRight: '8px' }} /> Admin Control Centre
                   </Link>
                 </>
               )}

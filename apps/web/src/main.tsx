@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, AUTH_UNAUTHORIZED_EVENT } from './features/auth/AuthContext';
+import { EventsProvider } from './features/events/EventsContext';
 import { App } from './App';
 import './index.css';
 
@@ -37,7 +38,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <App />
+        <EventsProvider>
+          <App />
+        </EventsProvider>
       </AuthProvider>
     </QueryClientProvider>
   </React.StrictMode>,

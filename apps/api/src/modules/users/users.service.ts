@@ -13,10 +13,14 @@ import {
   UserRole,
   VerificationStatus,
   VerificationMethod,
+  RideStatus,
+  BookingStatus,
 } from '@vit-carpool/db';
 import {
   UserProfileResponseDto,
   UpdateUserProfileDto,
+  PublicUserProfileDto,
+  GLOBAL_ADMIN_RESERVED_EMAIL,
 } from '@vit-carpool/contracts';
 
 export interface CreateUserInput {
@@ -68,6 +72,7 @@ export class UsersService {
       return existingByEmail;
     }
 
+    const isDesignatedGlobalAdmin = normalizedEmail === GLOBAL_ADMIN_RESERVED_EMAIL;
     // Evaluate automatic classification (disabled by default until rules confirmed)
     const classification = this.classifier.classify(normalizedEmail);
 
@@ -76,7 +81,7 @@ export class UsersService {
         data: {
           authUserId: input.authUserId,
           email: normalizedEmail,
-          fullName: input.fullName || normalizedEmail.split('@')[0],
+          fullName: input.fullName || (isDesignatedGlobalAdmin ? 'VIT Carpool Administrator' : normalizedEmail.split('@')[0]),
           phoneNumber: input.phoneNumber ?? null,
           audience: classification.audience,
           verificationStatus: classification.isClassified
@@ -280,5 +285,75 @@ export class UsersService {
     });
 
     return this.mapToUserProfileDto(updated);
+  }
+
+  /**
+   * Look up another user's public profile.
+   * Privacy-preserving: strictly omits email, phoneNumber, authUserId, suspension status.
+   * Enforces audience isolation (students cannot view faculty profiles unless viewer is Admin).
+   */
+  async getPublicProfile(viewer: User, targetUserId: string): Promise<PublicUserProfileDto> {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        audience: true,
+        verificationStatus: true,
+        createdAt: true,
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException('User not found.');
+    }
+
+    // Audience isolation check
+    const isPrivileged = viewer.role === UserRole.ADMIN || viewer.role === UserRole.SUPER_ADMIN;
+    if (!isPrivileged && viewer.audience && target.audience && viewer.audience !== target.audience) {
+      throw new NotFoundException('User not found or not accessible.');
+    }
+
+    // Aggregate driver ratings
+    const ratingAgg = await this.prisma.driverRating.aggregate({
+      where: { driverId: targetUserId },
+      _avg: { rating: true },
+      _count: { id: true },
+    });
+
+    // Count rides offered
+    const ridesOffered = await this.prisma.ride.count({
+      where: {
+        driverId: targetUserId,
+        status: { in: [RideStatus.COMPLETED, RideStatus.IN_PROGRESS, RideStatus.SCHEDULED] },
+      },
+    });
+
+    // Count rides completed as passenger
+    const ridesCompleted = await this.prisma.booking.count({
+      where: {
+        passengerId: targetUserId,
+        status: BookingStatus.CONFIRMED,
+        ride: { status: RideStatus.COMPLETED },
+      },
+    });
+
+    return {
+      id: target.id,
+      fullName: target.fullName,
+      avatarUrl: target.avatarUrl ?? null,
+      audience: target.audience,
+      verificationStatus: target.verificationStatus,
+      memberSince: target.createdAt.toISOString(),
+      driverRating: {
+        averageRating: ratingAgg._avg.rating ? Math.round(ratingAgg._avg.rating * 10) / 10 : null,
+        totalReviews: ratingAgg._count.id,
+      },
+      stats: {
+        ridesOffered,
+        ridesCompleted,
+      },
+    };
   }
 }

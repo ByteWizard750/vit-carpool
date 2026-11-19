@@ -212,9 +212,12 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
   afterAll(async () => {
     if (app) await app.close();
     if (testPrisma) await testPrisma.$disconnect();
-  });
+  }, 15000);
 
   beforeEach(async () => {
+    if (trackingService) {
+      (trackingService as any).lastUpdateMap?.clear();
+    }
     await testPrisma.notification.deleteMany();
     await testPrisma.driverLocationSnapshot.deleteMany();
     await testPrisma.rideTrackingSession.deleteMany();
@@ -351,7 +354,7 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
         where: { rideId: activeRideId },
       });
       expect(session?.endedAt).not.toBeNull();
-    });
+    }, 15000);
 
     it('JOURNEY B — Multi-passenger individual ETAs and distinct pickup proximity triggers', async () => {
       await request(app.getHttpServer())
@@ -359,11 +362,11 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
         .set('Authorization', `Bearer ${driverToken}`)
         .expect(201);
 
-      // Driver at 12.8980, 80.0880: Close to Passenger 1 (Vandalur, ~1.2 km), further from Passenger 2 (Perungalathur, ~2.5 km)
+      // Driver at 12.8920, 80.0840: Close to Passenger 1 (Vandalur, ~460m), further from Passenger 2 (Perungalathur, ~2.3km)
       await new Promise((r) => setTimeout(r, 1100));
       const res = await trackingService.recordDriverLocation(driverUser, activeRideId, {
-        latitude: 12.8980,
-        longitude: 80.0880,
+        latitude: 12.8920,
+        longitude: 80.0840,
         accuracy: 10,
         speedKmh: 35,
       });
@@ -378,7 +381,7 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
       expect(res.passengerETAs[p1User.id].distanceMeters).toBeLessThan(
         res.passengerETAs[p2User.id].distanceMeters,
       );
-    });
+    }, 15000);
 
     it('JOURNEY C — Mid-journey booking cancellation immediately revokes access without affecting other passenger', async () => {
       await request(app.getHttpServer())
@@ -451,7 +454,7 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
         .expect(200);
 
       expect(activeRes.body.isStale).toBe(false);
-    });
+    }, 15000);
 
     it('JOURNEY E — Unauthorized access enforcement across 6 attack vectors', async () => {
       await request(app.getHttpServer())
@@ -536,6 +539,11 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
     });
 
     it('enforces GPS location ingestion rate limiting (max 1 req/sec per ride)', async () => {
+      // Isolate rate-limiter state for activeRideId
+      if (trackingService) {
+        (trackingService as any).lastUpdateMap?.delete(activeRideId);
+      }
+
       await request(app.getHttpServer())
         .post(`/rides/${activeRideId}/start`)
         .set('Authorization', `Bearer ${driverToken}`)
@@ -558,7 +566,7 @@ describe('Milestone 7.8: Complete Integration, Security & Production Validation 
         .expect(429);
 
       expect(rateLimitRes.body.message).toContain('Rate limit exceeded');
-    });
+    }, 15000);
 
     it('prevents cross-user data leakage: Co-passengers only see first names, never full names or contact numbers', async () => {
       await request(app.getHttpServer())

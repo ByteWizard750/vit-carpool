@@ -18,6 +18,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@vit-carpool/db';
 import { NotificationsService } from './notifications.service';
 import { WebPushService } from './web-push.service';
+import { validatePushEndpoint } from './push-endpoint.validator';
 import {
   NotificationResponseDto,
   NotificationsListResponseDto,
@@ -49,8 +50,9 @@ export class NotificationsController {
     if (!body?.endpoint || !body?.keys?.p256dh || !body?.keys?.auth) {
       throw new BadRequestException('Invalid subscription payload: endpoint, p256dh, and auth are required');
     }
+    const validatedEndpoint = validatePushEndpoint(body.endpoint);
     await this.webPushService.registerSubscription(user.id, {
-      endpoint: body.endpoint,
+      endpoint: validatedEndpoint,
       p256dh: body.keys.p256dh,
       auth: body.keys.auth,
     });

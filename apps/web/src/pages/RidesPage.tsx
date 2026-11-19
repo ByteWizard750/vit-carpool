@@ -28,10 +28,13 @@ import {
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { LocationAutocomplete } from '../components/common/LocationAutocomplete';
+import { searchFallbackLandmarks } from '../components/common/chennai-landmarks.data';
 import { RouteSpine } from '../components/common/RouteSpine';
 import { SeatDots } from '../components/common/SeatDots';
 import { PageShell } from '../components/layout/PageShell';
 import { PageHeader } from '../components/common/PageHeader';
+import { PublicProfileModal } from '../components/profile/PublicProfileModal';
+import { useDataSync, triggerAppSync } from '../hooks/useDataSync';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   PublicRideSummaryDto,
@@ -122,6 +125,7 @@ export const RidesPage: React.FC = () => {
 
   // Selected ride for detail view & booking
   const [selectedRide, setSelectedRide] = useState<PublicRideSummaryDto | null>(null);
+  const [viewProfileUserId, setViewProfileUserId] = useState<string | null>(null);
   const [requestedSeats, setRequestedSeats] = useState<number>(1);
   const [bookingLoading, setBookingLoading] = useState<boolean>(false);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
@@ -232,8 +236,18 @@ export const RidesPage: React.FC = () => {
 
       const curOrigin = overrides?.origin !== undefined ? overrides.origin : origin;
       const curDest = overrides?.destination !== undefined ? overrides.destination : destination;
-      const curOriginLoc = overrides?.originLoc !== undefined ? overrides.originLoc : originLocation;
-      const curDestLoc = overrides?.destLoc !== undefined ? overrides.destLoc : destLocation;
+      let curOriginLoc = overrides?.originLoc !== undefined ? overrides.originLoc : originLocation;
+      if (!curOriginLoc && curOrigin.trim()) {
+        const fallbackOrigin = searchFallbackLandmarks(curOrigin.trim(), 1);
+        if (fallbackOrigin.length > 0) curOriginLoc = fallbackOrigin[0];
+      }
+
+      let curDestLoc = overrides?.destLoc !== undefined ? overrides.destLoc : destLocation;
+      if (!curDestLoc && curDest.trim()) {
+        const fallbackDest = searchFallbackLandmarks(curDest.trim(), 1);
+        if (fallbackDest.length > 0) curDestLoc = fallbackDest[0];
+      }
+
       const curDate = overrides?.date !== undefined ? overrides.date : date;
       const curSeats = overrides?.seats !== undefined ? overrides.seats : seats;
       const curMaxCost = overrides?.maxCost !== undefined ? overrides.maxCost : maxCost;
@@ -375,6 +389,26 @@ export const RidesPage: React.FC = () => {
     }
   }, [token, user?.verificationStatus]);
 
+  // Real-time ride event subscription: immediately re-fetch when any ride is created, modified, or cancelled
+  useEffect(() => {
+    const handleRideEvent = () => {
+      if (token && user?.verificationStatus === 'VERIFIED' && !selectedRide) {
+        executeSearch(1);
+      }
+    };
+    window.addEventListener('app:ride_event', handleRideEvent);
+    return () => {
+      window.removeEventListener('app:ride_event', handleRideEvent);
+    };
+  }, [token, user?.verificationStatus, selectedRide, executeSearch]);
+
+  // Periodic quiet search refresh when tab is active
+  useDataSync(() => {
+    if (token && user?.verificationStatus === 'VERIFIED' && !selectedRide) {
+      executeSearch(currentPage);
+    }
+  }, 9000);
+
   const handleFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const nextParams = new URLSearchParams();
@@ -441,8 +475,9 @@ export const RidesPage: React.FC = () => {
       setBookingSuccess(
         `Seat request submitted to ${selectedRide.driverName}! Your request is pending driver confirmation. Available seats remain allocated after approval.`,
       );
-      // Refresh current search results to update UI
+      // Refresh current search results and notify active views to update
       executeSearch(currentPage);
+      triggerAppSync();
     } catch (err: any) {
       setBookingError(err.message || 'Unable to submit seat request. Please try again.');
     } finally {
@@ -463,6 +498,30 @@ export const RidesPage: React.FC = () => {
           </Link>
         }
       />
+
+      {user?.audience && (
+        <div
+          id="rides-audience-banner"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 14px',
+            borderRadius: '8px',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            marginBottom: '1rem',
+            background: user.audience === 'FACULTY' ? '#f5f3ff' : '#eff6ff',
+            color: user.audience === 'FACULTY' ? '#6b21a8' : '#1e40af',
+            border: `1px solid ${user.audience === 'FACULTY' ? '#ddd6fe' : '#bfdbfe'}`,
+          }}
+        >
+          <ShieldCheck size={16} />
+          <span>
+            {user.audience === 'FACULTY' ? 'Faculty Cohort • Faculty Peer Rides' : 'Student Cohort • Student Peer Rides'}
+          </span>
+        </div>
+      )}
 
       {/* Sleek Segmented Switcher: Find a Ride vs Offer a Ride */}
       <div className="commute-mode-segmented-bar" id="ride-mode-switcher-banner">
@@ -973,9 +1032,32 @@ export const RidesPage: React.FC = () => {
       {user && (
         <>
           {loading ? (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px', color: 'var(--color-brand-600)' }} />
-              <div style={{ fontWeight: 600 }}>Scanning verified campus corridors...</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '24px',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '16px',
+                    border: '1px solid var(--border-light, #e2e8f0)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="skeleton" style={{ width: '140px', height: '24px', borderRadius: '12px' }} />
+                    <div className="skeleton" style={{ width: '70px', height: '24px', borderRadius: '8px' }} />
+                  </div>
+                  <div className="skeleton" style={{ width: '65%', height: '22px', borderRadius: '4px' }} />
+                  <div className="skeleton" style={{ width: '45%', height: '16px', borderRadius: '4px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                    <div className="skeleton" style={{ width: '130px', height: '20px', borderRadius: '4px' }} />
+                    <div className="skeleton" style={{ width: '110px', height: '38px', borderRadius: '8px' }} />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : rides.length === 0 ? (
             <div
@@ -1224,7 +1306,14 @@ export const RidesPage: React.FC = () => {
 
                       {/* Driver / Organiser & Available Seats Summary */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewProfileUserId(ride.driverId);
+                          }}
+                          title="View Verified Profile"
+                        >
                           {ride.driverAvatarUrl ? (
                             <img
                               src={ride.driverAvatarUrl}
@@ -1480,7 +1569,11 @@ export const RidesPage: React.FC = () => {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Users size={13} /> Journey Organiser
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', cursor: 'pointer' }}
+                        onClick={() => setViewProfileUserId(selectedRide.driverId)}
+                        title="View Organiser Verified Profile"
+                      >
                         {selectedRide.driverAvatarUrl ? (
                           <img
                             src={selectedRide.driverAvatarUrl}
@@ -1659,7 +1752,11 @@ export const RidesPage: React.FC = () => {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Car size={13} /> Registered Vehicle
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', cursor: 'pointer' }}
+                        onClick={() => setViewProfileUserId(selectedRide.driverId)}
+                        title="View Organiser Verified Profile"
+                      >
                         {selectedRide.vehicle?.imageUrl && (
                           <img
                             src={selectedRide.vehicle.imageUrl}
@@ -1686,7 +1783,11 @@ export const RidesPage: React.FC = () => {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <ShieldCheck size={13} /> Verified Driver
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', cursor: 'pointer' }}
+                        onClick={() => setViewProfileUserId(selectedRide.driverId)}
+                        title="View Organiser Verified Profile"
+                      >
                         {selectedRide.driverAvatarUrl ? (
                           <img
                             src={selectedRide.driverAvatarUrl}
@@ -2199,6 +2300,14 @@ export const RidesPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Public Profile View Modal */}
+      <PublicProfileModal
+        userId={viewProfileUserId}
+        isOpen={Boolean(viewProfileUserId)}
+        onClose={() => setViewProfileUserId(null)}
+        token={token}
+      />
     </PageShell>
   );
 };

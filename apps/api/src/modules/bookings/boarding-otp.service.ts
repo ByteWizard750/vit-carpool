@@ -37,10 +37,21 @@ export class BoardingOtpService {
   constructor(private readonly config: ConfigService) {
     const rawSecret =
       this.config.get<string>('OTP_HMAC_SECRET') ||
-      this.config.get<string>('JWT_PRIVATE_KEY') ||
-      'vit-carpool-boarding-otp-master-secret-key-salt-2026';
+      this.config.get<string>('JWT_PRIVATE_KEY');
 
-    this.hmacSecret = rawSecret.trim();
+    if (!rawSecret || !rawSecret.trim()) {
+      const nodeEnv = this.config.get<string>('NODE_ENV');
+      if (nodeEnv === 'test') {
+        this.hmacSecret = 'deterministic-test-hmac-secret-for-test-isolation-only';
+      } else {
+        throw new Error(
+          '[SecurityError] OTP_HMAC_SECRET is required for boarding OTP derivation. Refusing to start with missing cryptographic secret.',
+        );
+      }
+    } else {
+      this.hmacSecret = rawSecret.trim();
+    }
+
     // Derive exactly 32 bytes (256 bits) for AES-256-GCM encryption
     this.encryptionKey = crypto.createHash('sha256').update(this.hmacSecret).digest();
   }

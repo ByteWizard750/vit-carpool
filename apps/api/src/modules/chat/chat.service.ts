@@ -13,8 +13,11 @@ import {
   MessageResponseDto,
   ConversationDetailDto,
   ConversationSummaryDto,
+  APP_SOCKET_EVENTS,
 } from '@vit-carpool/contracts';
 import { ModerationService } from '../moderation/moderation.service';
+import { EventsService } from '../events/events.service';
+import { Optional } from '@nestjs/common';
 
 @Injectable()
 export class ChatService {
@@ -24,6 +27,7 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly moderationService: ModerationService,
+    @Optional() private readonly eventsService?: EventsService,
   ) {}
 
   /**
@@ -462,7 +466,7 @@ export class ChatService {
       },
     });
 
-    return {
+    const responseDto: MessageResponseDto = {
       id: createdMessage.id,
       conversationId: createdMessage.conversationId,
       senderId: createdMessage.senderId,
@@ -472,6 +476,23 @@ export class ChatService {
       createdAt: createdMessage.createdAt.toISOString(),
       isMine: true,
     };
+
+    // Real-time broadcast: push message to conversation room and to recipient directly
+    try {
+      const recipientId = conversation.passengerId === user.id ? conversation.driverId : conversation.passengerId;
+      this.eventsService?.emitToConversation(conversationId, APP_SOCKET_EVENTS.CHAT_MESSAGE, responseDto);
+      this.eventsService?.emitToUser(recipientId, APP_SOCKET_EVENTS.CHAT_MESSAGE, {
+        ...responseDto,
+        isMine: false,
+      });
+      this.eventsService?.emitToUser(recipientId, APP_SOCKET_EVENTS.CHAT_UNREAD, {
+        conversationId,
+      });
+    } catch (err) {
+      this.logger.warn(`[ChatService] Real-time message emission warning: ${err}`);
+    }
+
+    return responseDto;
   }
 
   /**
@@ -501,6 +522,15 @@ export class ChatService {
         readAt: new Date(),
       },
     });
+
+    try {
+      this.eventsService?.emitToUser(user.id, APP_SOCKET_EVENTS.CHAT_UNREAD, {
+        conversationId,
+        read: true,
+      });
+    } catch (err) {
+      this.logger.warn(`[ChatService] Real-time read update warning: ${err}`);
+    }
 
     return { success: true };
   }
