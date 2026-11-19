@@ -318,17 +318,26 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       attributionControl: false,
     });
 
-    // Premium Mobility Tile Layer: CartoDB Voyager (Apple Maps / Uber aesthetic)
-    // High-contrast roads, subtle buildings, zero visual noise, retina @2x support
+    // Clean, high-contrast mobility basemap: OpenStreetMap Humanitarian (HOT)
+    // 100% free, zero watermark, transit-optimized road hierarchy
     const mobilityTiles = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
       {
-        subdomains: 'abcd',
+        subdomains: 'abc',
         maxZoom: 19,
         attribution:
-          '&copy; <a href="https://carto.com/" target="_blank">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
       }
     );
+
+    // Resilient fallback to OpenStreetMap Standard if HOT experiences network issues
+    mobilityTiles.on('tileerror', () => {
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+      }).addTo(map);
+    });
 
     mobilityTiles.addTo(map);
 
