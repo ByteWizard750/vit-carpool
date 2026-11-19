@@ -81,56 +81,84 @@ function easeOutCubic(t: number): number {
 }
 
 /**
- * High-fidelity top-down vehicle SVG asset with realistic chassis, windshields,
- * side mirrors, front headlight beams, and rear taillights.
+ * Classy, executive top-down sports sedan SVG asset (Porsche / Audi e-tron aesthetic)
+ * Featuring metallic obsidian lacquer, sculpted aero curves, xenon light beams, and continuous rear LED lightbar.
  */
-function renderTopDownCarSvg(color: string, roofColor: string, isStale: boolean): string {
-  const headlightColor = isStale ? '#fbbf24' : '#38bdf8';
+function renderTopDownCarSvg(isStale: boolean): string {
+  const beamColor = isStale ? '#f59e0b' : '#38bdf8';
   return `
-    <svg width="42" height="66" viewBox="0 0 42 66" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 8px 18px rgba(0,0,0,0.48));">
+    <svg width="44" height="76" viewBox="0 0 44 76" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 10px 22px rgba(0,0,0,0.55));">
       <defs>
-        <linearGradient id="headlight-beam" x1="0%" y1="100%" x2="0%" y2="0%">
-          <stop offset="0%" stop-color="${headlightColor}" stop-opacity="0.8"/>
-          <stop offset="100%" stop-color="${headlightColor}" stop-opacity="0"/>
+        <linearGradient id="bodyLacquer" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0b0f19" />
+          <stop offset="20%" stop-color="#1e293b" />
+          <stop offset="45%" stop-color="#334155" />
+          <stop offset="55%" stop-color="#1e293b" />
+          <stop offset="80%" stop-color="#334155" />
+          <stop offset="100%" stop-color="#0b0f19" />
+        </linearGradient>
+
+        <linearGradient id="glassCanopy" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#020617" stop-opacity="0.95" />
+          <stop offset="35%" stop-color="#0f172a" stop-opacity="0.85" />
+          <stop offset="70%" stop-color="#1e293b" stop-opacity="0.8" />
+          <stop offset="100%" stop-color="#020617" stop-opacity="0.95" />
+        </linearGradient>
+
+        <linearGradient id="specularSheen" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.45)" />
+          <stop offset="50%" stop-color="rgba(255,255,255,0.05)" />
+          <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+        </linearGradient>
+
+        <linearGradient id="headlightBeam" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="${beamColor}" stop-opacity="0.75" />
+          <stop offset="70%" stop-color="${beamColor}" stop-opacity="0.2" />
+          <stop offset="100%" stop-color="${beamColor}" stop-opacity="0" />
         </linearGradient>
       </defs>
 
-      <!-- Headlight Projections (Forward beams) -->
-      <polygon points="10,14 1,0 15,0" fill="url(#headlight-beam)" opacity="0.75" />
-      <polygon points="32,14 27,0 41,0" fill="url(#headlight-beam)" opacity="0.75" />
+      <!-- Forward High-Intensity Projection Light Beams -->
+      <polygon points="11,18 2,0 18,0" fill="url(#headlightBeam)" opacity="0.8" />
+      <polygon points="33,18 26,0 42,0" fill="url(#headlightBeam)" opacity="0.8" />
 
-      <!-- Shadow Underbody Base -->
-      <rect x="7" y="12" width="28" height="48" rx="8" fill="#090d16" />
+      <!-- Performance Low-Profile Wheels -->
+      <rect x="3" y="20" width="4" height="10" rx="1.5" fill="#020617" />
+      <rect x="37" y="20" width="4" height="10" rx="1.5" fill="#020617" />
+      <rect x="3" y="50" width="4" height="10" rx="1.5" fill="#020617" />
+      <rect x="37" y="50" width="4" height="10" rx="1.5" fill="#020617" />
 
-      <!-- Side Mirrors -->
-      <rect x="3" y="24" width="4" height="7" rx="2" fill="#1e293b" />
-      <rect x="35" y="24" width="4" height="7" rx="2" fill="#1e293b" />
+      <!-- Sculpted Aerodynamic Monocoque Body -->
+      <path d="M14 13 C17 11.5, 27 11.5, 30 13 C33 15, 36.5 19, 36.5 28 C37 36, 35.5 44, 37 53 C37.5 59, 34.5 65.5, 31 66.5 C28 67.5, 16 67.5, 13 66.5 C9.5 65.5, 6.5 59, 7 53 C8.5 44, 7 36, 7.5 28 C7.5 19, 11 15, 14 13 Z" fill="url(#bodyLacquer)" stroke="#475569" stroke-width="0.8" />
 
-      <!-- Car Outer Painted Body -->
-      <rect x="8" y="13" width="26" height="46" rx="7" fill="${color}" />
+      <!-- High-Gloss Hood Creases -->
+      <path d="M15 14 L17.5 24 M29 14 L26.5 24" stroke="rgba(255,255,255,0.35)" stroke-width="0.8" stroke-linecap="round" />
+      <path d="M22 13 L22 23" stroke="rgba(255,255,255,0.18)" stroke-width="0.6" stroke-linecap="round" />
 
-      <!-- Aerodynamic Hood Curves -->
-      <path d="M13 14 L15 23 M29 14 L27 23" stroke="rgba(255,255,255,0.4)" stroke-width="1.2" stroke-linecap="round" />
+      <!-- Aerodynamic Side Mirrors with Chrome Turn Indicators -->
+      <path d="M6.5 28 C3.5 28, 2.5 31, 5.5 33 L7.5 33 Z" fill="#1e293b" stroke="#64748b" stroke-width="0.5" />
+      <line x1="4" y1="29.5" x2="6" y2="31" stroke="#f8fafc" stroke-width="0.7" stroke-linecap="round" />
 
-      <!-- Front Windshield (Curved Dark Tint) -->
-      <path d="M10 25 C10 22, 32 22, 32 25 L31 32 L11 32 Z" fill="#090d16" />
+      <path d="M37.5 28 C40.5 28, 41.5 31, 38.5 33 L36.5 33 Z" fill="#1e293b" stroke="#64748b" stroke-width="0.5" />
+      <line x1="40" y1="29.5" x2="38" y2="31" stroke="#f8fafc" stroke-width="0.7" stroke-linecap="round" />
 
-      <!-- Cabin Roof -->
-      <rect x="11" y="32" width="20" height="16" rx="2" fill="${roofColor}" />
+      <!-- Panoramic Dark Tint Glasshouse Canopy -->
+      <path d="M12.5 27 C15 25, 29 25, 31.5 27 L32.5 48 C30 50.5, 14 50.5, 11.5 48 Z" fill="url(#glassCanopy)" stroke="#090d16" stroke-width="0.6" />
+
+      <!-- Specular Glass Highlight Glazing -->
+      <path d="M13.5 27.5 L24 27.5 L17 48 L12.5 47 Z" fill="url(#specularSheen)" opacity="0.6" />
 
       <!-- Tinted Sunroof Glass -->
-      <rect x="14" y="34" width="14" height="10" rx="1.5" fill="#090d16" opacity="0.85" />
+      <rect x="15" y="32" width="14" height="12" rx="1.5" fill="#020617" stroke="rgba(56,189,248,0.4)" stroke-width="0.6" />
 
-      <!-- Rear Windshield -->
-      <path d="M11 48 L31 48 L32 53 C32 54.5, 10 54.5, 10 53 Z" fill="#090d16" />
+      <!-- Dual Xenon LED Headlight Blades -->
+      <path d="M11.5 15.5 L16.5 14" stroke="#e0f2fe" stroke-width="2.2" stroke-linecap="round" style="filter: drop-shadow(0 0 3px #38bdf8);" />
+      <path d="M32.5 15.5 L27.5 14" stroke="#e0f2fe" stroke-width="2.2" stroke-linecap="round" style="filter: drop-shadow(0 0 3px #38bdf8);" />
 
-      <!-- Front Xenon Headlights -->
-      <rect x="9.5" y="13" width="6.5" height="2.5" rx="1" fill="#e0f2fe" />
-      <rect x="26" y="13" width="6.5" height="2.5" rx="1" fill="#e0f2fe" />
-
-      <!-- Rear LED Taillights -->
-      <rect x="9.5" y="56.5" width="6.5" height="2.5" rx="1" fill="#ef4444" />
-      <rect x="26" y="56.5" width="6.5" height="2.5" rx="1" fill="#ef4444" />
+      <!-- Continuous Precision Red Neon LED Taillight Bar -->
+      <path d="M12 65 C17 66, 27 66, 32 65" stroke="#ef4444" stroke-width="2.4" stroke-linecap="round" style="filter: drop-shadow(0 0 4px #ef4444);" />
+      <circle cx="12.5" cy="65" r="1" fill="#ff8888" />
+      <circle cx="31.5" cy="65" r="1" fill="#ff8888" />
     </svg>
   `;
 }
@@ -660,30 +688,28 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
 
     const { latitude, longitude, heading, accuracy, speedKmh } = driverLocation;
     const targetHeading = typeof heading === 'number' && !isNaN(heading) ? (heading + 360) % 360 : 0;
-    const markerColor = isStale ? '#ea580c' : '#059669';
-    const roofColor = isStale ? '#9a3412' : '#065f46';
     const speedDisplay = typeof speedKmh === 'number' && speedKmh > 0 ? `${Math.round(speedKmh)} km/h` : null;
 
     const buildDriverIconHtml = (currHeading: number) => `
-      <div id="${isStale ? 'driver-marker-stale' : 'driver-marker'}" style="position: relative; width: 68px; height: 82px; display: flex; align-items: center; justify-content: center; pointer-events: auto;">
+      <div id="${isStale ? 'driver-marker-stale' : 'driver-marker'}" style="position: relative; width: 72px; height: 94px; display: flex; align-items: center; justify-content: center; pointer-events: auto;">
         ${
           !isStale
             ? `<div style="
                 position: absolute;
-                width: 62px;
-                height: 62px;
+                width: 68px;
+                height: 68px;
                 border-radius: 50%;
-                background: rgba(5, 150, 105, 0.24);
-                animation: driver-radar-pulse 2s infinite ease-out;
+                background: rgba(56, 189, 248, 0.18);
+                animation: driver-radar-pulse 2.2s infinite ease-out;
                 pointer-events: none;
               "></div>`
             : ''
         }
 
-        <!-- Rotating Top-Down Vehicle Container -->
+        <!-- Rotating Top-Down Luxury Vehicle Container -->
         <div class="car-rotator" style="
-          width: 42px;
-          height: 66px;
+          width: 44px;
+          height: 76px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -692,26 +718,32 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           transition: transform 0.08s linear;
           z-index: 1000;
         ">
-          ${renderTopDownCarSvg(markerColor, roofColor, isStale)}
+          ${renderTopDownCarSvg(isStale)}
         </div>
 
-        <!-- Floating Upright Speed / Status Badge -->
+        <!-- Floating Upright Speed / Status Glass Badge -->
         <div style="
           position: absolute;
-          bottom: 0px;
-          background: ${isStale ? '#ea580c' : '#059669'};
-          color: white;
-          font-size: 9.5px;
-          font-weight: 800;
-          padding: 2.5px 8px;
-          border-radius: 12px;
-          border: 1.5px solid white;
-          box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+          bottom: -4px;
+          background: rgba(15, 23, 42, 0.92);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: #ffffff;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 3px 9px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
           white-space: nowrap;
           z-index: 1010;
-          letter-spacing: 0.3px;
+          letter-spacing: 0.2px;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
         ">
-          ${speedDisplay ? `${isStale ? 'STALE • ' : ''}${speedDisplay}` : isStale ? 'STALE' : 'LIVE'}
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isStale ? '#f59e0b' : '#10b981'}; box-shadow: 0 0 6px ${isStale ? '#f59e0b' : '#10b981'};"></span>
+          <span>${speedDisplay ? `${isStale ? 'Stale • ' : ''}${speedDisplay}` : isStale ? 'Reconnecting' : 'Live'}</span>
         </div>
       </div>
     `;
@@ -719,8 +751,8 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     const driverIcon = L.divIcon({
       className: 'custom-driver-marker-icon custom-driver-icon',
       html: buildDriverIconHtml(targetHeading),
-      iconSize: [68, 82],
-      iconAnchor: [34, 41],
+      iconSize: [72, 94],
+      iconAnchor: [36, 47],
     });
 
     // Case A: First location arrival
