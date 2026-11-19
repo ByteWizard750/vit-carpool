@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 
 export interface TrackingMapProps {
+  rideId?: string;
+  routeGeometry?: Array<[number, number]>; // Array of [lat, lng]
   driverLocation?: {
     latitude: number;
     longitude: number;
@@ -60,7 +62,82 @@ function hasValidCoords<T extends { latitude?: number | null; longitude?: number
   );
 }
 
+/**
+ * Calculates the shortest signed angle between two bearings in degrees (-180 to +180).
+ */
+function getShortestAngleDelta(fromAngle: number, toAngle: number): number {
+  let diff = (toAngle - fromAngle) % 360;
+  if (diff < -180) diff += 360;
+  if (diff > 180) diff -= 360;
+  return diff;
+}
+
+/**
+ * Cubic easing out for ultra-smooth vehicular deceleration.
+ */
+function easeOutCubic(t: number): number {
+  const p = t - 1;
+  return p * p * p + 1;
+}
+
+/**
+ * High-fidelity top-down vehicle SVG asset with realistic chassis, windshields,
+ * side mirrors, front headlight beams, and rear taillights.
+ */
+function renderTopDownCarSvg(color: string, roofColor: string, isStale: boolean): string {
+  const headlightColor = isStale ? '#fbbf24' : '#38bdf8';
+  return `
+    <svg width="42" height="66" viewBox="0 0 42 66" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 8px 18px rgba(0,0,0,0.48));">
+      <defs>
+        <linearGradient id="headlight-beam" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="${headlightColor}" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="${headlightColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Headlight Projections (Forward beams) -->
+      <polygon points="10,14 1,0 15,0" fill="url(#headlight-beam)" opacity="0.75" />
+      <polygon points="32,14 27,0 41,0" fill="url(#headlight-beam)" opacity="0.75" />
+
+      <!-- Shadow Underbody Base -->
+      <rect x="7" y="12" width="28" height="48" rx="8" fill="#090d16" />
+
+      <!-- Side Mirrors -->
+      <rect x="3" y="24" width="4" height="7" rx="2" fill="#1e293b" />
+      <rect x="35" y="24" width="4" height="7" rx="2" fill="#1e293b" />
+
+      <!-- Car Outer Painted Body -->
+      <rect x="8" y="13" width="26" height="46" rx="7" fill="${color}" />
+
+      <!-- Aerodynamic Hood Curves -->
+      <path d="M13 14 L15 23 M29 14 L27 23" stroke="rgba(255,255,255,0.4)" stroke-width="1.2" stroke-linecap="round" />
+
+      <!-- Front Windshield (Curved Dark Tint) -->
+      <path d="M10 25 C10 22, 32 22, 32 25 L31 32 L11 32 Z" fill="#090d16" />
+
+      <!-- Cabin Roof -->
+      <rect x="11" y="32" width="20" height="16" rx="2" fill="${roofColor}" />
+
+      <!-- Tinted Sunroof Glass -->
+      <rect x="14" y="34" width="14" height="10" rx="1.5" fill="#090d16" opacity="0.85" />
+
+      <!-- Rear Windshield -->
+      <path d="M11 48 L31 48 L32 53 C32 54.5, 10 54.5, 10 53 Z" fill="#090d16" />
+
+      <!-- Front Xenon Headlights -->
+      <rect x="9.5" y="13" width="6.5" height="2.5" rx="1" fill="#e0f2fe" />
+      <rect x="26" y="13" width="6.5" height="2.5" rx="1" fill="#e0f2fe" />
+
+      <!-- Rear LED Taillights -->
+      <rect x="9.5" y="56.5" width="6.5" height="2.5" rx="1" fill="#ef4444" />
+      <rect x="26" y="56.5" width="6.5" height="2.5" rx="1" fill="#ef4444" />
+    </svg>
+  `;
+}
+
 export const TrackingMap: React.FC<TrackingMapProps> = ({
+  rideId,
+  routeGeometry,
   driverLocation,
   origin,
   destination,
@@ -76,8 +153,44 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
   const driverMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeGlowRef = useRef<L.Polyline | null>(null);
   const routeCasingRef = useRef<L.Polyline | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+
+  // Road Curve State
+  const [roadCoordinates, setRoadCoordinates] = useState<Array<[number, number]>>([]);
+
+  // Smooth 60fps Animation Refs
+  const animStateRef = useRef<{
+    startLat: number;
+    startLng: number;
+    targetLat: number;
+    targetLng: number;
+    startHeading: number;
+    targetHeading: number;
+    headingDelta: number;
+    startTime: number;
+    duration: number;
+    currentLat: number;
+    currentLng: number;
+    currentHeading: number;
+    isInitialized: boolean;
+  }>({
+    startLat: 0,
+    startLng: 0,
+    targetLat: 0,
+    targetLng: 0,
+    startHeading: 0,
+    targetHeading: 0,
+    headingDelta: 0,
+    startTime: 0,
+    duration: 1600,
+    currentLat: 0,
+    currentLng: 0,
+    currentHeading: 0,
+    isInitialized: false,
+  });
+  const rafIdRef = useRef<number | null>(null);
 
   // Framing & Navigation state
   const isUserPannedRef = useRef<boolean>(false);
@@ -87,7 +200,95 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
   const initialFitDoneRef = useRef<boolean>(false);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 1. Initialize Map Instance
+  // 1. Fetch Real Road Network Geometry (OSRM / Backend)
+  // ───────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let isCancelled = false;
+
+    // Use passed prop if available
+    if (routeGeometry && routeGeometry.length > 1) {
+      setRoadCoordinates(routeGeometry);
+      return;
+    }
+
+    if (!hasValidCoords(origin) || !hasValidCoords(destination)) return;
+
+    const fetchRoadRoute = async () => {
+      // Priority 1: Backend stored route geometry if rideId provided
+      if (rideId) {
+        try {
+          const token = localStorage.getItem('vit_auth_token');
+          const res = await fetch(`/api/rides/${rideId}/route`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.geometry?.coordinates && Array.isArray(data.geometry.coordinates)) {
+              // Convert [lng, lat] GeoJSON to [lat, lng] Leaflet
+              const latLngs: Array<[number, number]> = data.geometry.coordinates.map(
+                ([lng, lat]: [number, number]) => [lat, lng]
+              );
+              if (!isCancelled && latLngs.length > 1) {
+                setRoadCoordinates(latLngs);
+                return;
+              }
+            }
+          }
+        } catch {
+          // Fall back to direct road routing
+        }
+      }
+
+      // Priority 2: Direct OpenStreetMap OSRM Driving Road Routing (Routing via Origin -> Pickup -> Destination)
+      try {
+        const waypointParts: string[] = [`${origin.longitude},${origin.latitude}`];
+        if (hasValidCoords(myPickup)) {
+          waypointParts.push(`${myPickup.longitude},${myPickup.latitude}`);
+        }
+        waypointParts.push(`${destination.longitude},${destination.latitude}`);
+
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${waypointParts.join(';')}?overview=full&geometries=geojson`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(osrmUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          const coords = data?.routes?.[0]?.geometry?.coordinates;
+          if (Array.isArray(coords) && coords.length > 1) {
+            const latLngs: Array<[number, number]> = coords.map(([lng, lat]: [number, number]) => [
+              lat,
+              lng,
+            ]);
+            if (!isCancelled) {
+              setRoadCoordinates(latLngs);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Fall back to straight landmark connection if offline
+      }
+    };
+
+    fetchRoadRoute();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    rideId,
+    routeGeometry,
+    origin?.latitude,
+    origin?.longitude,
+    destination?.latitude,
+    destination?.longitude,
+    myPickup?.latitude,
+    myPickup?.longitude,
+  ]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 2. Initialize Map with Modern Clean Mobility Tiles (CartoDB Voyager)
   // ───────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -108,8 +309,8 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       center: [defaultLat, defaultLng],
       zoom: 14,
       minZoom: 10,
-      maxZoom: 18,
-      zoomControl: false, // Custom styled touch controls
+      maxZoom: 19,
+      zoomControl: false,
       scrollWheelZoom: true,
       doubleClickZoom: true,
       touchZoom: true,
@@ -117,47 +318,20 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       attributionControl: false,
     });
 
-    // Modern mobility app tiles: Mapbox Navigation Day (clean roads, subtle labels, high-contrast routing)
-    // with automatic resilient fallback to OpenStreetMap if token is absent or unreachable
-    const mapboxToken = (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '').trim();
-
-    if (mapboxToken) {
-      let fallbackTriggered = false;
-      const mapboxLayer = L.tileLayer(
-        `https://api.mapbox.com/styles/v1/mapbox/navigation-day-v1/tiles/512/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
-        {
-          maxZoom: 19,
-          tileSize: 512,
-          zoomOffset: -1,
-          attribution:
-            '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-        }
-      );
-
-      mapboxLayer.on('tileerror', () => {
-        if (!fallbackTriggered) {
-          fallbackTriggered = true;
-          map.removeLayer(mapboxLayer);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            subdomains: 'abc',
-            attribution:
-              '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-          }).addTo(map);
-        }
-      });
-
-      mapboxLayer.addTo(map);
-    } else {
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Premium Mobility Tile Layer: CartoDB Voyager (Apple Maps / Uber aesthetic)
+    // High-contrast roads, subtle buildings, zero visual noise, retina @2x support
+    const mobilityTiles = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      {
+        subdomains: 'abcd',
         maxZoom: 19,
-        subdomains: 'abc',
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-      }).addTo(map);
-    }
+          '&copy; <a href="https://carto.com/" target="_blank">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+      }
+    );
 
-    // Subtle attribution at bottom right
+    mobilityTiles.addTo(map);
+
     L.control
       .attribution({ position: 'bottomright', prefix: false })
       .addTo(map);
@@ -165,9 +339,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     corridorLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
-    // Detect manual user navigation (pan, drag, pinch)
     const handleUserInteraction = (e: L.LeafletEvent) => {
-      // 'dragstart' is exclusively user-initiated. For other events, check originalEvent.
       if (e.type === 'dragstart' || (e as any).originalEvent) {
         isUserPannedRef.current = true;
         setIsUserInteracting(true);
@@ -177,7 +349,6 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     map.on('dragstart', handleUserInteraction);
     map.on('zoomstart', handleUserInteraction);
 
-    // Ensure map redraws correctly on container size change
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
     });
@@ -189,6 +360,10 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     }, 150);
 
     return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       resizeObserver.disconnect();
       map.off('dragstart', handleUserInteraction);
       map.off('zoomstart', handleUserInteraction);
@@ -196,16 +371,17 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       mapRef.current = null;
       driverMarkerRef.current = null;
       accuracyCircleRef.current = null;
+      routeGlowRef.current = null;
       routeCasingRef.current = null;
       routeLineRef.current = null;
       corridorLayerRef.current = null;
       initialFitDoneRef.current = false;
+      animStateRef.current.isInitialized = false;
     };
   }, []);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 2. Render Static Corridor Elements (Origin, Destination, Pickups, Route)
-  //    Only re-runs when route landmarks change, NOT on every GPS update!
+  // 3. Render Curved Road Network Corridor Elements & Pins
   // ───────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -215,7 +391,7 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
     corridorLayer.clearLayers();
     const corridorPoints: L.LatLngExpression[] = [];
 
-    // 1. Origin Marker - Modern pill badge
+    // 1. Origin Marker (A Pin)
     if (hasValidCoords(origin)) {
       const originIcon = L.divIcon({
         className: 'custom-map-icon',
@@ -225,39 +401,40 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             align-items: center;
             gap: 6px;
             background: #ffffff;
-            padding: 4px 10px 4px 6px;
-            border-radius: 20px;
+            padding: 5px 12px 5px 7px;
+            border-radius: 24px;
             border: 2px solid #2563eb;
-            box-shadow: 0 4px 14px rgba(37,99,235,0.25);
+            box-shadow: 0 4px 16px rgba(37,99,235,0.28);
             font-family: inherit;
             cursor: pointer;
+            z-index: 50;
           ">
             <div style="
               background: #2563eb;
               color: white;
               border-radius: 50%;
-              width: 20px;
-              height: 20px;
+              width: 22px;
+              height: 22px;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 10px;
+              font-size: 11px;
               font-weight: 800;
             ">A</div>
-            <span style="font-size: 11px; font-weight: 700; color: #1e293b; white-space: nowrap;">Origin</span>
+            <span style="font-size: 11px; font-weight: 700; color: #0f172a; white-space: nowrap;">Origin</span>
           </div>
         `,
-        iconSize: [80, 30],
-        iconAnchor: [40, 15],
+        iconSize: [84, 32],
+        iconAnchor: [42, 16],
       });
 
-      L.marker([origin.latitude, origin.longitude], { icon: originIcon })
+      L.marker([origin.latitude, origin.longitude], { icon: originIcon, zIndexOffset: 500 })
         .bindPopup(`<b>Ride Origin:</b><br/>${origin.label || 'Origin Stop'}`)
         .addTo(corridorLayer);
       corridorPoints.push([origin.latitude, origin.longitude]);
     }
 
-    // 2. Destination Marker - Modern mobility flag pill
+    // 2. Destination Marker (🏁 Flag Pin)
     if (hasValidCoords(destination)) {
       const destIcon = L.divIcon({
         className: 'custom-map-icon',
@@ -267,20 +444,21 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             align-items: center;
             gap: 6px;
             background: #0f172a;
-            padding: 4px 10px 4px 6px;
-            border-radius: 20px;
+            padding: 5px 12px 5px 7px;
+            border-radius: 24px;
             border: 2px solid #ffffff;
-            box-shadow: 0 4px 14px rgba(15,23,42,0.35);
+            box-shadow: 0 4px 16px rgba(15,23,42,0.4);
             color: #ffffff;
             font-family: inherit;
             cursor: pointer;
+            z-index: 50;
           ">
             <div style="
               background: #ef4444;
               color: white;
               border-radius: 50%;
-              width: 20px;
-              height: 20px;
+              width: 22px;
+              height: 22px;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -291,51 +469,64 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             <span style="font-size: 11px; font-weight: 700; white-space: nowrap;">Destination</span>
           </div>
         `,
-        iconSize: [110, 30],
-        iconAnchor: [55, 15],
+        iconSize: [115, 32],
+        iconAnchor: [57, 16],
       });
 
-      L.marker([destination.latitude, destination.longitude], { icon: destIcon })
+      L.marker([destination.latitude, destination.longitude], { icon: destIcon, zIndexOffset: 500 })
         .bindPopup(`<b>Final Destination:</b><br/>${destination.label || 'Campus Destination'}`)
         .addTo(corridorLayer);
       corridorPoints.push([destination.latitude, destination.longitude]);
     }
 
-    // 3. User's Own Designated Pickup Marker
+    // 3. User's Own Designated Pickup Marker with Pulsing Beacon Ring
     if (hasValidCoords(myPickup)) {
       const pickupIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
-          <div id="my-pickup-marker" style="
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: #059669;
-            color: white;
-            border-radius: 20px;
-            padding: 4px 12px 4px 8px;
-            font-size: 11px;
-            font-weight: 700;
-            white-space: nowrap;
-            box-shadow: 0 4px 14px rgba(5,150,105,0.4);
-            border: 2px solid white;
-            font-family: inherit;
-            cursor: pointer;
-          ">
-            <span>📍 Your Pickup</span>
+          <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+            <div style="
+              position: absolute;
+              width: 52px;
+              height: 52px;
+              border-radius: 50%;
+              background: rgba(5, 150, 105, 0.28);
+              animation: pickup-radar-pulse 2.2s infinite ease-out;
+              pointer-events: none;
+            "></div>
+            <div id="my-pickup-marker" style="
+              position: relative;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              background: #059669;
+              color: white;
+              border-radius: 24px;
+              padding: 5px 14px 5px 9px;
+              font-size: 11px;
+              font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 4px 16px rgba(5,150,105,0.48);
+              border: 2px solid white;
+              font-family: inherit;
+              cursor: pointer;
+              z-index: 60;
+            ">
+              <span>📍 Your Pickup</span>
+            </div>
           </div>
         `,
-        iconSize: [110, 28],
-        iconAnchor: [55, 14],
+        iconSize: [126, 38],
+        iconAnchor: [63, 19],
       });
 
-      L.marker([myPickup.latitude, myPickup.longitude], { icon: pickupIcon })
+      L.marker([myPickup.latitude, myPickup.longitude], { icon: pickupIcon, zIndexOffset: 600 })
         .bindPopup(`<b>Your Pickup Point:</b><br/>${myPickup.label || 'Designated Stop'}`)
         .addTo(corridorLayer);
       corridorPoints.push([myPickup.latitude, myPickup.longitude]);
     }
 
-    // 4. Other Passenger Pickups (Driver View)
+    // 4. Other Passenger Pickups
     otherPickups.forEach((p) => {
       if (hasValidCoords(p)) {
         const isBoarded = p.boardingStatus === 'BOARDED';
@@ -347,72 +538,79 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
               background: ${bgColor};
               color: white;
               border-radius: 50%;
-              width: 28px;
-              height: 28px;
+              width: 30px;
+              height: 30px;
               display: flex;
               align-items: center;
               justify-content: center;
               font-size: 11px;
-              font-weight: 700;
-              box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+              font-weight: 800;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.28);
               border: 2px solid white;
             ">${p.label.substring(0, 2).toUpperCase()}</div>
           `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
         });
 
-        L.marker([p.latitude, p.longitude], { icon })
+        L.marker([p.latitude, p.longitude], { icon, zIndexOffset: 400 })
           .bindPopup(`<b>Passenger Stop:</b><br/>${p.label} (${p.boardingStatus})`)
           .addTo(corridorLayer);
         corridorPoints.push([p.latitude, p.longitude]);
       }
     });
 
-    // 5. Connect corridor landmarks with high-contrast dual-layer polyline
-    const polylineCoords: L.LatLngExpression[] = [];
-    if (hasValidCoords(origin)) {
-      polylineCoords.push([origin.latitude, origin.longitude]);
-    }
-    if (hasValidCoords(myPickup)) {
-      polylineCoords.push([myPickup.latitude, myPickup.longitude]);
-    }
-    otherPickups.forEach((p) => {
-      if (hasValidCoords(p)) {
-        polylineCoords.push([p.latitude, p.longitude]);
-      }
-    });
-    if (hasValidCoords(destination)) {
-      polylineCoords.push([destination.latitude, destination.longitude]);
-    }
+    // 5. Dual-Layer Curved Road Polyline (Hugs Highway Curves)
+    const polylineCoords: L.LatLngExpression[] =
+      roadCoordinates.length > 1
+        ? roadCoordinates
+        : [
+            ...(hasValidCoords(origin) ? [[origin.latitude, origin.longitude] as [number, number]] : []),
+            ...(hasValidCoords(myPickup) ? [[myPickup.latitude, myPickup.longitude] as [number, number]] : []),
+            ...otherPickups.filter(hasValidCoords).map((p) => [p.latitude, p.longitude] as [number, number]),
+            ...(hasValidCoords(destination) ? [[destination.latitude, destination.longitude] as [number, number]] : []),
+          ];
 
     if (polylineCoords.length >= 2) {
+      if (routeGlowRef.current) {
+        try { routeGlowRef.current.remove(); } catch {}
+      }
       if (routeCasingRef.current) {
         try { routeCasingRef.current.remove(); } catch {}
       }
       if (routeLineRef.current) {
         try { routeLineRef.current.remove(); } catch {}
       }
-      // Outer subtle halo/casing
-      routeCasingRef.current = L.polyline(polylineCoords, {
-        color: '#1e3a8a',
-        weight: 7,
-        opacity: 0.25,
+
+      // Layer 1: Soft ambient neon glow on road
+      routeGlowRef.current = L.polyline(polylineCoords, {
+        color: '#38bdf8',
+        weight: 12,
+        opacity: 0.22,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(corridorLayer);
 
-      // Inner crisp electric blue line
+      // Layer 2: Deep high-contrast obsidian casing
+      routeCasingRef.current = L.polyline(polylineCoords, {
+        color: '#0f172a',
+        weight: 7,
+        opacity: 0.65,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(corridorLayer);
+
+      // Layer 3: Vibrant high-definition sapphire navigation ribbon
       routeLineRef.current = L.polyline(polylineCoords, {
         color: '#2563eb',
-        weight: 4,
-        opacity: 0.95,
+        weight: 4.5,
+        opacity: 1.0,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(corridorLayer);
     }
 
-    // Initial Bounds Framing (Executed ONCE on first valid render)
+    // Initial Bounds Framing
     if (!initialFitDoneRef.current && corridorPoints.length > 0) {
       if (hasValidCoords(driverLocation)) {
         corridorPoints.push([driverLocation.latitude, driverLocation.longitude]);
@@ -425,16 +623,20 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       }
       initialFitDoneRef.current = true;
     }
-  }, [origin, destination, myPickup, otherPickups]);
+  }, [origin, destination, myPickup, otherPickups, roadCoordinates]);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 3. Dynamic Live Driver Marker Updates (Zero Full Layer Resets)
+  // 4. 60 FPS Gliding Interpolation & Shortest-Arc Steering Engine
   // ───────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     if (!hasValidCoords(driverLocation)) {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       if (driverMarkerRef.current) {
         try { driverMarkerRef.current.remove(); } catch {}
         driverMarkerRef.current = null;
@@ -443,93 +645,81 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
         try { accuracyCircleRef.current.remove(); } catch {}
         accuracyCircleRef.current = null;
       }
+      animStateRef.current.isInitialized = false;
       return;
     }
 
     const { latitude, longitude, heading, accuracy, speedKmh } = driverLocation;
-
-    // Distinct styling between live active vs stale signal
-    const markerBg = isStale ? '#ea580c' : '#059669';
-    const borderColor = '#ffffff';
-    const rotation = typeof heading === 'number' && !isNaN(heading) ? heading : 0;
+    const targetHeading = typeof heading === 'number' && !isNaN(heading) ? (heading + 360) % 360 : 0;
+    const markerColor = isStale ? '#ea580c' : '#059669';
+    const roofColor = isStale ? '#9a3412' : '#065f46';
     const speedDisplay = typeof speedKmh === 'number' && speedKmh > 0 ? `${Math.round(speedKmh)} km/h` : null;
+
+    const buildDriverIconHtml = (currHeading: number) => `
+      <div id="${isStale ? 'driver-marker-stale' : 'driver-marker'}" style="position: relative; width: 68px; height: 82px; display: flex; align-items: center; justify-content: center; pointer-events: auto;">
+        ${
+          !isStale
+            ? `<div style="
+                position: absolute;
+                width: 62px;
+                height: 62px;
+                border-radius: 50%;
+                background: rgba(5, 150, 105, 0.24);
+                animation: driver-radar-pulse 2s infinite ease-out;
+                pointer-events: none;
+              "></div>`
+            : ''
+        }
+
+        <!-- Rotating Top-Down Vehicle Container -->
+        <div class="car-rotator" style="
+          width: 42px;
+          height: 66px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transform: rotate(${currHeading}deg);
+          transform-origin: center center;
+          transition: transform 0.08s linear;
+          z-index: 1000;
+        ">
+          ${renderTopDownCarSvg(markerColor, roofColor, isStale)}
+        </div>
+
+        <!-- Floating Upright Speed / Status Badge -->
+        <div style="
+          position: absolute;
+          bottom: 0px;
+          background: ${isStale ? '#ea580c' : '#059669'};
+          color: white;
+          font-size: 9.5px;
+          font-weight: 800;
+          padding: 2.5px 8px;
+          border-radius: 12px;
+          border: 1.5px solid white;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+          white-space: nowrap;
+          z-index: 1010;
+          letter-spacing: 0.3px;
+        ">
+          ${speedDisplay ? `${isStale ? 'STALE • ' : ''}${speedDisplay}` : isStale ? 'STALE' : 'LIVE'}
+        </div>
+      </div>
+    `;
 
     const driverIcon = L.divIcon({
       className: 'custom-driver-marker-icon custom-driver-icon',
-      html: `
-        <div id="${isStale ? 'driver-marker-stale' : 'driver-marker'}" style="position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;">
-          ${
-            !isStale
-              ? `<div style="
-                  position: absolute;
-                  width: 46px;
-                  height: 46px;
-                  border-radius: 50%;
-                  background: rgba(5, 150, 105, 0.25);
-                  animation: driver-radar-pulse 2s infinite ease-out;
-                  pointer-events: none;
-                "></div>`
-              : ''
-          }
-          <div style="
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: ${markerBg};
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 2.5px solid ${borderColor};
-            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
-            z-index: 10;
-            transform: rotate(${rotation}deg);
-            transition: transform 0.4s ease;
-          ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
-            </svg>
-          </div>
-          ${
-            isStale
-              ? `<span style="
-                  position: absolute;
-                  bottom: -6px;
-                  background: #ea580c;
-                  color: white;
-                  font-size: 9px;
-                  font-weight: 800;
-                  padding: 1px 5px;
-                  border-radius: 4px;
-                  border: 1px solid white;
-                  white-space: nowrap;
-                  z-index: 20;
-                ">STALE</span>`
-              : `<span style="
-                  position: absolute;
-                  bottom: -6px;
-                  background: #059669;
-                  color: white;
-                  font-size: 9px;
-                  font-weight: 800;
-                  padding: 1px 5px;
-                  border-radius: 4px;
-                  border: 1px solid white;
-                  white-space: nowrap;
-                  z-index: 20;
-                ">LIVE</span>`
-          }
-        </div>
-      `,
-      iconSize: [48, 48],
-      iconAnchor: [24, 24],
+      html: buildDriverIconHtml(targetHeading),
+      iconSize: [68, 82],
+      iconAnchor: [34, 41],
     });
 
-    // Update or create driver marker
-    if (!driverMarkerRef.current || !map.hasLayer(driverMarkerRef.current)) {
+    // Case A: First location arrival
+    if (!animStateRef.current.isInitialized || !driverMarkerRef.current || !map.hasLayer(driverMarkerRef.current)) {
       if (driverMarkerRef.current) {
         try { driverMarkerRef.current.remove(); } catch {}
       }
+
       driverMarkerRef.current = L.marker([latitude, longitude], {
         icon: driverIcon,
         zIndexOffset: 2000,
@@ -538,11 +728,111 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       driverMarkerRef.current.bindPopup(
         `<b>Driver Location</b><br/>${isStale ? '<span style="color:#ea580c">⚠️ Signal Stale</span>' : '<span style="color:#059669">🟢 Live Tracking</span>'}${speedDisplay ? `<br/>Speed: ${speedDisplay}` : ''}`
       );
-    } else {
-      // Smooth position update
-      driverMarkerRef.current.setLatLng([latitude, longitude]);
-      driverMarkerRef.current.setIcon(driverIcon);
+
+      animStateRef.current = {
+        startLat: latitude,
+        startLng: longitude,
+        targetLat: latitude,
+        targetLng: longitude,
+        startHeading: targetHeading,
+        targetHeading: targetHeading,
+        headingDelta: 0,
+        startTime: performance.now(),
+        duration: 1600,
+        currentLat: latitude,
+        currentLng: longitude,
+        currentHeading: targetHeading,
+        isInitialized: true,
+      };
+
+      if (!isUserPannedRef.current) {
+        map.setView([latitude, longitude], 15, { animate: true });
+      }
+      return;
     }
+
+    // Case B: Marker exists -> 60fps Interpolation
+    driverMarkerRef.current.setIcon(driverIcon);
+    driverMarkerRef.current.setPopupContent(
+      `<b>Driver Location</b><br/>${isStale ? '<span style="color:#ea580c">⚠️ Signal Stale</span>' : '<span style="color:#059669">🟢 Live Tracking</span>'}${speedDisplay ? `<br/>Speed: ${speedDisplay}` : ''}`
+    );
+
+    const prevLat = animStateRef.current.currentLat;
+    const prevLng = animStateRef.current.currentLng;
+    const prevHeading = animStateRef.current.currentHeading;
+
+    const headingDelta = getShortestAngleDelta(prevHeading, targetHeading);
+
+    animStateRef.current.startLat = prevLat;
+    animStateRef.current.startLng = prevLng;
+    animStateRef.current.targetLat = latitude;
+    animStateRef.current.targetLng = longitude;
+    animStateRef.current.startHeading = prevHeading;
+    animStateRef.current.targetHeading = targetHeading;
+    animStateRef.current.headingDelta = headingDelta;
+    animStateRef.current.startTime = performance.now();
+    animStateRef.current.duration = 1800;
+
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
+    const animateFrame = (now: number) => {
+      const {
+        startLat,
+        startLng,
+        targetLat,
+        targetLng,
+        startHeading,
+        headingDelta,
+        startTime,
+        duration,
+      } = animStateRef.current;
+
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedT = easeOutCubic(progress);
+
+      const interpolatedLat = startLat + (targetLat - startLat) * easedT;
+      const interpolatedLng = startLng + (targetLng - startLng) * easedT;
+      const interpolatedHeading = (startHeading + headingDelta * easedT + 360) % 360;
+
+      animStateRef.current.currentLat = interpolatedLat;
+      animStateRef.current.currentLng = interpolatedLng;
+      animStateRef.current.currentHeading = interpolatedHeading;
+
+      // Update marker coordinates
+      if (driverMarkerRef.current) {
+        driverMarkerRef.current.setLatLng([interpolatedLat, interpolatedLng]);
+      }
+
+      // Rotate car chassis via DOM
+      const markerEl = document.getElementById(isStale ? 'driver-marker-stale' : 'driver-marker');
+      if (markerEl) {
+        const rotator = markerEl.querySelector('.car-rotator') as HTMLElement;
+        if (rotator) {
+          rotator.style.transform = `rotate(${interpolatedHeading}deg)`;
+        }
+      }
+
+      // Update accuracy circle
+      if (accuracyCircleRef.current) {
+        accuracyCircleRef.current.setLatLng([interpolatedLat, interpolatedLng]);
+      }
+
+      // Smooth camera auto-follow
+      if (!isUserPannedRef.current && mapRef.current) {
+        mapRef.current.panTo([interpolatedLat, interpolatedLng], { animate: false });
+      }
+
+      if (progress < 1) {
+        rafIdRef.current = requestAnimationFrame(animateFrame);
+      } else {
+        rafIdRef.current = null;
+      }
+    };
+
+    rafIdRef.current = requestAnimationFrame(animateFrame);
 
     // Accuracy Circle
     if (accuracy && accuracy > 0 && accuracy < 600) {
@@ -555,11 +845,10 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           color: isStale ? '#ea580c' : '#059669',
           dashArray: isStale ? '4, 6' : undefined,
           fillColor: isStale ? '#ea580c' : '#059669',
-          fillOpacity: 0.08,
+          fillOpacity: 0.07,
           weight: 1,
         }).addTo(map);
       } else {
-        accuracyCircleRef.current.setLatLng([latitude, longitude]);
         accuracyCircleRef.current.setRadius(accuracy);
         accuracyCircleRef.current.setStyle({
           color: isStale ? '#ea580c' : '#059669',
@@ -571,22 +860,23 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
       try { accuracyCircleRef.current.remove(); } catch {}
       accuracyCircleRef.current = null;
     }
-
-    // Auto-Follow: ONLY pan smoothly if the user has NOT manually panned away
-    if (!isUserPannedRef.current) {
-      map.panTo([latitude, longitude], { animate: true, duration: 0.6 });
-    }
   }, [driverLocation, isStale]);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 4. Interactive Map Actions
+  // 5. Interactive Map Actions
   // ───────────────────────────────────────────────────────────────────────────
   const handleRecenterDriver = useCallback(() => {
     if (!mapRef.current) return;
     if (hasValidCoords(driverLocation)) {
       isUserPannedRef.current = false;
       setIsUserInteracting(false);
-      mapRef.current.setView([driverLocation.latitude, driverLocation.longitude], 15, {
+      const targetLat = animStateRef.current.isInitialized
+        ? animStateRef.current.currentLat
+        : driverLocation.latitude;
+      const targetLng = animStateRef.current.isInitialized
+        ? animStateRef.current.currentLng
+        : driverLocation.longitude;
+      mapRef.current.setView([targetLat, targetLng], 15, {
         animate: true,
       });
     }
@@ -634,13 +924,13 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
         right: isExpanded ? 0 : 'auto',
         bottom: isExpanded ? 0 : 'auto',
         width: '100%',
-        height: isExpanded ? '100vh' : '460px',
+        height: isExpanded ? '100vh' : '480px',
         zIndex: isExpanded ? 9999 : 1,
-        borderRadius: isExpanded ? '0' : '14px',
+        borderRadius: isExpanded ? '0' : '16px',
         overflow: 'hidden',
-        border: isExpanded ? 'none' : '1px solid #e2e8f0',
-        boxShadow: isExpanded ? 'none' : '0 4px 16px rgba(0,0,0,0.08)',
-        backgroundColor: '#e5e7eb',
+        border: isExpanded ? 'none' : '1px solid rgba(226, 232, 240, 0.9)',
+        boxShadow: isExpanded ? 'none' : '0 8px 24px rgba(15,23,42,0.08)',
+        backgroundColor: '#f8fafc',
       }}
     >
       <style>{`
@@ -649,6 +939,11 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           70% { transform: scale(1.6); opacity: 0.15; }
           100% { transform: scale(2.0); opacity: 0; }
         }
+        @keyframes pickup-radar-pulse {
+          0% { transform: scale(0.5); opacity: 0.9; }
+          65% { transform: scale(1.7); opacity: 0.2; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
         .leaflet-container {
           width: 100%;
           height: 100%;
@@ -656,23 +951,23 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           touch-action: pan-x pan-y;
         }
         .custom-driver-marker-icon {
-          transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+          will-change: transform;
         }
         .map-floating-btn {
-          background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          background: rgba(255, 255, 255, 0.92);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
           color: #1e293b;
           border: 1px solid rgba(226, 232, 240, 0.9);
-          border-radius: 10px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           box-shadow: 0 4px 14px rgba(0,0,0,0.08);
           transition: all 0.15s ease;
-          min-width: 38px;
-          min-height: 38px;
+          min-width: 40px;
+          min-height: 40px;
         }
         .map-floating-btn:hover {
           background: #ffffff;
@@ -692,7 +987,41 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
         style={{ width: '100%', height: '100%' }}
       />
 
-      {/* Top-Right Floating Controls (Touch-Friendly, Size >= 38px) */}
+      {/* Top Floating Glass Navigation Header */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '16px',
+          left: '16px',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: 'rgba(255, 255, 255, 0.92)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          padding: '6px 14px',
+          borderRadius: '24px',
+          border: '1px solid rgba(226, 232, 240, 0.9)',
+          boxShadow: '0 4px 16px rgba(15,23,42,0.08)',
+          fontSize: '12px',
+          fontWeight: 700,
+          color: '#0f172a',
+        }}
+      >
+        <span
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: isStale ? '#ea580c' : '#10b981',
+            boxShadow: `0 0 0 3px ${isStale ? 'rgba(234,88,12,0.2)' : 'rgba(16,185,129,0.2)'}`,
+          }}
+        />
+        <span>{isStale ? 'Signal Stale • Reconnecting' : 'Live Campus Transit Corridor'}</span>
+      </div>
+
+      {/* Top-Right Floating Controls */}
       <div
         style={{
           position: 'absolute',
@@ -746,17 +1075,17 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
         </button>
       </div>
 
-      {/* Top-Left: Manual Pan Notification Pill */}
+      {/* Manual Pan Notification Pill */}
       {isUserInteracting && (
         <div
           id="map-free-pan-pill"
           data-testid="map-free-pan-indicator"
           style={{
             position: 'absolute',
-            top: '16px',
+            top: '56px',
             left: '16px',
             zIndex: 1000,
-            background: 'rgba(15, 23, 42, 0.85)',
+            background: 'rgba(15, 23, 42, 0.88)',
             color: '#ffffff',
             padding: '6px 12px',
             borderRadius: '20px',
@@ -765,8 +1094,8 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            backdropFilter: 'blur(4px)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
           }}
         >
           <span>Free Pan Active</span>
@@ -807,16 +1136,16 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
             data-testid="recenter-driver-btn"
             className="map-floating-btn"
             style={{
-              padding: '9px 18px',
+              padding: '10px 20px',
               gap: '8px',
               background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
               color: '#047857',
               borderColor: '#a7f3d0',
               fontWeight: 700,
               fontSize: '13px',
-              boxShadow: '0 4px 16px rgba(4,120,87,0.22)',
+              boxShadow: '0 4px 18px rgba(4,120,87,0.25)',
               borderRadius: '24px',
             }}
           >
@@ -834,8 +1163,8 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           left: '16px',
           zIndex: 1000,
           background: 'rgba(255, 255, 255, 0.94)',
-          borderRadius: '12px',
-          padding: showLegend ? '10px 14px' : '6px 10px',
+          borderRadius: '14px',
+          padding: showLegend ? '10px 14px' : '6px 12px',
           border: '1px solid rgba(226, 232, 240, 0.9)',
           boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
           fontSize: '11px',
@@ -843,8 +1172,8 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: '6px',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
         }}
       >
         <div
@@ -859,13 +1188,13 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
           onClick={() => setShowLegend(!showLegend)}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <Layers size={13} /> Legend
+            <Layers size={13} /> Corridor Legend
           </span>
           <span style={{ fontSize: '10px', color: '#64748b' }}>{showLegend ? '▼' : '▲'}</span>
         </div>
 
         {showLegend && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span
                 style={{
@@ -884,12 +1213,16 @@ export const TrackingMap: React.FC<TrackingMapProps> = ({
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#1e40af' }} />
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2563eb' }} />
               <span>Ride Origin</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>🏁</span>
               <span>Final Destination</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '14px', height: '3px', background: '#2563eb', borderRadius: '2px' }} />
+              <span>Road Highway Route</span>
             </div>
           </div>
         )}

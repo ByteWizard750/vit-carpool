@@ -1723,6 +1723,7 @@ export const RideTrackingPage: React.FC = () => {
       {/* Interactive Leaflet Map */}
       <div style={{ marginBottom: '20px' }}>
         <TrackingMap
+          rideId={rideId}
           driverLocation={
             currentLocation
               ? {

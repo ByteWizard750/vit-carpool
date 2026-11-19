@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Car,
@@ -75,7 +75,9 @@ export const DashboardPage: React.FC = () => {
   const [pendingDriverBookings, setPendingDriverBookings] = useState<DriverBookingResponseDto[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
   const [alertsCount, setAlertsCount] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Web Push status
   const [pushEnabled, setPushEnabled] = useState<boolean>(false);
@@ -86,9 +88,13 @@ export const DashboardPage: React.FC = () => {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (isSilent = false) => {
     if (!token) return;
-    setLoading(true);
+    if (!hasLoadedRef.current && !isSilent) {
+      setInitialLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     try {
       const [bookingsRes, ridesRes, vehiclesRes, notifsRes, alertsRes, pendingRes] = await Promise.all([
         fetch('/api/bookings/mine', {
@@ -123,20 +129,22 @@ export const DashboardPage: React.FC = () => {
       );
       setAlertsCount(Array.isArray(alertsRes) ? alertsRes.length : 0);
       setPendingDriverBookings(Array.isArray(pendingRes) ? pendingRes : []);
+      hasLoadedRef.current = true;
     } catch (err) {
       console.warn('Dashboard data fetch error:', err);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, [token]);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(false);
   }, [fetchDashboardData]);
 
-  // Real-time synchronization across browser tabs and devices
+  // Real-time silent synchronization across browser tabs and devices (no skeleton flashing)
   useDataSync(() => {
-    fetchDashboardData();
+    fetchDashboardData(true);
   }, 7000);
 
   // Check Web Push subscription on mount
@@ -230,24 +238,29 @@ export const DashboardPage: React.FC = () => {
   );
   const hasActiveRides = activeDrivingRides.length > 0 || activePassengerBookings.length > 0;
 
-  // 2. UPCOMING SCHEDULED (Future rides only)
+  // 2. UPCOMING & READY TO DEPART (3-hour grace window so departing rides never vanish prematurely)
   const nowMs = Date.now();
+  const SCHEDULED_GRACE_PERIOD_MS = 3 * 60 * 60 * 1000; // 3 hours
+
   const upcomingDrivingRides = rides.filter(
-    (r) => r.status === 'SCHEDULED' && new Date(r.departureTime).getTime() > nowMs
+    (r) =>
+      r.status === 'SCHEDULED' &&
+      new Date(r.departureTime).getTime() + SCHEDULED_GRACE_PERIOD_MS > nowMs
   );
   const upcomingPassengerBookings = bookings.filter(
     (b) =>
       (b.status === 'CONFIRMED' || b.status === 'PENDING') &&
       b.ride?.status === 'SCHEDULED' &&
-      new Date(b.ride.departureTime).getTime() > nowMs
+      new Date(b.ride.departureTime).getTime() + SCHEDULED_GRACE_PERIOD_MS > nowMs
   );
 
   // 3. PENDING DRIVER REQUESTS (Actionable items)
-  // Only surface requests for rides that are scheduled or active and haven't departed
+  // Keeps requests visible as long as the ride is active or scheduled within the operating window
   const actionablePendingBookings = pendingDriverBookings.filter((b) => {
     const isRideActiveOrScheduled = b.ride.status === 'SCHEDULED' || b.ride.status === 'IN_PROGRESS';
-    const hasNotDeparted = new Date(b.ride.departureTime).getTime() > nowMs;
-    return isRideActiveOrScheduled && hasNotDeparted;
+    const isWithinOperatingWindow =
+      new Date(b.ride.departureTime).getTime() + SCHEDULED_GRACE_PERIOD_MS > nowMs;
+    return isRideActiveOrScheduled && isWithinOperatingWindow;
   });
 
   return (
@@ -416,9 +429,9 @@ export const DashboardPage: React.FC = () => {
             <Button
               variant="outline"
               size="md"
-              leftIcon={<RefreshCw size={15} className={loading ? 'animate-spin' : ''} />}
-              onClick={fetchDashboardData}
-              disabled={loading}
+              leftIcon={<RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />}
+              onClick={() => fetchDashboardData(false)}
+              disabled={isRefreshing || initialLoading}
               title="Refresh dashboard data"
             >
               Refresh
@@ -1045,7 +1058,7 @@ export const DashboardPage: React.FC = () => {
               </Link>
             </div>
 
-            {loading ? (
+            {initialLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
                 <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
@@ -1069,14 +1082,16 @@ export const DashboardPage: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {upcomingDrivingRides.slice(0, 3).map((r) => (
+                {upcomingDrivingRides.slice(0, 3).map((r) => {
+                  const isReadyToStart = new Date(r.departureTime).getTime() <= nowMs;
+                  return (
                   <div
                     key={r.id}
                     style={{
                       padding: '14px',
                       borderRadius: '8px',
-                      border: '1px solid var(--border-light, #e5e7eb)',
-                      backgroundColor: '#f8fafc',
+                      border: isReadyToStart ? '1.5px solid #fde68a' : '1px solid var(--border-light, #e5e7eb)',
+                      backgroundColor: isReadyToStart ? '#fffbeb' : '#f8fafc',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1086,15 +1101,15 @@ export const DashboardPage: React.FC = () => {
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: '4px',
-                          backgroundColor: '#dbeafe',
-                          color: '#1e40af',
+                          backgroundColor: isReadyToStart ? '#fef3c7' : '#dbeafe',
+                          color: isReadyToStart ? '#92400e' : '#1e40af',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
                         }}
                       >
                         <Clock size={11} />
-                        {formatRelativeTime(r.departureTime)}
+                        {isReadyToStart ? 'Ready to Start • ' : ''}{formatRelativeTime(r.departureTime)}
                       </span>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {r.availableSeats} open seat(s) &bull; ₹{r.costPerSeat}/seat
@@ -1126,7 +1141,8 @@ export const DashboardPage: React.FC = () => {
                       </Link>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             )}
           </div>
@@ -1153,7 +1169,7 @@ export const DashboardPage: React.FC = () => {
               </Link>
             </div>
 
-            {loading ? (
+            {initialLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
                 <div className="skeleton" style={{ width: '100%', height: '56px', borderRadius: '8px' }} />
