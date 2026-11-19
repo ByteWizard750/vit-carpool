@@ -483,18 +483,35 @@ export const DashboardPage: React.FC = () => {
             borderTop: '1px solid #f1f5f9',
           }}
         >
-          <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Bookings</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>
-              {bookings.filter((b) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && b.ride?.status !== 'CANCELLED' && b.ride?.status !== 'COMPLETED').length}
+          <Link to="/bookings" style={{ textDecoration: 'none' }} title="View your campus bookings">
+            <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', transition: 'all 0.15s ease' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Bookings</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#2563eb', marginTop: '2px' }}>
+                {bookings.filter((b) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && b.ride?.status !== 'CANCELLED' && b.ride?.status !== 'COMPLETED').length}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                {bookings.length} total booking{bookings.length === 1 ? '' : 's'}
+              </div>
             </div>
-          </div>
-          <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Published Rides</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>
-              {rides.filter((r) => r.status === 'SCHEDULED' || r.status === 'IN_PROGRESS').length}
+          </Link>
+          <Link to="/my-rides" style={{ textDecoration: 'none' }} title="Manage your offered rides and driver trips">
+            <div style={{ backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', transition: 'all 0.15s ease' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Published Rides</span>
+                {rides.filter((r) => r.status === 'SCHEDULED' || r.status === 'IN_PROGRESS').length > 0 && (
+                  <span style={{ fontSize: '0.65rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '9999px', fontWeight: 700 }}>
+                    {rides.filter((r) => r.status === 'SCHEDULED' || r.status === 'IN_PROGRESS').length} Active
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#16a34a', marginTop: '2px' }}>
+                {rides.length}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                {rides.filter((r) => r.status === 'SCHEDULED' || r.status === 'IN_PROGRESS').length} upcoming · {rides.filter((r) => r.status === 'COMPLETED').length} completed
+              </div>
             </div>
-          </div>
+          </Link>
           <Link to="/notifications" style={{ textDecoration: 'none' }}>
             <div
               style={{
