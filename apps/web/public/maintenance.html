@@ -276,38 +276,29 @@
 
   <script>
     function updateCountdown() {
-      // Current time
-      const now = new Date();
-      // Target is today's 6:00 AM IST (or next 6:00 AM if currently after 6:00 AM)
-      // IST is UTC+5.5
-      // Current UTC time
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const istNow = new Date(utc + (3600000 * 5.5));
-      
-      const istTarget = new Date(istNow);
+      var now = new Date();
+      var utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      var istNow = new Date(utc + (3600000 * 5.5));
+      var istTarget = new Date(istNow);
       if (istNow.getHours() >= 6) {
-        // If past 6:00 AM, target is next day 6:00 AM
         istTarget.setDate(istTarget.getDate() + 1);
       }
       istTarget.setHours(6, 0, 0, 0);
-
-      const diffMs = istTarget.getTime() - istNow.getTime();
-
+      var diffMs = istTarget.getTime() - istNow.getTime();
       if (diffMs <= 0) {
-        // Reached 6:00 AM IST! Auto-reload the page!
         window.location.reload();
         return;
       }
-
-      const hours = Math.floor(diffMs / (1000 * 60 * 60));
-      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-      document.getElementById('hours').innerText = String(hours).padStart(2, '0');
-      document.getElementById('minutes').innerText = String(mins).padStart(2, '0');
-      document.getElementById('seconds').innerText = String(secs).padStart(2, '0');
+      var hours = Math.floor(diffMs / 3600000);
+      var mins = Math.floor((diffMs % 3600000) / 60000);
+      var secs = Math.floor((diffMs % 60000) / 1000);
+      var elH = document.getElementById("hours");
+      var elM = document.getElementById("minutes");
+      var elS = document.getElementById("seconds");
+      if (elH) elH.innerText = (hours < 10 ? "0" : "") + hours;
+      if (elM) elM.innerText = (mins < 10 ? "0" : "") + mins;
+      if (elS) elS.innerText = (secs < 10 ? "0" : "") + secs;
     }
-
     updateCountdown();
     setInterval(updateCountdown, 1000);
   </script>
