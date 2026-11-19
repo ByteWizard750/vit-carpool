@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      deploy_to_ec2:
+        description: 'Deploy built images to AWS EC2 production host'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -64,7 +71,7 @@ jobs:
   build-and-push:
     name: Build & Push ARM64 Container Images
     needs: ci
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -97,8 +104,8 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.REPO_LC }}/api:latest
-            ghcr.io/${{ env.REPO_LC }}/api:${{ github.sha }}
+            ghcr.io/bytewizard750/vit-carpool-api:latest
+            ghcr.io/bytewizard750/vit-carpool-api:${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -111,8 +118,8 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.REPO_LC }}/web:latest
-            ghcr.io/${{ env.REPO_LC }}/web:${{ github.sha }}
+            ghcr.io/bytewizard750/vit-carpool-web:latest
+            ghcr.io/bytewizard750/vit-carpool-web:${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
@@ -122,7 +129,7 @@ jobs:
   deploy:
     name: Zero-Downtime EC2 Rolling Deploy
     needs: build-and-push
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.deploy_to_ec2 == true
     runs-on: ubuntu-latest
     steps:
       - name: Execute remote deployment via SSH
@@ -146,7 +153,7 @@ jobs:
             git reset --hard origin/main
 
             echo "[+] Executing production deployment script..."
-            export API_IMAGE="ghcr.io/${{ env.REPO_LC }}/api:${{ github.sha }}"
-            export WEB_IMAGE="ghcr.io/${{ env.REPO_LC }}/web:${{ github.sha }}"
+            export API_IMAGE="ghcr.io/bytewizard750/vit-carpool-api:${{ github.sha }}"
+            export WEB_IMAGE="ghcr.io/bytewizard750/vit-carpool-web:${{ github.sha }}"
             ./scripts/deploy.sh
 

@@ -11,6 +11,7 @@ import {
 } from '@vit-carpool/db';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { EmailClassifierService } from '../src/modules/verification/email-classifier.service';
+import { CURRENT_TERMS_VERSION } from '@vit-carpool/contracts';
 
 describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (e2e)', () => {
   let app: INestApplication;
@@ -77,6 +78,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
           email: 'rohan.student2023@vitstudent.ac.in',
           fullName: 'Rohan Student',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(201);
 
@@ -91,6 +94,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
           email: 'renukadevi.faculty@vit.ac.in',
           fullName: 'Dr. Renuka Devi',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(201);
 
@@ -103,6 +108,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
         .send({
           email: 'noname@vitstudent.ac.in',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(400);
 
@@ -116,6 +123,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
           email: 'intruder@gmail.com',
           fullName: 'Gmail User',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(400);
 
@@ -134,7 +143,13 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
       // Request OTP
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({
+          email,
+          fullName,
+          intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
+        })
         .expect(201);
 
       // Verify OTP with default test mock code '123456'
@@ -171,7 +186,13 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
 
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName, intent: 'signup' })
+        .send({
+          email,
+          fullName,
+          intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
+        })
         .expect(201);
 
       const verifyRes = await request(app.getHttpServer())
@@ -202,6 +223,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
           email,
           fullName: 'Arjun Impersonator',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
         })
         .expect(400);
 
@@ -217,7 +240,13 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
       const email = 'otp.test@vitstudent.ac.in';
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName: 'OTP Tester', intent: 'signup' })
+        .send({
+          email,
+          fullName: 'OTP Tester',
+          intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
+        })
         .expect(201);
 
       const res = await request(app.getHttpServer())
@@ -273,7 +302,13 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
       // First request
       await request(app.getHttpServer())
         .post('/auth/request-otp')
-        .send({ email, fullName: 'Cooldown User', intent: 'signup' })
+        .send({
+          email,
+          fullName: 'Cooldown User',
+          intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
+        })
         .expect(201);
 
       // Immediate second request without waiting
@@ -399,6 +434,8 @@ describe('Milestone 5.2: Authentication, Automatic Classification & Onboarding (
           email: 'tamper@vitstudent.ac.in',
           fullName: 'Tamper Tester',
           intent: 'signup',
+          termsAccepted: true,
+          termsVersion: CURRENT_TERMS_VERSION,
           audience: 'FACULTY', // Tamper attempt
           role: 'ADMIN', // Tamper attempt
         })
