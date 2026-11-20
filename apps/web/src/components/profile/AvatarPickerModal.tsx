@@ -24,6 +24,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +36,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       stream.getTracks().forEach((track) => track.stop());
       setStream(null);
     }
+    setIsCameraReady(false);
   }, [stream]);
 
   // Clean up when modal closes or unmounts
@@ -48,12 +50,14 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
         setPreviewUrl(null);
       }
       setError(null);
+      setIsCameraReady(false);
     }
   }, [isOpen, stopStream, previewUrl]);
 
   // Start live camera stream
   const startCamera = async (selectedFacing: 'user' | 'environment' = facingMode) => {
     setError(null);
+    setIsCameraReady(false);
     stopStream();
 
     if (!navigator?.mediaDevices?.getUserMedia) {
@@ -67,9 +71,9 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       try {
         newStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: selectedFacing,
-            width: { ideal: 640 },
-            height: { ideal: 640 },
+            facingMode: selectedFacing ? { ideal: selectedFacing } : undefined,
+            width: { ideal: 1280, min: 480 },
+            height: { ideal: 720, min: 480 },
           },
           audio: false,
         });
@@ -90,29 +94,45 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     }
   };
 
+  // Dedicated helper to attach stream and configure Safari autoplay safely
+  const attachStreamToVideo = useCallback((video: HTMLVideoElement | null, mediaStream: MediaStream | null) => {
+    if (!video || !mediaStream) return;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('muted', 'true');
+    video.setAttribute('autoplay', 'true');
+
+    if (video.srcObject !== mediaStream) {
+      video.srcObject = mediaStream;
+    }
+
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('Live video play warning:', err);
+      });
+    }
+  }, []);
+
   // Ensure video element receives the stream once mounted in DOM
   useEffect(() => {
     if (mode === 'CAMERA' && videoRef.current && stream) {
-      const video = videoRef.current;
-      video.srcObject = stream;
-      video.play().catch((err) => {
-        console.warn('Live video play error:', err);
-      });
+      attachStreamToVideo(videoRef.current, stream);
     }
-  }, [mode, stream]);
+  }, [mode, stream, attachStreamToVideo]);
 
   // Callback ref to guarantee immediate stream binding on mount
   const bindVideoRef = useCallback(
     (node: HTMLVideoElement | null) => {
       videoRef.current = node;
       if (node && stream) {
-        node.srcObject = stream;
-        node.play().catch((err) => {
-          console.warn('Video node play error:', err);
-        });
+        attachStreamToVideo(node, stream);
       }
     },
-    [stream],
+    [stream, attachStreamToVideo],
   );
 
   // Flip between front/back cameras
@@ -546,20 +566,62 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                 overflow: 'hidden',
                 border: '4px solid #3b82f6',
                 boxShadow: '0 0 24px rgba(59, 130, 246, 0.4)',
-                backgroundColor: '#000000',
+                backgroundColor: '#090d16',
+                WebkitMaskImage: '-webkit-radial-gradient(white, black)',
+                maskImage: 'radial-gradient(white, black)',
+                isolation: 'isolate',
+                transform: 'translateZ(0)',
+                WebkitTransform: 'translateZ(0)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
+              {!isCameraReady && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    color: '#38bdf8',
+                    backgroundColor: '#0f172a',
+                    zIndex: 2,
+                  }}
+                >
+                  <Loader2 size={32} className="animate-spin" />
+                  <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Starting camera...</span>
+                </div>
+              )}
               <video
                 ref={bindVideoRef}
                 autoPlay
                 playsInline
                 muted
-                onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget;
+                  v.muted = true;
+                  v.play().catch(() => {});
+                }}
+                onCanPlay={(e) => {
+                  const v = e.currentTarget;
+                  v.muted = true;
+                  v.play().then(() => setIsCameraReady(true)).catch(() => {});
+                }}
+                onPlaying={() => setIsCameraReady(true)}
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+                  borderRadius: '50%',
+                  transform: facingMode === 'user' ? 'scaleX(-1) translateZ(0)' : 'translateZ(0)',
+                  WebkitTransform: facingMode === 'user' ? 'scaleX(-1) translateZ(0)' : 'translateZ(0)',
                 }}
               />
             </div>
