@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDevUser } from './helpers/auth';
 
 test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => {
   test('1. Landing page renders branding, navigation, hero, and corridor benchmarks', async ({ page, isMobile }) => {
@@ -31,7 +32,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
     await expect(page.locator('.search-widget-container, #search').first()).toBeVisible();
   });
 
-  test('2. Authentication page renders login/register tabs, institutional hints, and dev login', async ({ page }) => {
+  test('2. Authentication page renders login/register tabs and institutional hints', async ({ page }) => {
     await page.goto('/auth');
 
     // Verify heading
@@ -42,30 +43,11 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
     const emailInput = page.locator('#input-auth-email, input[type="email"]').first();
     await expect(emailInput).toBeVisible();
     await expect(emailInput).toHaveAttribute('placeholder', /@vitstudent\.ac\.in/i);
-
-    // Verify dev helper section
-    const devHelper = page.locator('details');
-    await expect(devHelper).toBeVisible();
-    await devHelper.click();
-
-    // Check helper prefill buttons
-    await expect(page.getByRole('button', { name: /Fill Student/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Fill Faculty/i })).toBeVisible();
-    await expect(page.locator('#btn-dev-login-arjun')).toBeVisible();
-
-    // Test prefill
-    await page.getByRole('button', { name: /Fill Student/i }).click();
-    await expect(emailInput).toHaveValue('student@vitstudent.ac.in');
   });
 
-  test('3. Authenticated session: 1-click dev login sets session and unlocks member navigation', async ({ page, isMobile }) => {
-    await page.goto('/auth');
-
-    // Expand dev helper and click 1-click login
-    await page.locator('details').click();
-    await page.locator('#btn-dev-login-arjun').click();
-
-    // Wait for redirect to /recurring-commutes
+  test('3. Authenticated session: dev login sets session and unlocks member navigation', async ({ page, isMobile }) => {
+    await loginAsDevUser(page, { email: 'arjun.driver@vitstudent.ac.in', fullName: 'Arjun Driver' });
+    await page.goto('/dashboard');
     await page.waitForURL(/\/(recurring-commutes|dashboard)/);
 
     // Verify localStorage has vit_auth_token and vit_auth_user
@@ -114,10 +96,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
 
   test('5. Vehicle Management (/vehicles): lists registered vehicles and validates Add Vehicle modal', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth');
-    await page.locator('details').click();
-    await page.locator('#btn-dev-login-arjun').click();
-    await page.waitForURL(/\/(recurring-commutes|dashboard)/);
+    await loginAsDevUser(page, { email: 'arjun.driver@vitstudent.ac.in', fullName: 'Arjun Driver' });
 
     // Navigate to vehicles
     await page.goto('/vehicles');
@@ -157,10 +136,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
 
   test('6. Offer Ride (/offer-ride): verified driver form displays vehicle selection and private notes', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth');
-    await page.locator('details').click();
-    await page.locator('#btn-dev-login-arjun').click();
-    await page.waitForURL(/\/(recurring-commutes|dashboard)/);
+    await loginAsDevUser(page, { email: 'arjun.driver@vitstudent.ac.in', fullName: 'Arjun Driver' });
 
     await page.goto('/offer-ride');
     await expect(page.getByRole('heading', { name: /Offer a Campus Ride/i })).toBeVisible();
@@ -172,10 +148,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
 
   test('7. Recurring Commutes (/recurring-commutes): loads schedules and displays IST timezone indicators', async ({ page }) => {
     // Authenticate
-    await page.goto('/auth');
-    await page.locator('details').click();
-    await page.locator('#btn-dev-login-arjun').click();
-    await page.waitForURL(/\/(recurring-commutes|dashboard)/);
+    await loginAsDevUser(page, { email: 'arjun.driver@vitstudent.ac.in', fullName: 'Arjun Driver' });
 
     await page.goto('/recurring-commutes');
     await expect(page.getByRole('heading', { name: /Recurring Commutes/i })).toBeVisible();
@@ -186,10 +159,7 @@ test.describe('Milestone 15: Browser Smoke & End-to-End User Experience', () => 
 
   test('8. Admin Protection: non-admin student account is strictly blocked from /admin', async ({ page }) => {
     // Authenticate as student driver
-    await page.goto('/auth');
-    await page.locator('details').click();
-    await page.locator('#btn-dev-login-arjun').click();
-    await page.waitForURL(/\/(recurring-commutes|dashboard)/);
+    await loginAsDevUser(page, { email: 'arjun.driver@vitstudent.ac.in', fullName: 'Arjun Driver' });
 
     // Attempt direct navigation to /admin
     await page.goto('/admin');
