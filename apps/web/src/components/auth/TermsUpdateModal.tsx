@@ -150,7 +150,7 @@ export const TermsUpdateModal: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Shield size={15} style={{ color: '#059669' }} />
-            <span>Strict institutional identity verification and zero tolerance for harassment.</span>
+            <span>Strict institutional identity verification and community code of conduct.</span>
           </div>
         </div>
 

@@ -155,85 +155,112 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
             zIndex: 1000,
           }}
         >
-          {/* User summary header */}
+          {/* User summary container */}
           <div
             style={{
-              padding: '10px 12px',
+              padding: '4px',
               borderBottom: '1px solid var(--border-subtle, #e5e7eb)',
               marginBottom: '4px',
             }}
           >
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.fullName}
-                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--brand-subtle, #eef3ff)',
-                    color: 'var(--brand-blue, #2340b8)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  {initials}
-                </div>
-              )}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                    lineHeight: 1.2,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {user.fullName}
-                </div>
-                <div
-                  style={{
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)',
-                    marginTop: '2px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {user.email}
+            {/* User summary header - Click to open profile */}
+            <Link
+              to="/profile"
+              onClick={() => setIsOpen(false)}
+              id="account-menu-header-profile"
+              style={{
+                display: 'block',
+                textDecoration: 'none',
+                padding: '8px 10px',
+                borderRadius: '8px',
+                transition: 'background-color 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--canvas-subtle, #f1f5f9)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              title="Click to view and edit profile"
+            >
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--brand-subtle, #eef3ff)',
+                      color: 'var(--brand-blue, #2340b8)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initials}
+                  </div>
+                )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      lineHeight: 1.2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {user.fullName}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      marginTop: '2px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {user.email}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: '#2563eb',
+                      fontWeight: 600,
+                      marginTop: '2px',
+                    }}
+                  >
+                    View Profile & Settings →
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div
-              style={{
-                marginTop: '6px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                fontSize: '11px',
-                fontWeight: 600,
-                backgroundColor: 'var(--brand-subtle, #eef3ff)',
-                color: 'var(--brand-blue, #2340b8)',
-              }}
-            >
-              <CheckCircle2 size={11} /> {audienceLabel}
-            </div>
+              <div
+                style={{
+                  marginTop: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--brand-subtle, #eef3ff)',
+                  color: 'var(--brand-blue, #2340b8)',
+                }}
+              >
+                <CheckCircle2 size={11} /> {audienceLabel}
+              </div>
+            </Link>
 
             {!['SUPER_ADMIN', 'ADMIN'].includes(user.role) && user.verificationStatus === 'PENDING' && onOpenVerification && (
               <button
@@ -243,7 +270,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenVerification }) 
                   onOpenVerification();
                 }}
                 style={{
-                  marginTop: '8px',
+                  marginTop: '6px',
                   width: '100%',
                   padding: '5px 8px',
                   borderRadius: '6px',

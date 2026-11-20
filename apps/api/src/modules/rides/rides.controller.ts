@@ -193,8 +193,9 @@ export class RidesController {
   async cancelRide(
     @CurrentUser() user: User,
     @Param('id') id: string,
+    @Body() body?: { reason?: string },
   ): Promise<DriverRideResponseDto> {
-    return this.ridesService.cancelMyRide(user, id);
+    return this.ridesService.cancelMyRide(user, id, body?.reason);
   }
 
   @Post(':id/complete')

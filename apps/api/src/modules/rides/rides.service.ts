@@ -1673,7 +1673,7 @@ export class RidesService {
   /**
    * Cancel a scheduled ride owned by the caller.
    */
-  async cancelMyRide(user: User, rideId: string): Promise<DriverRideResponseDto> {
+  async cancelMyRide(user: User, rideId: string, reason?: string): Promise<DriverRideResponseDto> {
     const { result, activeBookings, rideDepartureTime, rideOrigin, rideDestination, rideAudience, rideType } =
       await this.prisma.$transaction(async (tx) => {
       // Row-level lock ensures serialized execution and prevents duplicate concurrent cancellations
@@ -1738,9 +1738,9 @@ export class RidesService {
         data: {
           status: BookingStatus.CANCELLED,
           cancelledAt: new Date(),
-          cancellationReason: ride.rideType === RideType.CAB_SHARE
+          cancellationReason: reason?.trim() || (ride.rideType === RideType.CAB_SHARE
             ? 'Cab share journey was cancelled by organiser'
-            : 'Ride was cancelled by driver',
+            : 'Ride was cancelled by driver'),
         },
       });
 
@@ -1816,7 +1816,10 @@ export class RidesService {
       const notifTitle = isCabShare
         ? '❌ Shared Cab Cancelled by Organiser'
         : '❌ Ride Cancelled by Driver';
-      const notifMessage = isCabShare
+      const cleanReason = reason?.trim();
+      const notifMessage = cleanReason
+        ? `The ride from ${rideOrigin} to ${rideDestination} scheduled for ${kolkataTime} was cancelled: "${cleanReason}".`
+        : isCabShare
         ? `The shared cab from ${rideOrigin} to ${rideDestination} scheduled for ${kolkataTime} was cancelled by the organiser.`
         : `The ride from ${rideOrigin} to ${rideDestination} scheduled for ${kolkataTime} was cancelled by the driver.`;
 

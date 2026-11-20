@@ -55,6 +55,9 @@ export const MyRidesPage: React.FC = () => {
   const [rideToCancel, setRideToCancel] = useState<DriverRideResponseDto | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [driverCancelReason, setDriverCancelReason] = useState<string>('Personal emergency');
+  const [driverCustomReason, setDriverCustomReason] = useState<string>('');
+  const [driverAckLateCancel, setDriverAckLateCancel] = useState<boolean>(false);
 
   // Booking Requests Modal State for a specific ride
   const [selectedRideForRequests, setSelectedRideForRequests] = useState<DriverRideResponseDto | null>(null);
@@ -251,13 +254,17 @@ export const MyRidesPage: React.FC = () => {
     setCancelling(true);
     setCancelError(null);
 
+    const fullReason = driverCancelReason === 'Other' ? (driverCustomReason.trim() || 'Other reason') : driverCancelReason;
+
     try {
       const res = await fetch(`/api/rides/${rideToCancel.id}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
           Accept: 'application/json',
         },
+        body: JSON.stringify({ reason: fullReason }),
       });
 
       const body = await res.json().catch(() => ({}));
@@ -267,6 +274,8 @@ export const MyRidesPage: React.FC = () => {
 
       setActionSuccess(`Ride from "${rideToCancel.origin}" to "${rideToCancel.destination}" has been cancelled.`);
       setRideToCancel(null);
+      setDriverCustomReason('');
+      setDriverAckLateCancel(false);
       await fetchMyRides();
     } catch (err: any) {
       setCancelError(err.message || 'Error occurred while cancelling this ride.');
@@ -1359,66 +1368,142 @@ export const MyRidesPage: React.FC = () => {
           isOpen={Boolean(rideToCancel)}
           onClose={() => setRideToCancel(null)}
           title={rideToCancel.rideType === 'CAB_SHARE' ? 'Cancel Shared Cab Journey' : 'Cancel Published Ride'}
-          maxWidth="460px"
+          maxWidth="500px"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div
-              style={{
-                padding: '12px 14px',
-                backgroundColor: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '10px',
-              }}
-            >
-              <AlertTriangle size={18} style={{ color: '#dc2626', marginTop: '2px', flexShrink: 0 }} />
-              <div style={{ fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.4' }}>
-                Are you sure you want to cancel your {rideToCancel.rideType === 'CAB_SHARE' ? 'shared cab journey' : 'ride'} from <strong>{rideToCancel.origin}</strong> to <strong>{rideToCancel.destination}</strong> scheduled for <strong>{formatDeparture(rideToCancel.departureTime)}</strong>?
+          {(() => {
+            const diffHours = (new Date(rideToCancel.departureTime).getTime() - Date.now()) / (1000 * 60 * 60);
+            const isLastMinute = diffHours <= 2 && diffHours > -1;
+            const isInvalidOther = driverCancelReason === 'Other' && driverCustomReason.trim().length < 4;
+            const canSubmit = !cancelling && (!isLastMinute || driverAckLateCancel) && !isInvalidOther;
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                  }}
+                >
+                  <AlertTriangle size={18} style={{ color: '#dc2626', marginTop: '2px', flexShrink: 0 }} />
+                  <div style={{ fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.4' }}>
+                    Cancel your {rideToCancel.rideType === 'CAB_SHARE' ? 'shared cab journey' : 'ride'} from <strong>{rideToCancel.origin}</strong> to <strong>{rideToCancel.destination}</strong> scheduled for <strong>{formatDeparture(rideToCancel.departureTime)}</strong>?
+                  </div>
+                </div>
+
+                {isLastMinute && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: '#fffbeb',
+                      border: '1.5px solid #f59e0b',
+                      borderRadius: '8px',
+                      color: '#92400e',
+                      fontSize: '0.825rem',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    <strong>⚠️ Short-Notice Cancellation Penalty:</strong>
+                    <div style={{ marginTop: '4px' }}>
+                      This ride departs in less than 2 hours. Cancelling on short notice leaves campus peers stranded without commute alternatives. Repeated last-minute cancellations negatively impact your reliability score and trigger temporary driver suspension.
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={driverAckLateCancel}
+                        onChange={(e) => setDriverAckLateCancel(e.target.checked)}
+                        style={{ accentColor: '#d97706', width: '16px', height: '16px' }}
+                      />
+                      <span>I understand the impact on my riders and reliability score</span>
+                    </label>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    Reason for Cancellation *
+                  </label>
+                  <select
+                    value={driverCancelReason}
+                    onChange={(e) => setDriverCancelReason(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      fontSize: '0.875rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: '#ffffff',
+                    }}
+                  >
+                    <option value="Personal emergency">Personal emergency / Sudden illness</option>
+                    <option value="Class or exam schedule change">Class or exam schedule change</option>
+                    <option value="Vehicle mechanical issue">Vehicle issue / Breakdown / Flat tyre</option>
+                    <option value="Severe weather / Waterlogging">Inclement weather / Rain / Waterlogging</option>
+                    <option value="Other">Other reason (specify below)</option>
+                  </select>
+
+                  {driverCancelReason === 'Other' && (
+                    <input
+                      type="text"
+                      placeholder="Please specify why you are cancelling..."
+                      value={driverCustomReason}
+                      onChange={(e) => setDriverCustomReason(e.target.value)}
+                      style={{
+                        width: '100%',
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-medium)',
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                  Confirmed riders will be notified immediately with your stated reason.
+                </div>
+
+                {cancelError && (
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      color: '#991b1b',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {cancelError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+                  <Button variant="outline" size="sm" onClick={() => setRideToCancel(null)} disabled={cancelling}>
+                    Keep Ride
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!canSubmit}
+                    onClick={handleConfirmCancelRide}
+                    style={{
+                      backgroundColor: canSubmit ? '#dc2626' : '#94a3b8',
+                      borderColor: canSubmit ? '#dc2626' : '#94a3b8',
+                      cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {cancelling ? 'Cancelling...' : 'Confirm Cancellation'}
+                  </Button>
+                </div>
               </div>
-            </div>
-
-            <div style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              <strong>Cancellation Consequences:</strong>
-              <ul style={{ margin: '6px 0 0', paddingLeft: '18px' }}>
-                <li>This {rideToCancel.rideType === 'CAB_SHARE' ? 'shared cab' : 'ride'} will be removed from campus search corridors immediately.</li>
-                <li>Any pending passenger requests will be automatically declined.</li>
-                <li>Confirmed riders will receive an immediate cancellation notice.</li>
-                <li>This action is permanent and cannot be undone.</li>
-              </ul>
-            </div>
-
-            {cancelError && (
-              <div
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#fee2e2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '6px',
-                  color: '#991b1b',
-                  fontSize: '0.8rem',
-                }}
-              >
-                {cancelError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
-              <Button variant="outline" size="sm" onClick={() => setRideToCancel(null)} disabled={cancelling}>
-                Keep Ride
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={cancelling}
-                onClick={handleConfirmCancelRide}
-                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-              >
-                {cancelling ? 'Cancelling...' : 'Confirm Cancellation'}
-              </Button>
-            </div>
-          </div>
+            );
+          })()}
         </Modal>
       )}
 
