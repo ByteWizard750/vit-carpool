@@ -25,7 +25,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputFallbackRef = useRef<HTMLInputElement>(null);
 
@@ -63,26 +63,57 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     }
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: selectedFacing,
-          width: { ideal: 640 },
-          height: { ideal: 640 },
-        },
-        audio: false,
-      });
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: selectedFacing,
+            width: { ideal: 640 },
+            height: { ideal: 640 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Fallback for desktop Safari/Chrome without strict facingMode support
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
 
       setStream(newStream);
       setMode('CAMERA');
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-      }
     } catch (err: any) {
       console.warn('getUserMedia error, falling back to capture input:', err);
       // If user denied camera or device unavailable, fallback gracefully
       cameraInputFallbackRef.current?.click();
     }
   };
+
+  // Ensure video element receives the stream once mounted in DOM
+  useEffect(() => {
+    if (mode === 'CAMERA' && videoRef.current && stream) {
+      const video = videoRef.current;
+      video.srcObject = stream;
+      video.play().catch((err) => {
+        console.warn('Live video play error:', err);
+      });
+    }
+  }, [mode, stream]);
+
+  // Callback ref to guarantee immediate stream binding on mount
+  const bindVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      videoRef.current = node;
+      if (node && stream) {
+        node.srcObject = stream;
+        node.play().catch((err) => {
+          console.warn('Video node play error:', err);
+        });
+      }
+    },
+    [stream],
+  );
 
   // Flip between front/back cameras
   const toggleFacingMode = () => {
@@ -519,10 +550,11 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               }}
             >
               <video
-                ref={videoRef}
+                ref={bindVideoRef}
                 autoPlay
                 playsInline
                 muted
+                onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
                 style={{
                   width: '100%',
                   height: '100%',
