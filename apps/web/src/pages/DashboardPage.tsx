@@ -18,6 +18,7 @@ import {
   X,
   MessageSquare,
   Home,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { RouteSpine } from '../components/common/RouteSpine';
@@ -33,7 +34,7 @@ import {
 import {
   registerServiceWorker,
   getExistingPushSubscription,
-  requestAndSubscribePush,
+  activateWebPush,
 } from '../features/notifications/webPush';
 
 function formatRelativeTime(dateString: string): string {
@@ -83,6 +84,7 @@ export const DashboardPage: React.FC = () => {
   const [pushEnabled, setPushEnabled] = useState<boolean>(false);
   const [pushLoading, setPushLoading] = useState<boolean>(false);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [showPushGuide, setShowPushGuide] = useState<boolean>(false);
 
   // Action status message
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -169,22 +171,24 @@ export const DashboardPage: React.FC = () => {
     setPushMessage(null);
     try {
       if (typeof window !== 'undefined' && typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-        setPushMessage('Notifications are blocked in your browser. Tap the site settings icon next to the URL in your address bar → Permissions → Allow Notifications.');
+        setShowPushGuide(true);
+        setPushLoading(false);
         return;
       }
-      const ok = await requestAndSubscribePush(token);
-      if (ok) {
+      const res = await activateWebPush(token);
+      if (res.success) {
         setPushEnabled(true);
+        setShowPushGuide(false);
         setPushMessage('Web Push notifications successfully activated on this device.');
+      } else if (res.reason === 'denied') {
+        setShowPushGuide(true);
+      } else if (res.reason === 'unsupported') {
+        setPushMessage('Push notifications are not supported on this browser. You will still receive in-app alerts.');
       } else {
-        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-          setPushMessage('Notifications are blocked in your browser. Tap the site settings/lock icon in your address bar → Permissions → Allow Notifications.');
-        } else {
-          setPushMessage('Could not activate push notifications. Please check your browser site settings to allow notifications.');
-        }
+        setPushMessage('Could not activate push notifications right now. You will still receive in-app alerts.');
       }
     } catch {
-      setPushMessage('Error requesting push permission. Please ensure your device supports Web Push notifications.');
+      setPushMessage('Error requesting push permission. You will still receive in-app alerts.');
     } finally {
       setPushLoading(false);
     }
@@ -457,11 +461,48 @@ export const DashboardPage: React.FC = () => {
               fontSize: '0.85rem',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'space-between',
               gap: '8px',
             }}
           >
-            {pushEnabled ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-            {pushMessage}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {pushEnabled ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+              <span>{pushMessage}</span>
+              {!pushEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setShowPushGuide(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563eb',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    padding: 0,
+                  }}
+                >
+                  How to enable?
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPushMessage(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: pushEnabled ? '#065f46' : '#991b1b',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              title="Dismiss"
+            >
+              <X size={15} />
+            </button>
           </div>
         )}
 
@@ -1423,6 +1464,132 @@ export const DashboardPage: React.FC = () => {
           </Link>
         </div>
       </section>
+
+      {/* Interactive Web Push Permission Guidance Modal */}
+      {showPushGuide && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={() => setShowPushGuide(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              border: '1px solid #e2e8f0',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    backgroundColor: '#eff6ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563eb',
+                  }}
+                >
+                  <Bell size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                    Enable Campus Ride Alerts
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                    Never miss a seat confirmation or driver arrival
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPushGuide(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.86rem', color: '#334155', lineHeight: 1.5, margin: '0 0 16px' }}>
+              Your browser currently has notifications paused for this site. To receive real-time updates when:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#0f172a' }}>
+                <Check size={15} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>A driver confirms or updates your seat request</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#0f172a' }}>
+                <Check size={15} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Your driver begins the trip or approaches campus gate</span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                marginBottom: '20px',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <SlidersHorizontal size={14} />
+                How to allow in 3 seconds:
+              </div>
+              <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6 }}>
+                <li>Tap the <strong>tune / lock icon (⚙️)</strong> in your browser address bar.</li>
+                <li>Tap <strong>Permissions</strong> &rarr; switch <strong>Notifications</strong> to <strong>Allow</strong>.</li>
+                <li>Tap the blue <strong>"Check Again & Activate"</strong> button below.</li>
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <Button
+                variant="primary"
+                size="md"
+                style={{ flex: 1 }}
+                onClick={() => handleEnablePush()}
+                disabled={pushLoading}
+              >
+                {pushLoading ? 'Checking...' : "I've Allowed It - Activate Now"}
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setShowPushGuide(false)}
+              >
+                Not Now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 };

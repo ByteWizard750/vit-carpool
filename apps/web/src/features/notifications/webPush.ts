@@ -38,55 +38,100 @@ export async function getExistingPushSubscription(): Promise<PushSubscription | 
   }
 }
 
+export type PushActivationResult =
+  | { success: true }
+  | { success: false; reason: 'unsupported' | 'denied' | 'sw_failed' | 'server_failed' | 'network_error' };
+
 export async function requestAndSubscribePush(token: string): Promise<boolean> {
+  const result = await activateWebPush(token);
+  return result.success;
+}
+
+export async function activateWebPush(token: string): Promise<PushActivationResult> {
+  if (typeof window === 'undefined') {
+    return { success: false, reason: 'unsupported' };
+  }
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    return false;
+    return { success: false, reason: 'unsupported' };
   }
 
-  const permission = await Notification.requestPermission();
+  // If already explicitly denied by user/browser
+  if (Notification.permission === 'denied') {
+    return { success: false, reason: 'denied' };
+  }
+
+  // Request browser permission
+  let permission: NotificationPermission;
+  try {
+    permission = await Notification.requestPermission();
+  } catch {
+    return { success: false, reason: 'denied' };
+  }
+
   if (permission !== 'granted') {
-    return false;
+    return { success: false, reason: 'denied' };
   }
 
-  const reg = await navigator.serviceWorker.ready;
-
-  // 1. Fetch backend VAPID public key
-  const keyRes = await fetch('/api/notifications/push-public-key', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!keyRes.ok) return false;
-  const { publicKey } = await keyRes.json();
-  if (!publicKey) return false;
-
-  // 2. Subscribe via PushManager
-  const applicationServerKey = urlBase64ToUint8Array(publicKey);
-  const subscription = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: applicationServerKey as unknown as BufferSource,
-  });
-
-  const subJson = subscription.toJSON();
-  if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
-    return false;
+  // Ensure Service Worker is active
+  let reg = await registerServiceWorker();
+  if (!reg) {
+    try {
+      reg = await navigator.serviceWorker.ready;
+    } catch {
+      return { success: false, reason: 'sw_failed' };
+    }
   }
 
-  // 3. Post to backend
-  const postRes = await fetch('/api/notifications/subscribe-push', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      endpoint: subJson.endpoint,
-      keys: {
-        p256dh: subJson.keys.p256dh,
-        auth: subJson.keys.auth,
+  if (!reg) {
+    return { success: false, reason: 'sw_failed' };
+  }
+
+  try {
+    // 1. Fetch backend VAPID public key
+    const keyRes = await fetch('/api/notifications/push-public-key', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!keyRes.ok) return { success: false, reason: 'server_failed' };
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) return { success: false, reason: 'server_failed' };
+
+    // 2. Subscribe via PushManager
+    const applicationServerKey = urlBase64ToUint8Array(publicKey);
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: applicationServerKey as unknown as BufferSource,
+    });
+
+    const subJson = subscription.toJSON();
+    if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
+      return { success: false, reason: 'sw_failed' };
+    }
+
+    // 3. Post to backend
+    const postRes = await fetch('/api/notifications/subscribe-push', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-    }),
-  });
+      body: JSON.stringify({
+        endpoint: subJson.endpoint,
+        keys: {
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth,
+        },
+      }),
+    });
 
-  return postRes.ok;
+    if (!postRes.ok) {
+      return { success: false, reason: 'server_failed' };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.warn('[WebPush] Error during push subscription:', err);
+    return { success: false, reason: 'network_error' };
+  }
 }
 
 export async function unsubscribeFromPush(token: string): Promise<boolean> {
