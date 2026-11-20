@@ -598,22 +598,20 @@ export const AuthPage: React.FC = () => {
                   }}
                   id="input-auth-otp"
                 />
-                {import.meta.env.DEV && (
-                  <div
-                    style={{
-                      marginTop: '8px',
-                      fontSize: '0.75rem',
-                      color: '#0369a1',
-                      backgroundColor: '#f0f9ff',
-                      border: '1px solid #bae6fd',
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      textAlign: 'center',
-                    }}
-                  >
-                    ✉️ Check your institutional inbox for the 6-digit code.{import.meta.env.DEV && <> (Dev mode fallback: <code>123456</code>)</>}
-                  </div>
-                )}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    fontSize: '0.75rem',
+                    color: '#0369a1',
+                    backgroundColor: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    textAlign: 'center',
+                  }}
+                >
+                  ✉️ Check your institutional inbox for the 6-digit verification code.
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
@@ -655,128 +653,7 @@ export const AuthPage: React.FC = () => {
             </form>
           )}
 
-          {/* Development Quick-Fill Helper (Local Dev Only) */}
-          {import.meta.env.DEV && (
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed var(--border-medium)' }}>
-              <details style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 600, userSelect: 'none' }}>
-                  🔧 Local Dev Fast-Fill (Test Accounts)
-                </summary>
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode('signin');
-                        setEmail('student@vitstudent.ac.in');
-                        setStep('email');
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '0.7rem',
-                        backgroundColor: '#dcfce7',
-                        color: '#166534',
-                        border: '1px solid #bbf7d0',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Fill Student (Commuter)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode('signin');
-                        setEmail('faculty@vit.ac.in');
-                        setStep('email');
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '0.7rem',
-                        backgroundColor: '#f3e8ff',
-                        color: '#6b21a8',
-                        border: '1px solid #e9d5ff',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Fill Faculty (Staff)
-                    </button>
-                    <button
-                      type="button"
-                      id="btn-dev-login-arjun"
-                      onClick={async () => {
-                        try {
-                          setIsLoading(true);
-                          const res = await fetch('/api/auth/dev-login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email: 'arjun.driver@vitstudent.ac.in' }),
-                          });
-                          const data = await res.json();
-                          if (res.ok && data.token && data.user) {
-                            login(data.token, data.user);
-                            navigate('/recurring-commutes');
-                          }
-                        } catch (err) {
-                          console.error(err);
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '0.7rem',
-                        backgroundColor: '#0284c7',
-                        color: '#ffffff',
-                        border: '1px solid #0369a1',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                    >
-                      ⚡ 1-Click Login (Arjun Driver)
-                    </button>
-                    <button
-                      type="button"
-                      id="btn-dev-login-admin"
-                      onClick={() => {
-                        login('dev-admin-token-preview', {
-                          id: '34aeec7c-33e1-49ad-97d5-d8541bbe315d',
-                          email: 'admin.safety@vitstudent.ac.in',
-                          fullName: 'Campus Admin Safety Officer',
-                          phoneNumber: null,
-                          audience: 'STUDENT',
-                          verificationStatus: 'VERIFIED',
-                          verificationMethod: 'MANUAL_ID_REVIEW',
-                          verifiedAt: new Date().toISOString(),
-                          createdAt: new Date().toISOString(),
-                          updatedAt: new Date().toISOString(),
-                          role: 'ADMIN',
-                        } as any);
-                        navigate('/admin');
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '0.7rem',
-                        backgroundColor: '#dc2626',
-                        color: '#ffffff',
-                        border: '1px solid #b91c1c',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
-                    >
-                      🛡️ 1-Click Login (Admin)
-                    </button>
-                  </div>
-                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                    In dev mode with unconfigured Supabase credentials, use code <code>123456</code>.
-                  </span>
-                </div>
-              </details>
-            </div>
-          )}
+
         </div>
 
         {/* Footer Guarantee */}
