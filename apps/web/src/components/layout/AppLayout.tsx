@@ -8,6 +8,7 @@ import { BottomNav } from './BottomNav';
 import { DevDiagnosticsDrawer } from '../dev/DevDiagnosticsDrawer';
 import { VerificationRequestModal } from '../../features/modals/VerificationRequestModal';
 import { TermsUpdateModal } from '../auth/TermsUpdateModal';
+import { NotificationPromptModal } from '../notifications/NotificationPromptModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ShieldAlert, AlertTriangle } from 'lucide-react';
 
@@ -124,6 +125,8 @@ export const AppLayout: React.FC = () => {
       />
 
       <TermsUpdateModal />
+
+      <NotificationPromptModal />
 
       <BottomNav />
     </div>

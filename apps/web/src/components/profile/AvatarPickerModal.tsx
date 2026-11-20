@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, Image as ImageIcon, Trash2, X, RefreshCw, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, X, RefreshCw, Check, AlertCircle, Loader2, ZoomIn, ZoomOut, RotateCcw, Crop, Move } from 'lucide-react';
 import { Button } from '../common/Button';
 
 interface AvatarPickerModalProps {
@@ -10,6 +10,8 @@ interface AvatarPickerModalProps {
   token: string | null;
 }
 
+const VIEWPORT_SIZE = 260;
+
 export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   isOpen,
   onClose,
@@ -17,18 +19,30 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   onUploadSuccess,
   token,
 }) => {
-  const [mode, setMode] = useState<'ACTIONS' | 'CAMERA' | 'PREVIEW'>('ACTIONS');
+  const [mode, setMode] = useState<'ACTIONS' | 'CAMERA' | 'CROP'>('ACTIONS');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isCameraReady, setIsCameraReady] = useState<boolean>(false);
 
+  // Cropper states
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+  const [rawImageElement, setRawImageElement] = useState<HTMLImageElement | null>(null);
+  const [cropZoom, setCropZoom] = useState<number>(1);
+  const [cropPan, setCropPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const currentPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputFallbackRef = useRef<HTMLInputElement>(null);
+
+  // Keep ref synced
+  useEffect(() => {
+    currentPanRef.current = cropPan;
+  }, [cropPan]);
 
   // Stop camera media tracks safely
   const stopStream = useCallback(() => {
@@ -44,15 +58,14 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     if (!isOpen) {
       stopStream();
       setMode('ACTIONS');
-      setCapturedBlob(null);
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-      }
+      setRawImageSrc(null);
+      setRawImageElement(null);
+      setCropZoom(1);
+      setCropPan({ x: 0, y: 0 });
       setError(null);
       setIsCameraReady(false);
     }
-  }, [isOpen, stopStream, previewUrl]);
+  }, [isOpen, stopStream]);
 
   // Start live camera stream
   const startCamera = async (selectedFacing: 'user' | 'environment' = facingMode) => {
@@ -61,7 +74,6 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     stopStream();
 
     if (!navigator?.mediaDevices?.getUserMedia) {
-      // Fallback for older browsers or restricted WebViews: use mobile native camera capture input
       cameraInputFallbackRef.current?.click();
       return;
     }
@@ -78,7 +90,6 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
           audio: false,
         });
       } catch {
-        // Fallback for desktop Safari/Chrome without strict facingMode support
         newStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -89,12 +100,11 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       setMode('CAMERA');
     } catch (err: any) {
       console.warn('getUserMedia error, falling back to capture input:', err);
-      // If user denied camera or device unavailable, fallback gracefully
       cameraInputFallbackRef.current?.click();
     }
   };
 
-  // Dedicated helper to attach stream and configure Safari autoplay safely
+  // Helper to attach stream and configure Safari autoplay safely
   const attachStreamToVideo = useCallback((video: HTMLVideoElement | null, mediaStream: MediaStream | null) => {
     if (!video || !mediaStream) return;
     video.muted = true;
@@ -117,14 +127,12 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     }
   }, []);
 
-  // Ensure video element receives the stream once mounted in DOM
   useEffect(() => {
     if (mode === 'CAMERA' && videoRef.current && stream) {
       attachStreamToVideo(videoRef.current, stream);
     }
   }, [mode, stream, attachStreamToVideo]);
 
-  // Callback ref to guarantee immediate stream binding on mount
   const bindVideoRef = useCallback(
     (node: HTMLVideoElement | null) => {
       videoRef.current = node;
@@ -135,53 +143,50 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     [stream, attachStreamToVideo],
   );
 
-  // Flip between front/back cameras
   const toggleFacingMode = () => {
     const nextMode = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(nextMode);
     startCamera(nextMode);
   };
 
-  // Capture snapshot from video stream onto canvas
+  // Load raw image into Image object and open Crop mode
+  const setupCropImage = (imageSrc: string) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      setRawImageElement(img);
+      setRawImageSrc(imageSrc);
+      setCropZoom(1);
+      setCropPan({ x: 0, y: 0 });
+      setMode('CROP');
+    };
+    img.onerror = () => {
+      setError('Could not load image for editing.');
+    };
+    img.src = imageSrc;
+  };
+
+  // Capture snapshot from video stream and open Cropper
   const handleCaptureSnapshot = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
 
     const canvas = document.createElement('canvas');
-    const size = Math.min(video.videoWidth, video.videoHeight) || 480;
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Crop center square
-    const startX = (video.videoWidth - size) / 2;
-    const startY = (video.videoHeight - size) / 2;
-
     if (facingMode === 'user') {
-      // Mirror horizontally for selfie view
-      ctx.translate(size, 0);
+      ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
     }
 
-    ctx.drawImage(video, startX, startY, size, size, 0, 0, size, size);
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          setError('Failed to capture snapshot.');
-          return;
-        }
-        stopStream();
-        setCapturedBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setPreviewUrl(url);
-        setMode('PREVIEW');
-      },
-      'image/jpeg',
-      0.88,
-    );
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    stopStream();
+    setupCropImage(dataUrl);
   };
 
   // Handle file chosen from gallery or fallback capture
@@ -194,88 +199,150 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setError('Image must be under 8MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image must be under 10MB.');
       return;
     }
 
-    // Resize and compress via canvas
-    const img = new window.Image();
     const reader = new FileReader();
-
     reader.onload = (event) => {
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              setError('Failed to process image.');
-              return;
-            }
-            setCapturedBlob(blob);
-            const url = URL.createObjectURL(blob);
-            setPreviewUrl(url);
-            setMode('PREVIEW');
-          },
-          'image/jpeg',
-          0.85,
-        );
-      };
-      img.src = event.target?.result as string;
+      const src = event.target?.result as string;
+      if (src) {
+        setupCropImage(src);
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  // Upload processed blob to /api/users/me/avatar
-  const handleSaveAvatar = async () => {
-    if (!capturedBlob || !token) return;
+  // Drag pan clamping helper
+  const clampPan = (x: number, y: number, zoomLevel: number) => {
+    if (!rawImageElement) return { x: 0, y: 0 };
+    const imgW = rawImageElement.naturalWidth || rawImageElement.width;
+    const imgH = rawImageElement.naturalHeight || rawImageElement.height;
+    const baseScale = Math.max(VIEWPORT_SIZE / imgW, VIEWPORT_SIZE / imgH);
+    const curW = imgW * baseScale * zoomLevel;
+    const curH = imgH * baseScale * zoomLevel;
+    const maxPanX = Math.max(0, (curW - VIEWPORT_SIZE) / 2);
+    const maxPanY = Math.max(0, (curH - VIEWPORT_SIZE) / 2);
+
+    return {
+      x: Math.min(maxPanX, Math.max(-maxPanX, x)),
+      y: Math.min(maxPanY, Math.max(-maxPanY, y)),
+    };
+  };
+
+  // Drag Handlers for Mouse
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX - currentPanRef.current.x,
+      y: e.clientY - currentPanRef.current.y,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const nextX = e.clientX - dragStartRef.current.x;
+    const nextY = e.clientY - dragStartRef.current.y;
+    setCropPan(clampPan(nextX, nextY, cropZoom));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Drag Handlers for Mobile Touch
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.touches[0].clientX - currentPanRef.current.x,
+        y: e.touches[0].clientY - currentPanRef.current.y,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const nextX = e.touches[0].clientX - dragStartRef.current.x;
+    const nextY = e.touches[0].clientY - dragStartRef.current.y;
+    setCropPan(clampPan(nextX, nextY, cropZoom));
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Apply crop and upload to server
+  const handleApplyCropAndSave = async () => {
+    if (!rawImageElement || !token) return;
     setLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('file', capturedBlob, 'avatar.jpg');
-
     try {
-      const res = await fetch('/api/users/me/avatar', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        onUploadSuccess(data.avatarUrl);
-        onClose();
-      } else {
-        const body = await res.json().catch(() => ({}));
-        setError(body.message || 'Failed to upload photo.');
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setError('Canvas context could not be initialized.');
+        setLoading(false);
+        return;
       }
-    } catch {
-      setError('Network error while uploading photo.');
-    } finally {
+
+      const imgW = rawImageElement.naturalWidth || rawImageElement.width;
+      const imgH = rawImageElement.naturalHeight || rawImageElement.height;
+      const baseScale = Math.max(VIEWPORT_SIZE / imgW, VIEWPORT_SIZE / imgH);
+      const totalScale = baseScale * cropZoom;
+
+      const sx = ((imgW * totalScale) / 2 - VIEWPORT_SIZE / 2 - cropPan.x) / totalScale;
+      const sy = ((imgH * totalScale) / 2 - VIEWPORT_SIZE / 2 - cropPan.y) / totalScale;
+      const sWidth = VIEWPORT_SIZE / totalScale;
+      const sHeight = VIEWPORT_SIZE / totalScale;
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(rawImageElement, sx, sy, sWidth, sHeight, 0, 0, 512, 512);
+
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) {
+            setError('Failed to export cropped photo.');
+            setLoading(false);
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('file', blob, 'avatar.jpg');
+
+          try {
+            const res = await fetch('/api/users/me/avatar', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: formData,
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              onUploadSuccess(data.avatarUrl);
+              onClose();
+            } else {
+              const body = await res.json().catch(() => ({}));
+              setError(body.message || 'Failed to upload photo.');
+            }
+          } catch {
+            setError('Network error while uploading photo.');
+          } finally {
+            setLoading(false);
+          }
+        },
+        'image/jpeg',
+        0.88,
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Error processing crop.');
       setLoading(false);
     }
   };
@@ -316,8 +383,8 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.65)',
-        backdropFilter: 'blur(4px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.72)',
+        backdropFilter: 'blur(5px)',
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
@@ -351,10 +418,10 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: '420px',
+          maxWidth: '430px',
           backgroundColor: '#ffffff',
           borderRadius: '20px',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -363,7 +430,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       >
         <style>{`
           @keyframes avatar-modal-pop {
-            from { opacity: 0; transform: scale(0.95); }
+            from { opacity: 0; transform: scale(0.96); }
             to { opacity: 1; transform: scale(1); }
           }
         `}</style>
@@ -378,13 +445,16 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
-            {mode === 'CAMERA'
-              ? 'Live Camera'
-              : mode === 'PREVIEW'
-              ? 'Preview Photo'
-              : 'Profile Picture'}
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {mode === 'CROP' && <Crop size={18} style={{ color: '#2563eb' }} />}
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+              {mode === 'CAMERA'
+                ? 'Live Camera'
+                : mode === 'CROP'
+                ? 'Crop & Position Photo'
+                : 'Profile Picture'}
+            </h3>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -510,7 +580,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span>Choose from Gallery</span>
                 <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
-                  Upload JPEG, PNG or WebP
+                  Upload & crop photo
                 </span>
               </div>
             </button>
@@ -705,60 +775,231 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
           </div>
         )}
 
-        {/* Mode 3: Captured Image Preview */}
-        {mode === 'PREVIEW' && previewUrl && (
+        {/* Mode 3: Interactive Photo Cropper */}
+        {mode === 'CROP' && rawImageSrc && rawImageElement && (
           <div
             style={{
-              padding: '24px 20px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '16px',
+              backgroundColor: '#0f172a',
+              userSelect: 'none',
             }}
           >
+            {/* Crop Viewport with Circular Mask */}
             <div
               style={{
-                width: '180px',
-                height: '180px',
-                borderRadius: '50%',
+                position: 'relative',
+                width: `${VIEWPORT_SIZE}px`,
+                height: `${VIEWPORT_SIZE}px`,
                 overflow: 'hidden',
-                border: '4px solid #10b981',
-                boxShadow: '0 8px 24px rgba(16, 185, 129, 0.25)',
+                borderRadius: '16px',
+                backgroundColor: '#020617',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                touchAction: 'none',
               }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
-              <img
-                src={previewUrl}
-                alt="Avatar Preview"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              {/* Underlying Image */}
+              {(() => {
+                const imgW = rawImageElement.naturalWidth || rawImageElement.width;
+                const imgH = rawImageElement.naturalHeight || rawImageElement.height;
+                const baseScale = Math.max(VIEWPORT_SIZE / imgW, VIEWPORT_SIZE / imgH);
+                const curW = imgW * baseScale * cropZoom;
+                const curH = imgH * baseScale * cropZoom;
+                const leftPos = (VIEWPORT_SIZE - curW) / 2 + cropPan.x;
+                const topPos = (VIEWPORT_SIZE - curH) / 2 + cropPan.y;
+
+                return (
+                  <img
+                    src={rawImageSrc}
+                    alt="Crop Source"
+                    draggable={false}
+                    style={{
+                      position: 'absolute',
+                      left: `${leftPos}px`,
+                      top: `${topPos}px`,
+                      width: `${curW}px`,
+                      height: `${curH}px`,
+                      maxWidth: 'none',
+                      maxHeight: 'none',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                );
+              })()}
+
+              {/* Circular Overlay Mask (Dark vignette outside circle) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  border: '2px solid rgba(56, 189, 248, 0.9)',
+                  boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.72)',
+                  pointerEvents: 'none',
+                }}
               />
+
+              {/* Move Indicator badge */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  padding: '3px 8px',
+                  borderRadius: '999px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                  color: '#e2e8f0',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  pointerEvents: 'none',
+                }}
+              >
+                <Move size={12} /> Drag to adjust
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '8px' }}>
+            {/* Zoom Slider and Controls */}
+            <div
+              style={{
+                width: '100%',
+                maxWidth: `${VIEWPORT_SIZE + 40}px`,
+                marginTop: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = Math.max(1, cropZoom - 0.2);
+                    setCropZoom(next);
+                    setCropPan(clampPan(cropPan.x, cropPan.y, next));
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#94a3b8',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Zoom Out"
+                >
+                  <ZoomOut size={16} />
+                </button>
+
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.05"
+                  value={cropZoom}
+                  onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    setCropZoom(next);
+                    setCropPan(clampPan(cropPan.x, cropPan.y, next));
+                  }}
+                  style={{
+                    flex: 1,
+                    accentColor: '#3b82f6',
+                    cursor: 'pointer',
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = Math.min(3, cropZoom + 0.2);
+                    setCropZoom(next);
+                    setCropPan(clampPan(cropPan.x, cropPan.y, next));
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#94a3b8',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Zoom In"
+                >
+                  <ZoomIn size={16} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCropZoom(1);
+                    setCropPan({ x: 0, y: 0 });
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#94a3b8',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Reset Position"
+                >
+                  <RotateCcw size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '20px' }}>
               <Button
                 variant="outline"
                 size="md"
-                style={{ flex: 1 }}
+                style={{ flex: 1, color: '#f8fafc', borderColor: '#475569', backgroundColor: 'transparent' }}
                 onClick={() => {
-                  setCapturedBlob(null);
-                  if (previewUrl) URL.revokeObjectURL(previewUrl);
-                  setPreviewUrl(null);
+                  setRawImageSrc(null);
+                  setRawImageElement(null);
                   setMode('ACTIONS');
                 }}
                 disabled={loading}
               >
-                Retake
+                Back
               </Button>
 
               <Button
                 variant="primary"
                 size="md"
-                id="btn-save-captured-avatar"
+                id="btn-apply-crop-avatar"
                 style={{ flex: 1 }}
-                onClick={handleSaveAvatar}
+                onClick={handleApplyCropAndSave}
                 disabled={loading}
                 leftIcon={loading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               >
-                {loading ? 'Saving...' : 'Save Photo'}
+                {loading ? 'Saving...' : 'Set Photo'}
               </Button>
             </div>
           </div>

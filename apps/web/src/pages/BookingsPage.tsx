@@ -61,6 +61,9 @@ export const BookingsPage: React.FC = () => {
 
   // Confirmation modal for cancelling passenger booking
   const [bookingToCancel, setBookingToCancel] = useState<PassengerBookingResponseDto | null>(null);
+  const [passengerCancelReason, setPassengerCancelReason] = useState<string>('Plans changed / No longer traveling');
+  const [passengerCustomReason, setPassengerCustomReason] = useState<string>('');
+  const [passengerAckLateCancel, setPassengerAckLateCancel] = useState<boolean>(false);
 
   // Rating modal & cache for completed rides
   const [bookingToRate, setBookingToRate] = useState<PassengerBookingResponseDto | null>(null);
@@ -188,6 +191,8 @@ export const BookingsPage: React.FC = () => {
     setActionLoadingId(bookingId);
     setActionMessage(null);
 
+    const fullReason = passengerCancelReason === 'Other' ? (passengerCustomReason.trim() || 'Other reason') : passengerCancelReason;
+
     try {
       const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
         method: 'POST',
@@ -196,7 +201,7 @@ export const BookingsPage: React.FC = () => {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ cancellationReason: 'Cancelled by passenger' }),
+        body: JSON.stringify({ cancellationReason: fullReason, reason: fullReason }),
       });
 
       const body = await res.json().catch(() => ({}));
@@ -209,6 +214,8 @@ export const BookingsPage: React.FC = () => {
         text: 'Your booking request has been cancelled.',
       });
       setBookingToCancel(null);
+      setPassengerCustomReason('');
+      setPassengerAckLateCancel(false);
       fetchPassengerBookings();
       triggerAppSync();
     } catch (err: any) {
@@ -1082,26 +1089,110 @@ export const BookingsPage: React.FC = () => {
           isOpen={Boolean(bookingToCancel)}
           onClose={() => setBookingToCancel(null)}
           title="Cancel Booking Request"
-          maxWidth="440px"
+          maxWidth="480px"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Are you sure you want to cancel your seat request for the ride from <strong>{bookingToCancel.ride.origin}</strong> to <strong>{bookingToCancel.ride.destination}</strong>?
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <Button variant="outline" size="sm" onClick={() => setBookingToCancel(null)}>
-                Keep Booking
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCancelBooking}
-                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-              >
-                Confirm Cancellation
-              </Button>
-            </div>
-          </div>
+          {(() => {
+            const diffHours = (new Date(bookingToCancel.ride.departureTime).getTime() - Date.now()) / (1000 * 60 * 60);
+            const isLastMinute = diffHours <= 2 && diffHours > -1;
+            const isInvalidOther = passengerCancelReason === 'Other' && passengerCustomReason.trim().length < 4;
+            const canSubmit = (!isLastMinute || passengerAckLateCancel) && !isInvalidOther;
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  Are you sure you want to cancel your seat request for the ride from <strong>{bookingToCancel.ride.origin}</strong> to <strong>{bookingToCancel.ride.destination}</strong>?
+                </p>
+
+                {isLastMinute && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: '#fffbeb',
+                      border: '1.5px solid #f59e0b',
+                      borderRadius: '8px',
+                      color: '#92400e',
+                      fontSize: '0.825rem',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    <strong>⚠️ Short-Notice Cancellation Notice:</strong>
+                    <div style={{ marginTop: '4px' }}>
+                      This ride departs in less than 2 hours. Cancelling on short notice leaves empty seats that cannot easily be reassigned to other waiting students. Frequent last-minute cancellations are tracked on your community profile.
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={passengerAckLateCancel}
+                        onChange={(e) => setPassengerAckLateCancel(e.target.checked)}
+                        style={{ accentColor: '#d97706', width: '16px', height: '16px' }}
+                      />
+                      <span>I understand the impact of this late cancellation</span>
+                    </label>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    Reason for Cancellation *
+                  </label>
+                  <select
+                    value={passengerCancelReason}
+                    onChange={(e) => setPassengerCancelReason(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      fontSize: '0.875rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: '#ffffff',
+                    }}
+                  >
+                    <option value="Plans changed / No longer traveling">Plans changed / No longer traveling</option>
+                    <option value="Class or schedule rescheduled">Class or exam schedule rescheduled</option>
+                    <option value="Found alternative transport">Found alternative transport / bus / auto</option>
+                    <option value="Personal emergency">Personal emergency</option>
+                    <option value="Other">Other reason (specify below)</option>
+                  </select>
+
+                  {passengerCancelReason === 'Other' && (
+                    <input
+                      type="text"
+                      placeholder="Please specify why you are cancelling..."
+                      value={passengerCustomReason}
+                      onChange={(e) => setPassengerCustomReason(e.target.value)}
+                      style={{
+                        width: '100%',
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-medium)',
+                      }}
+                    />
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-light)', paddingTop: '12px' }}>
+                  <Button variant="outline" size="sm" onClick={() => setBookingToCancel(null)}>
+                    Keep Booking
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!canSubmit || Boolean(actionLoadingId)}
+                    onClick={handleCancelBooking}
+                    style={{
+                      backgroundColor: canSubmit ? '#dc2626' : '#94a3b8',
+                      borderColor: canSubmit ? '#dc2626' : '#94a3b8',
+                      cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {actionLoadingId === bookingToCancel.id ? 'Cancelling...' : 'Confirm Cancellation'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </Modal>
       )}
 

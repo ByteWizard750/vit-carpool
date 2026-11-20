@@ -63,7 +63,10 @@ export const TermsPage: React.FC = () => {
             1. Platform Purpose and Scope
           </h2>
           <p>
-            VIT Carpool provides an automated coordination network exclusively designed for verified members of the Vellore Institute of Technology (VIT) Chennai campus. The platform facilitates peer-to-peer ride coordination for daily commutes, campus transit, and shared airport/railway journeys. The platform operates on a non-commercial, zero-profit model: no brokerage, commission, booking fee, or surge pricing is charged by the platform.
+            VIT Carpool provides an automated technology communication and software matchmaking network exclusively designed for verified members of the Vellore Institute of Technology (VIT) Chennai campus. The platform facilitates peer-to-peer ride coordination for daily commutes, campus transit, and shared airport/railway journeys. The platform operates on a non-commercial, zero-profit model: no brokerage, commission, booking fee, or surge pricing is charged by the platform.
+          </p>
+          <p style={{ marginTop: '8px' }}>
+            <strong>Intermediary Software Notice:</strong> VIT Carpool is strictly a peer-to-peer communication platform and does not provide transportation services, act as a transportation carrier, operate taxis, or employ drivers. All travel arrangements are voluntary peer agreements made independently between adult campus community members.
           </p>
         </section>
 
@@ -131,10 +134,10 @@ export const TermsPage: React.FC = () => {
         {/* Section 6 */}
         <section>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>
-            6. Zero-Tolerance Conduct: Safety, Harassment, and Fraud
+            6. Community Standards &amp; Right to Revoke Digital Access
           </h2>
           <p>
-            VIT Carpool enforces a strict zero-tolerance policy against:
+            VIT Carpool is a software coordination tool and does not physically police, monitor, escort, or supervise rides. To foster a safe, civil, and trustworthy community, the platform reserves the unilateral right to suspend or permanently revoke platform access for any user reported for:
           </p>
           <ul style={{ paddingLeft: '20px', margin: '6px 0' }}>
             <li>Physical, verbal, sexual, or discriminatory harassment of any community member.</li>
@@ -143,7 +146,7 @@ export const TermsPage: React.FC = () => {
             <li>Stalking, unauthorized photography, or sharing other members' contact numbers outside trip coordination.</li>
           </ul>
           <p>
-            Violations trigger immediate account suspension, permanent platform blacklisting, and reporting to the VIT Chennai Student Disciplinary Committee and local law enforcement.
+            Violations trigger immediate account suspension and permanent platform blacklisting. Disciplinary and legal actions remain strictly the domain of individual participants, campus authorities, and law enforcement. The platform disclaims any supervisory duty or guarantee over member conduct.
           </p>
         </section>
 
@@ -225,15 +228,16 @@ export const TermsPage: React.FC = () => {
         {/* Section 14 */}
         <section>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>
-            14. Limitation of Liability &amp; Disclaimers
+            14. Limitation of Liability &amp; Safe Harbor Disclaimers
           </h2>
           <p>
             To the maximum extent permitted by applicable Indian law:
           </p>
           <ul style={{ paddingLeft: '20px', margin: '6px 0' }}>
-            <li>VIT Carpool acts solely as a communication facilitator between independent adult travelers and is not a common carrier, motor transport operator, or employer of drivers.</li>
-            <li>The platform does not guarantee the roadworthiness of personal vehicles or the driving skill of peers, although basic credential verifications are conducted.</li>
-            <li>Nothing in these Terms limits or excludes liability for willful misconduct, intentional fraud, gross negligence, personal injury, or death where liability cannot be excluded under applicable consumer and statutory legislation.</li>
+            <li><strong>Intermediary Status:</strong> VIT Carpool acts solely as a communication platform between independent community members and is not a common carrier, motor transport operator, or employer.</li>
+            <li><strong>Assumption of Risk:</strong> Every user voluntarily assumes all inherent risks associated with motor vehicle travel, commuting, traffic, and personal interactions. Users participate at their own independent discretion and risk.</li>
+            <li><strong>No Warranty of Safety or Fitness:</strong> While basic institutional email verifications are conducted, the platform makes no representations, warranties, or covenants regarding vehicle roadworthiness, mechanical safety, driving skill, traffic adherence, or peer suitability.</li>
+            <li><strong>Total Exclusion of Liability:</strong> Under no circumstances shall VIT Carpool, its student creators, volunteer developers, campus administrators, or moderators be liable for any direct, indirect, incidental, punitive, or consequential damages, vehicular accidents, personal injuries, property losses, or off-platform disputes arising out of rides coordinated through the software.</li>
           </ul>
         </section>
 

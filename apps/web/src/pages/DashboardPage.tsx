@@ -400,12 +400,67 @@ export const DashboardPage: React.FC = () => {
                 </button>
               )}
             </div>
-            <h1 style={{ fontSize: '1.6rem', color: 'var(--text-primary)', margin: 0, fontWeight: 800, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-              Welcome back, {user?.fullName}!
-            </h1>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '4px 0 0', wordBreak: 'break-all' }}>
-              Signed in as <strong>{user?.email}</strong>
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '6px' }}>
+              <Link
+                to="/profile"
+                style={{
+                  textDecoration: 'none',
+                  flexShrink: 0,
+                  display: 'inline-block',
+                  transition: 'transform 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+                onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                title="View & Edit Profile"
+              >
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName || 'User'}
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2.5px solid #2563eb',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '50%',
+                      backgroundColor: '#eff6ff',
+                      color: '#2563eb',
+                      border: '2.5px solid #bfdbfe',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.25rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {user?.fullName?.charAt(0) || 'U'}
+                  </div>
+                )}
+              </Link>
+              <div>
+                <Link
+                  to="/profile"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                  title="View & Edit Profile"
+                >
+                  <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', margin: 0, fontWeight: 800, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                    Welcome back, {user?.fullName}!
+                  </h1>
+                </Link>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '4px 0 0', wordBreak: 'break-all' }}>
+                  Signed in as <strong>{user?.email}</strong>
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Top Quick Actions */}

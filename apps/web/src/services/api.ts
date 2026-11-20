@@ -1,9 +1,22 @@
 import { HealthResponse, HealthResponseSchema } from '@vit-carpool/contracts';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const getApiBase = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  // Always use same-origin relative paths on production or whenever accessing remote origin
+  if (
+    import.meta.env.PROD ||
+    !envUrl ||
+    (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') ||
+    envUrl.includes('localhost') ||
+    envUrl.includes('127.0.0.1')
+  ) {
+    return '';
+  }
+  return envUrl;
+};
 
 export async function fetchHealthStatus(): Promise<HealthResponse> {
-  const endpoint = `${API_BASE}/health`;
+  const endpoint = `${getApiBase()}/health`;
   const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
