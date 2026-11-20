@@ -168,15 +168,23 @@ export const DashboardPage: React.FC = () => {
     setPushLoading(true);
     setPushMessage(null);
     try {
+      if (typeof window !== 'undefined' && typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        setPushMessage('Notifications are blocked in your browser. Tap the site settings icon next to the URL in your address bar → Permissions → Allow Notifications.');
+        return;
+      }
       const ok = await requestAndSubscribePush(token);
       if (ok) {
         setPushEnabled(true);
         setPushMessage('Web Push notifications successfully activated on this device.');
       } else {
-        setPushMessage('Could not activate push notifications. Please check browser permissions.');
+        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+          setPushMessage('Notifications are blocked in your browser. Tap the site settings/lock icon in your address bar → Permissions → Allow Notifications.');
+        } else {
+          setPushMessage('Could not activate push notifications. Please check your browser site settings to allow notifications.');
+        }
       }
     } catch {
-      setPushMessage('Error requesting push permission.');
+      setPushMessage('Error requesting push permission. Please ensure your device supports Web Push notifications.');
     } finally {
       setPushLoading(false);
     }
