@@ -48,6 +48,11 @@ export const BottomNav: React.FC = () => {
     };
   }, [user, token]);
 
+  // Do not render consumer bottom navigation on administrative portals
+  if (location.pathname.startsWith('/admin')) {
+    return null;
+  }
+
   const isHomeActive = user
     ? location.pathname === '/dashboard'
     : location.pathname === '/';

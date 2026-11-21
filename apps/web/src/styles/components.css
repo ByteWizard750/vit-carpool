@@ -2412,6 +2412,246 @@
   }
 }
 
+/* ── Admin Login Portal Mobile Responsive Layout ───────────────────────────── */
+.admin-login-wrapper {
+  min-height: calc(100vh - 64px);
+  min-height: calc(100dvh - 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background-color: #0f172a;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-login-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: #1e293b;
+  border-radius: 16px;
+  border: 1px solid #334155;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  color: #f8fafc;
+  box-sizing: border-box;
+  margin: auto;
+}
+
+.admin-login-header {
+  padding: 28px 24px 20px;
+  text-align: center;
+  border-bottom: 1px solid #334155;
+  background-color: #0f172a;
+}
+
+.admin-login-icon-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background-color: rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  color: #60a5fa;
+}
+
+.admin-login-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.01em;
+}
+
+.admin-login-subtitle {
+  font-size: 0.825rem;
+  color: #94a3b8;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.admin-login-body {
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.admin-input-group {
+  margin-bottom: 18px;
+}
+
+.admin-input-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-input-field {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background-color: #0f172a;
+  color: #ffffff;
+  font-size: 16px !important; /* CRITICAL: Prevents iOS Safari from auto-zooming on focus */
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-input-field:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.admin-input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+}
+
+.admin-mfa-input {
+  width: 100%;
+  padding: 14px 10px;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background-color: #0f172a;
+  color: #ffffff;
+  font-size: 1.35rem !important;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-mfa-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.admin-tap-target-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #60a5fa;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  min-height: 36px;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-tap-target-btn:hover {
+  background-color: rgba(96, 165, 250, 0.1);
+  color: #93c5fd;
+}
+
+.admin-tap-target-btn:disabled {
+  color: #64748b;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.admin-login-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-quick-fill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(30, 41, 59, 0.9);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.775rem;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.admin-quick-fill-chip:hover, .admin-quick-fill-chip:active {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+}
+
+@media (max-width: 640px) {
+  .admin-login-wrapper {
+    padding: 16px 12px;
+    align-items: flex-start;
+  }
+
+  .admin-login-card {
+    border-radius: 14px;
+    max-width: 100%;
+  }
+
+  .admin-login-header {
+    padding: 20px 16px 16px;
+  }
+
+  .admin-login-icon-badge {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 10px;
+  }
+
+  .admin-login-title {
+    font-size: 1.15rem;
+    margin-bottom: 4px;
+  }
+
+  .admin-login-subtitle {
+    font-size: 0.775rem;
+  }
+
+  .admin-login-body {
+    padding: 18px 14px;
+  }
+
+  .admin-mfa-input {
+    font-size: 1.2rem !important;
+    letter-spacing: 0.22em;
+    padding: 12px 6px;
+  }
+
+  .admin-login-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
+}
+
+
 
 
 
