@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
+import { GLOBAL_ADMIN_RESERVED_EMAIL } from '@vit-carpool/contracts';
 
 export const AdminLoginPage: React.FC = () => {
   const { user, login } = useAuth();
@@ -185,63 +186,23 @@ export const AdminLoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '85vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 16px',
-        backgroundColor: '#0f172a',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '440px',
-          backgroundColor: '#1e293b',
-          borderRadius: '16px',
-          border: '1px solid #334155',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
-          overflow: 'hidden',
-          color: '#f8fafc',
-        }}
-      >
+    <div className="admin-login-wrapper">
+      <div className="admin-login-card">
         {/* Header Banner */}
-        <div
-          style={{
-            padding: '28px 24px 20px',
-            textAlign: 'center',
-            borderBottom: '1px solid #334155',
-            backgroundColor: '#0f172a',
-          }}
-        >
-          <div
-            style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '12px',
-              backgroundColor: 'rgba(37, 99, 235, 0.15)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 14px',
-              color: '#60a5fa',
-            }}
-          >
-            <ShieldCheck size={30} />
+        <div className="admin-login-header">
+          <div className="admin-login-icon-badge">
+            <ShieldCheck size={28} />
           </div>
-          <h1 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#ffffff', marginBottom: '6px' }}>
+          <h1 className="admin-login-title">
             VIT Carpool Operations Portal
           </h1>
-          <p style={{ fontSize: '0.825rem', color: '#94a3b8', lineHeight: '1.45' }}>
+          <p className="admin-login-subtitle">
             Restricted administrative gateway for campus operations, Trust &amp; Safety, and moderation staff.
           </p>
         </div>
 
         {/* Content Body */}
-        <div style={{ padding: '24px' }}>
+        <div className="admin-login-body">
           {error && (
             <div
               style={{
@@ -286,44 +247,40 @@ export const AdminLoginPage: React.FC = () => {
           {/* Step 1: Email Form */}
           {step === 'email' && (
             <form onSubmit={handleSendChallenge}>
-              <div style={{ marginBottom: '18px' }}>
-                <label
-                  htmlFor="admin-email"
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#cbd5e1',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                  }}
-                >
+              <div className="admin-input-group">
+                <label htmlFor="admin-email" className="admin-input-label">
                   Authorized Staff Email
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
                     id="admin-email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck="false"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="moderator@vit.ac.in"
+                    placeholder={GLOBAL_ADMIN_RESERVED_EMAIL}
                     required
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px 12px 38px',
-                      borderRadius: '8px',
-                      border: '1px solid #475569',
-                      backgroundColor: '#0f172a',
-                      color: '#ffffff',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                    }}
+                    className="admin-input-field"
                   />
                   <Mail
                     size={16}
-                    style={{ position: 'absolute', left: '12px', top: '14px', color: '#64748b' }}
+                    className="admin-input-icon"
                   />
+                </div>
+                {/* Mobile Convenience Quick-Fill Chip */}
+                <div>
+                  <button
+                    type="button"
+                    className="admin-quick-fill-chip"
+                    onClick={() => setEmail(GLOBAL_ADMIN_RESERVED_EMAIL)}
+                    id="btn-quick-fill-admin-email"
+                  >
+                    <ShieldCheck size={13} style={{ color: '#60a5fa' }} />
+                    <span>Use {GLOBAL_ADMIN_RESERVED_EMAIL}</span>
+                  </button>
                 </div>
               </div>
 
@@ -331,7 +288,7 @@ export const AdminLoginPage: React.FC = () => {
                 type="submit"
                 variant="primary"
                 size="lg"
-                style={{ width: '100%' }}
+                style={{ width: '100%', minHeight: '48px', fontSize: '0.95rem' }}
                 disabled={loading || !email.trim()}
                 leftIcon={loading ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
                 id="btn-admin-continue"
@@ -344,18 +301,9 @@ export const AdminLoginPage: React.FC = () => {
           {/* Step 2: 2FA MFA Verification Form */}
           {step === 'mfa' && (
             <form onSubmit={handleVerifyMfa}>
-              <div style={{ marginBottom: '18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label
-                    htmlFor="admin-mfa-code"
-                    style={{
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      color: '#cbd5e1',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                    }}
-                  >
+              <div className="admin-input-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label htmlFor="admin-mfa-code" className="admin-input-label" style={{ marginBottom: 0 }}>
                     6-Digit Security Code
                   </label>
                   <button
@@ -365,14 +313,7 @@ export const AdminLoginPage: React.FC = () => {
                       setCode('');
                       setError(null);
                     }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#60a5fa',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
+                    className="admin-tap-target-btn"
                   >
                     Change Email
                   </button>
@@ -380,33 +321,25 @@ export const AdminLoginPage: React.FC = () => {
                 <input
                   id="admin-mfa-code"
                   type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="••••••"
                   maxLength={6}
                   required
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    borderRadius: '8px',
-                    border: '1px solid #475569',
-                    backgroundColor: '#0f172a',
-                    color: '#ffffff',
-                    fontSize: '1.25rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.3em',
-                    textAlign: 'center',
-                    outline: 'none',
-                  }}
+                  className="admin-mfa-input"
                 />
                 <div
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginTop: '8px',
-                    fontSize: '0.75rem',
+                    marginTop: '10px',
+                    fontSize: '0.8rem',
+                    flexWrap: 'wrap',
+                    gap: '6px',
                   }}
                 >
                   <span style={{ color: '#94a3b8' }}>
@@ -416,15 +349,7 @@ export const AdminLoginPage: React.FC = () => {
                     type="button"
                     onClick={handleResendCode}
                     disabled={cooldown > 0 || loading}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: cooldown > 0 ? '#64748b' : '#38bdf8',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      cursor: cooldown > 0 ? 'not-allowed' : 'pointer',
-                      padding: 0,
-                    }}
+                    className="admin-tap-target-btn"
                   >
                     {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
                   </button>
@@ -444,6 +369,7 @@ export const AdminLoginPage: React.FC = () => {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       gap: '8px',
+                      flexWrap: 'wrap',
                     }}
                     id="banner-dev-otp"
                   >
@@ -468,6 +394,7 @@ export const AdminLoginPage: React.FC = () => {
                         fontWeight: 700,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
+                        minHeight: '32px',
                       }}
                     >
                       Fill Code
@@ -480,7 +407,7 @@ export const AdminLoginPage: React.FC = () => {
                 type="submit"
                 variant="primary"
                 size="lg"
-                style={{ width: '100%' }}
+                style={{ width: '100%', minHeight: '48px', fontSize: '0.95rem' }}
                 disabled={loading || code.length < 6}
                 leftIcon={loading ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                 id="btn-admin-verify-mfa"
@@ -507,19 +434,8 @@ export const AdminLoginPage: React.FC = () => {
                 You have been invited by a Super Administrator to join the VIT Carpool operations team.
               </div>
 
-              <div style={{ marginBottom: '18px' }}>
-                <label
-                  htmlFor="invite-fullname"
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#cbd5e1',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                  }}
-                >
+              <div className="admin-input-group">
+                <label htmlFor="invite-fullname" className="admin-input-label">
                   Your Full Name
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -530,20 +446,11 @@ export const AdminLoginPage: React.FC = () => {
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Prof. R. Ramanathan"
                     required
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px 12px 38px',
-                      borderRadius: '8px',
-                      border: '1px solid #475569',
-                      backgroundColor: '#0f172a',
-                      color: '#ffffff',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                    }}
+                    className="admin-input-field"
                   />
                   <User
                     size={16}
-                    style={{ position: 'absolute', left: '12px', top: '14px', color: '#64748b' }}
+                    className="admin-input-icon"
                   />
                 </div>
               </div>
@@ -552,7 +459,7 @@ export const AdminLoginPage: React.FC = () => {
                 type="submit"
                 variant="primary"
                 size="lg"
-                style={{ width: '100%' }}
+                style={{ width: '100%', minHeight: '48px', fontSize: '0.95rem' }}
                 disabled={loading || !fullName.trim()}
                 leftIcon={loading ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                 id="btn-accept-invite"
@@ -562,18 +469,7 @@ export const AdminLoginPage: React.FC = () => {
             </form>
           )}
 
-          <div
-            style={{
-              marginTop: '24px',
-              paddingTop: '16px',
-              borderTop: '1px solid #334155',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              fontSize: '0.775rem',
-              color: '#64748b',
-            }}
-          >
+          <div className="admin-login-footer">
             <span>Not staff?</span>
             <Link
               to="/auth"
@@ -584,9 +480,11 @@ export const AdminLoginPage: React.FC = () => {
                 alignItems: 'center',
                 gap: '4px',
                 fontWeight: 600,
+                minHeight: '36px',
+                padding: '4px 8px',
               }}
             >
-              Student / Faculty Sign In <ArrowRight size={12} />
+              Student / Faculty Sign In <ArrowRight size={14} />
             </Link>
           </div>
         </div>
